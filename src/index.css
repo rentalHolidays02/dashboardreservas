@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .module-header {
+    @apply px-5 border-b border-slate-100 flex items-center justify-between;
+    height: 44px;
+  }
+
+  .module-item {
+    @apply px-5 hover:bg-slate-50 transition-colors;
+    height: 64px;
+  }
+}
+
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 }

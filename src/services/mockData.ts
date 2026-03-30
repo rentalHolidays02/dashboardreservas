@@ -27,6 +27,44 @@ export const MOCK_USERS: (User & { password: string })[] = [
   }
 ];
 
+export interface CheckInOut {
+  id: string;
+  cleanerName: string;
+  accommodation: string;
+  timestamp: string; // ISO 8601
+  type: 'check-in' | 'check-out';
+}
+
+export const MOCK_CHECKINS: CheckInOut[] = [
+  { id: 'c1',  cleanerName: 'María García',      accommodation: 'Apt. Ramblas 12',    timestamp: '2026-03-30T09:05:00', type: 'check-in'  },
+  { id: 'c2',  cleanerName: 'Juan Pérez',         accommodation: 'Casa Marina 3B',     timestamp: '2026-03-30T09:18:00', type: 'check-in'  },
+  { id: 'c3',  cleanerName: 'Ana Martínez',       accommodation: 'Ático Sol 7',        timestamp: '2026-03-30T09:45:00', type: 'check-in'  },
+  { id: 'c4',  cleanerName: 'María García',       accommodation: 'Apt. Ramblas 12',    timestamp: '2026-03-30T10:30:00', type: 'check-out' },
+  { id: 'c5',  cleanerName: 'Carlos Rodríguez',   accommodation: 'Estudio Gracia 5',   timestamp: '2026-03-30T10:52:00', type: 'check-in'  },
+  { id: 'c6',  cleanerName: 'Juan Pérez',         accommodation: 'Casa Marina 3B',     timestamp: '2026-03-30T11:10:00', type: 'check-out' },
+  { id: 'c7',  cleanerName: 'Ana Martínez',       accommodation: 'Ático Sol 7',        timestamp: '2026-03-30T11:35:00', type: 'check-out' },
+  { id: 'c8',  cleanerName: 'Carlos Rodríguez',   accommodation: 'Estudio Gracia 5',   timestamp: '2026-03-30T12:20:00', type: 'check-out' },
+  { id: 'c9',  cleanerName: 'Juan Pérez',         accommodation: 'Penthouse Diagonal', timestamp: '2026-03-30T12:40:00', type: 'check-in'  },
+  { id: 'c10', cleanerName: 'María García',       accommodation: 'Loft Born 2',        timestamp: '2026-03-30T13:05:00', type: 'check-in'  },
+];
+
+export interface Incidencia {
+  id: string;
+  userName: string;
+  description: string;
+  timestamp: string;
+  accommodationId: string;
+  accommodationName: string;
+}
+
+export const MOCK_INCIDENCIAS: Incidencia[] = [
+  { id: 'i1', userName: 'María García',    description: 'persiana rota en habitación principal',  timestamp: '2026-03-30T08:47:00', accommodationId: 'a1', accommodationName: 'Apt. Ramblas 12'    },
+  { id: 'i2', userName: 'Juan Pérez',      description: 'mancha en el sofá difícil de limpiar',   timestamp: '2026-03-30T09:55:00', accommodationId: 'a2', accommodationName: 'Casa Marina 3B'    },
+  { id: 'i3', userName: 'Ana Martínez',    description: 'falta una toalla del set completo',       timestamp: '2026-03-30T10:12:00', accommodationId: 'a3', accommodationName: 'Ático Sol 7'       },
+  { id: 'i4', userName: 'Carlos Rodríguez','description': 'grifo de la cocina con fuga leve',      timestamp: '2026-03-30T11:03:00', accommodationId: 'a4', accommodationName: 'Estudio Gracia 5'  },
+  { id: 'i5', userName: 'María García',    description: 'mando del AC sin pilas',                  timestamp: '2026-03-30T12:30:00', accommodationId: 'a5', accommodationName: 'Loft Born 2'       },
+];
+
 export const MOCK_WORKERS: Worker[] = [
   {
     id: '1',
