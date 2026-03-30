@@ -42,9 +42,8 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header>
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Resumen general de pagos y limpiezas del mes actual.</p>
+      <header className="mb-10 pb-6 border-b border-slate-200">
+        <h1 className="text-3xl font-medium tracking-tight text-slate-900 font-display">Dashboard</h1>
       </header>
 
       {/* Bloque A: Módulos de analítica */}

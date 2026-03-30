@@ -15,10 +15,11 @@ interface SidebarProps {
   onLogout: () => void;
   isOpen: boolean;
   onClose: () => void;
+  isCollapsed: boolean;
+  onCollapse: (v: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose, isCollapsed, onCollapse }) => {
 
   const menuItems = [
     { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard', active: true },
@@ -48,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose }
         <div className="p-6 flex items-center justify-between border-b border-slate-800">
           {(!isCollapsed || isOpen) && <span className="font-bold text-xl tracking-tight">RH Pagos</span>}
           <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={() => onCollapse(!isCollapsed)}
             className="hidden lg:block p-1 hover:bg-slate-800 rounded-md transition-colors"
           >
             {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}

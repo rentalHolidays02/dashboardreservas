@@ -10,6 +10,7 @@ export interface Worker {
   netMoneyMonth: number;
   cleansCountMonth: number;
   kmsMonth: number;
+  accommodations: string[];
 }
 
 export const MOCK_USERS: (User & { password: string })[] = [
@@ -55,14 +56,16 @@ export interface Incidencia {
   timestamp: string;
   accommodationId: string;
   accommodationName: string;
+  coste: number;
+  pagadoPor: 'limpiador' | 'empresa';
 }
 
 export const MOCK_INCIDENCIAS: Incidencia[] = [
-  { id: 'i1', userName: 'María García',    description: 'persiana rota en habitación principal',  timestamp: '2026-03-30T08:47:00', accommodationId: 'a1', accommodationName: 'Apt. Ramblas 12'    },
-  { id: 'i2', userName: 'Juan Pérez',      description: 'mancha en el sofá difícil de limpiar',   timestamp: '2026-03-30T09:55:00', accommodationId: 'a2', accommodationName: 'Casa Marina 3B'    },
-  { id: 'i3', userName: 'Ana Martínez',    description: 'falta una toalla del set completo',       timestamp: '2026-03-30T10:12:00', accommodationId: 'a3', accommodationName: 'Ático Sol 7'       },
-  { id: 'i4', userName: 'Carlos Rodríguez','description': 'grifo de la cocina con fuga leve',      timestamp: '2026-03-30T11:03:00', accommodationId: 'a4', accommodationName: 'Estudio Gracia 5'  },
-  { id: 'i5', userName: 'María García',    description: 'mando del AC sin pilas',                  timestamp: '2026-03-30T12:30:00', accommodationId: 'a5', accommodationName: 'Loft Born 2'       },
+  { id: 'i1', userName: 'María García',    description: 'persiana rota en habitación principal', timestamp: '2026-03-30T08:47:00', accommodationId: 'a1', accommodationName: 'Apt. Ramblas 12',   coste: 45.00, pagadoPor: 'empresa'   },
+  { id: 'i2', userName: 'Juan Pérez',      description: 'mancha en el sofá difícil de limpiar',  timestamp: '2026-03-30T09:55:00', accommodationId: 'a2', accommodationName: 'Casa Marina 3B',   coste: 12.50, pagadoPor: 'limpiador' },
+  { id: 'i3', userName: 'Ana Martínez',    description: 'falta una toalla del set completo',      timestamp: '2026-03-30T10:12:00', accommodationId: 'a3', accommodationName: 'Ático Sol 7',      coste: 8.00,  pagadoPor: 'empresa'   },
+  { id: 'i4', userName: 'Carlos Rodríguez',description: 'grifo de la cocina con fuga leve',       timestamp: '2026-03-30T11:03:00', accommodationId: 'a4', accommodationName: 'Estudio Gracia 5', coste: 30.00, pagadoPor: 'limpiador' },
+  { id: 'i5', userName: 'María García',    description: 'mando del AC sin pilas',                 timestamp: '2026-03-30T12:30:00', accommodationId: 'a5', accommodationName: 'Loft Born 2',      coste: 4.50,  pagadoPor: 'empresa'   },
 ];
 
 export const MOCK_WORKERS: Worker[] = [
@@ -71,27 +74,31 @@ export const MOCK_WORKERS: Worker[] = [
     fullName: 'Juan Pérez',
     netMoneyMonth: 1250.50,
     cleansCountMonth: 12,
-    kmsMonth: 450
+    kmsMonth: 450,
+    accommodations: ['Penthouse Diagonal', 'Casa Marina 3B', 'Ático Sol 7']
   },
   {
     id: '2',
     fullName: 'María García',
     netMoneyMonth: 980.20,
     cleansCountMonth: 8,
-    kmsMonth: 120
+    kmsMonth: 120,
+    accommodations: ['Apt. Ramblas 12', 'Loft Born 2']
   },
   {
     id: '3',
     fullName: 'Carlos Rodríguez',
     netMoneyMonth: 1560.00,
     cleansCountMonth: 15,
-    kmsMonth: 600
+    kmsMonth: 600,
+    accommodations: ['Estudio Gracia 5', 'Casa Marina 3B', 'Loft Born 2', 'Ático Sol 7']
   },
   {
     id: '4',
     fullName: 'Ana Martínez',
     netMoneyMonth: 1100.00,
     cleansCountMonth: 10,
-    kmsMonth: 300
+    kmsMonth: 300,
+    accommodations: ['Ático Sol 7']
   }
 ];
