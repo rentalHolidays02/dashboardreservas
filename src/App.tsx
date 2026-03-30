@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Cleans from './pages/Cleans';
+import Workers from './pages/Workers';
 import MainLayout from './components/layout/MainLayout';
 import { User } from './services/mockData';
 
@@ -62,6 +63,11 @@ function App() {
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
                 <Cleans />
+          path="/workers" 
+          element={
+            user ? (
+              <MainLayout userRole={user.role} onLogout={handleLogout}>
+                <Workers />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
