@@ -21,11 +21,12 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose }
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard', active: true },
+    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard', active: false },
+    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '/cleans', active: true },
     { icon: <Users size={20} />, label: 'Trabajadores', path: '#', active: false },
-    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '#', active: false },
     { icon: <BarChart3 size={20} />, label: 'Reportes', path: '#', active: false },
   ];
+
 
   return (
     <>
