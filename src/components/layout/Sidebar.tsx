@@ -9,6 +9,7 @@ import {
   LogOut,
   BarChart3
 } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 
 interface SidebarProps {
   userRole: 'admin' | 'viewer';
@@ -18,13 +19,14 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose }) => {
+  const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard', active: true },
-    { icon: <Users size={20} />, label: 'Trabajadores', path: '#', active: false },
-    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '#', active: false },
-    { icon: <BarChart3 size={20} />, label: 'Reportes', path: '#', active: false },
+    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard' },
+    { icon: <Users size={20} />, label: 'Trabajadores', path: '/workers' },
+    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '#' },
+    { icon: <BarChart3 size={20} />, label: 'Reportes', path: '#' },
   ];
 
   return (
@@ -68,18 +70,18 @@ const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose }
           <ul className="space-y-2">
             {menuItems.map((item, index) => (
               <li key={index}>
-                <a
-                  href={item.path}
+                <Link
+                  to={item.path}
                   onClick={() => { if(window.innerWidth < 1024) onClose(); }}
                   className={`flex items-center p-3 rounded-lg transition-all ${
-                    item.active 
+                    location.pathname === item.path
                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
                       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                   } ${isCollapsed && !isOpen ? 'lg:justify-center' : 'space-x-3'}`}
                 >
                   {item.icon}
                   {(!isCollapsed || isOpen) && <span className="font-medium">{item.label}</span>}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>

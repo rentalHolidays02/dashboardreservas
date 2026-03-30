@@ -1,5 +1,21 @@
 import { MOCK_USERS, MOCK_WORKERS, User, Worker } from './mockData';
 
+// Simulación de persistencia en localStorage para el MVP
+const getStoredWorkers = (): Worker[] => {
+  const stored = localStorage.getItem('rh_workers');
+  if (stored) {
+    return JSON.parse(stored);
+  }
+  return MOCK_WORKERS;
+};
+
+let currentWorkers = getStoredWorkers();
+
+const saveWorkers = (workers: Worker[]) => {
+  currentWorkers = workers;
+  localStorage.setItem('rh_workers', JSON.stringify(workers));
+};
+
 // Simulación de delay para llamadas a "Apps Script"
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
@@ -16,13 +32,37 @@ export const appsScriptApi = {
 
   getWorkers: async (): Promise<Worker[]> => {
     await delay(500);
-    return MOCK_WORKERS;
+    return currentWorkers;
+  },
+
+  updateWorker: async (workerData: Worker): Promise<Worker> => {
+    await delay(1000);
+    const updatedWorkers = currentWorkers.map(w => 
+      w.id === workerData.id ? { ...workerData } : w
+    );
+    saveWorkers(updatedWorkers);
+    return workerData;
+  },
+
+  addWorker: async (workerData: Omit<Worker, 'id'>): Promise<Worker> => {
+    await delay(1000);
+    // Generar nuevo ID numérico
+    const lastId = currentWorkers.length > 0 
+      ? Math.max(...currentWorkers.map(w => parseInt(w.id))) 
+      : 0;
+    const newWorker: Worker = {
+      ...workerData,
+      id: (lastId + 1).toString()
+    };
+    const updatedWorkers = [...currentWorkers, newWorker];
+    saveWorkers(updatedWorkers);
+    return newWorker;
   },
 
   getAnalytics: async () => {
     await delay(500);
-    const totalMoney = MOCK_WORKERS.reduce((acc, w) => acc + w.netMoneyMonth, 0);
-    const totalCleans = MOCK_WORKERS.reduce((acc, w) => acc + w.cleansCountMonth, 0);
+    const totalMoney = currentWorkers.reduce((acc, w) => acc + w.netMoneyMonth, 0);
+    const totalCleans = currentWorkers.reduce((acc, w) => acc + w.cleansCountMonth, 0);
     return {
       totalMoney,
       totalCleans
