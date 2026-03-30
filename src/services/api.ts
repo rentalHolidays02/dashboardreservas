@@ -1,4 +1,15 @@
-import { MOCK_USERS, MOCK_WORKERS, User, Worker } from './mockData';
+import { 
+  MOCK_USERS, 
+  MOCK_WORKERS, 
+  MOCK_NORMAL_CLEANS,
+  MOCK_INITIAL_CLEANS,
+  MOCK_HANDYMAN_RECORDS,
+  User, 
+  Worker,
+  NormalCleanRecord,
+  InitialCleanRecord,
+  HandymanRecord
+} from './mockData';
 
 // Simulación de persistencia en localStorage para el MVP
 const getStoredWorkers = (): Worker[] => {
@@ -67,5 +78,21 @@ export const appsScriptApi = {
       totalMoney,
       totalCleans
     };
+  },
+
+  getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
+    await delay(400);
+    return MOCK_NORMAL_CLEANS;
+  },
+
+  getInitialCleans: async (): Promise<InitialCleanRecord[]> => {
+    await delay(400);
+    return MOCK_INITIAL_CLEANS;
+  },
+
+  getHandymanRecords: async (): Promise<HandymanRecord[]> => {
+    await delay(400);
+    return MOCK_HANDYMAN_RECORDS;
   }
 };
+
