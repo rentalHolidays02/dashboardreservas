@@ -10,6 +10,7 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
@@ -25,15 +26,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
       </div>
 
       {/* Sidebar */}
-      <Sidebar 
-        userRole={userRole} 
-        onLogout={onLogout} 
+      <Sidebar
+        userRole={userRole}
+        onLogout={onLogout}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onCollapse={setIsSidebarCollapsed}
       />
-      
+
       {/* Main Content */}
-      <main className="flex-1 transition-all duration-300 lg:ml-64 p-4 md:p-8">
+      <main className={`flex-1 transition-all duration-300 p-4 md:p-8 ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
         <div className="max-w-7xl mx-auto">
           {children}
         </div>

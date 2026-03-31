@@ -2,23 +2,26 @@ import React, { useEffect, useState } from 'react';
 import AnalyticsCards from '../components/dashboard/AnalyticsCards';
 import WorkersTable from '../components/dashboard/WorkersTable';
 import { appsScriptApi } from '../services/api';
-import { Worker } from '../services/mockData';
+import { Worker, CheckInOut, Incidencia } from '../services/mockData';
 import { Loader2 } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [analytics, setAnalytics] = useState({ totalMoney: 0, totalCleans: 0 });
+  const [checkIns, setCheckIns] = useState<CheckInOut[]>([]);
+  const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [workersData, analyticsData] = await Promise.all([
+        const [workersData, checkInsData, incidenciasData] = await Promise.all([
           appsScriptApi.getWorkers(),
-          appsScriptApi.getAnalytics()
+          appsScriptApi.getRecentCheckIns(),
+          appsScriptApi.getRecentIncidencias()
         ]);
         setWorkers(workersData);
-        setAnalytics(analyticsData);
+        setCheckIns(checkInsData);
+        setIncidencias(incidenciasData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -39,16 +42,12 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header>
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Resumen general de pagos y limpiezas del mes actual.</p>
+      <header className="mb-10 pb-6 border-b border-slate-200">
+        <h1 className="text-3xl font-medium tracking-tight text-slate-900 font-display">Dashboard</h1>
       </header>
 
-      {/* Bloque A: Analíticas */}
-      <AnalyticsCards 
-        totalMoney={analytics.totalMoney} 
-        totalCleans={analytics.totalCleans} 
-      />
+      {/* Bloque A: Módulos de analítica */}
+      <AnalyticsCards checkIns={checkIns} incidencias={incidencias} />
 
       {/* Bloque B: Tabla de Trabajadores */}
       <section>

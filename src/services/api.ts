@@ -1,3 +1,4 @@
+import { MOCK_USERS, MOCK_WORKERS, MOCK_CHECKINS, MOCK_INCIDENCIAS, User, Worker, CheckInOut, Incidencia } from './mockData';
 import { 
   MOCK_USERS, 
   MOCK_WORKERS, 
@@ -68,6 +69,20 @@ export const appsScriptApi = {
     const updatedWorkers = [...currentWorkers, newWorker];
     saveWorkers(updatedWorkers);
     return newWorker;
+  },
+
+  getRecentCheckIns: async (limit = 10): Promise<CheckInOut[]> => {
+    await delay(500);
+    return [...MOCK_CHECKINS]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
+  },
+
+  getRecentIncidencias: async (limit = 5): Promise<Incidencia[]> => {
+    await delay(500);
+    return [...MOCK_INCIDENCIAS]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, limit);
   },
 
   getAnalytics: async () => {

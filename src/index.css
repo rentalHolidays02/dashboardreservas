@@ -2,8 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .module-header {
+    @apply px-5 border-b border-slate-100 flex items-center justify-between;
+    height: 52px;
+  }
+
+  .module-item {
+    @apply px-5 hover:bg-slate-50 transition-colors;
+    height: 64px;
+  }
+}
+
+@keyframes text-wave {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.working-badge {
+  background: linear-gradient(90deg,
+    rgba(5, 150, 105, 1)   0%,
+    rgba(5, 150, 105, 1)   35%,
+    rgba(5, 150, 105, 0.5) 50%,
+    rgba(5, 150, 105, 1)   65%,
+    rgba(5, 150, 105, 1)   100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-wave 2s linear infinite;
+}
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Tailwind handles default font via extend.fontFamily.sans */
 }
 
 body {
