@@ -116,24 +116,24 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) =>
   <table className="w-full text-left border-collapse min-w-[1200px]">
     <thead>
       <tr className="bg-slate-50/50 border-b border-slate-200">
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Trabajador</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Apartamento</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Check-in</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Check-out</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Horas (E/S)</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Km</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Ubicación</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-center">Estado</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Trabajador</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Apartamento</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Check-in</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Check-out</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Horas (E/S)</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Km</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Ubicación</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Estado</th>
       </tr>
     </thead>
     <tbody className="divide-y divide-slate-100">
       {data.map((r) => (
         <tr key={r.id} className="hover:bg-slate-50 transition-colors text-sm">
           <td className="px-6 py-4">
-            <div className="font-medium text-slate-900">{r.nombre} {r.apellidos}</div>
+            <div className="font-normal text-slate-900">{r.nombre} {r.apellidos}</div>
             <div className="text-xs text-slate-500">{r.telefono}</div>
           </td>
-          <td className="px-6 py-4 font-semibold text-blue-600">{r.apartamento}</td>
+          <td className="px-6 py-4 font-normal text-blue-600">{r.apartamento}</td>
           <td className="px-6 py-4">
             <div className="flex items-center text-slate-600">
               <Clock size={14} className="mr-1.5 text-slate-400" />
@@ -161,7 +161,7 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) =>
           <td className="px-6 py-4">
             <div className="flex items-center text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg w-fit border border-emerald-100/50">
               <CheckCircle2 size={12} className="mr-1.5" />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Gps Match</span>
+              <span className="text-[10px] uppercase font-normal tracking-wider">Gps Match</span>
             </div>
           </td>
           <td className="px-6 py-4 text-center">
@@ -177,24 +177,24 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) 
   <table className="w-full text-left border-collapse min-w-[1200px]">
     <thead>
       <tr className="bg-slate-50/50 border-b border-slate-200">
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Trabajador</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Apartamento</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Check-in</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Check-out</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Horas (E/S)</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Km</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Ubicación</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-center">Estado</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Trabajador</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Apartamento</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Check-in</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Check-out</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Horas (E/S)</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Km</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Ubicación</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Estado</th>
       </tr>
     </thead>
     <tbody className="divide-y divide-slate-100">
       {data.map((r) => (
         <tr key={r.id} className="hover:bg-slate-50 transition-colors text-sm">
           <td className="px-6 py-4">
-            <div className="font-medium text-slate-900">{r.nombre} {r.apellidos}</div>
+            <div className="font-normal text-slate-900">{r.nombre} {r.apellidos}</div>
             <div className="text-xs text-slate-500">{r.telefono}</div>
           </td>
-          <td className="px-6 py-4 font-semibold text-blue-600">{r.apartamento}</td>
+          <td className="px-6 py-4 font-normal text-blue-600">{r.apartamento}</td>
           <td className="px-6 py-4">
             <div className="flex items-center text-slate-600">
               <Clock size={14} className="mr-1.5 text-slate-400" />
@@ -214,7 +214,7 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) 
           <td className="px-6 py-4">
             <div className="flex items-center text-blue-600 bg-blue-50 px-2 py-1 rounded-lg w-fit border border-blue-100/50">
               <CheckCircle2 size={12} className="mr-1.5" />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Verificada</span>
+              <span className="text-[10px] uppercase font-normal tracking-wider">Verificada</span>
             </div>
           </td>
           <td className="px-6 py-4 text-center">
@@ -231,24 +231,24 @@ const TableHandyman: React.FC<{ data: HandymanRecord[] }> = ({ data }) => (
   <table className="w-full text-left border-collapse min-w-[1200px]">
     <thead>
       <tr className="bg-slate-50/50 border-b border-slate-200">
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Operario</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Alojamiento</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Llegada</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Fin</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Tarea (E/S)</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Minutos</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase">Ubicación</th>
-        <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase text-center">Estado</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Operario</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Alojamiento</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Llegada</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Fin</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Tarea (E/S)</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Minutos</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Ubicación</th>
+        <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Estado</th>
       </tr>
     </thead>
     <tbody className="divide-y divide-slate-100">
       {data.map((r) => (
         <tr key={r.id} className="hover:bg-slate-50 transition-colors text-sm">
           <td className="px-6 py-4">
-            <div className="font-medium text-slate-900">{r.nombre} {r.apellidos}</div>
+            <div className="font-normal text-slate-900">{r.nombre} {r.apellidos}</div>
             <div className="text-xs text-slate-500">{r.telefono}</div>
           </td>
-          <td className="px-6 py-4 font-semibold text-blue-600">{r.alojamiento}</td>
+          <td className="px-6 py-4 font-normal text-blue-600">{r.alojamiento}</td>
           <td className="px-6 py-4">
             <div className="flex items-center text-slate-600">
               <Clock size={14} className="mr-1.5 text-slate-400" />
@@ -276,11 +276,11 @@ const TableHandyman: React.FC<{ data: HandymanRecord[] }> = ({ data }) => (
           <td className="px-6 py-4">
             <div className="flex items-center text-orange-600 bg-orange-50 px-2 py-1 rounded-lg w-fit border border-orange-100/50">
               <CheckCircle2 size={12} className="mr-1.5" />
-              <span className="text-[10px] uppercase font-bold tracking-wider">Verificado Manitas</span>
+              <span className="text-[10px] uppercase font-normal tracking-wider">Verificado Manitas</span>
             </div>
           </td>
           <td className="px-6 py-4 text-center">
-            <span className="text-[10px] px-2 py-1 bg-emerald-50 text-emerald-600 rounded-full font-bold uppercase tracking-wider border border-emerald-100">
+            <span className="text-[10px] px-2 py-1 bg-emerald-50 text-emerald-600 rounded-full font-normal uppercase tracking-wider border border-emerald-100">
               {r.estadoCompletado}
             </span>
           </td>

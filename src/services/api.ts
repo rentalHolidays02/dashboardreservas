@@ -6,13 +6,15 @@ import {
   MOCK_NORMAL_CLEANS,
   MOCK_INITIAL_CLEANS,
   MOCK_HANDYMAN_RECORDS,
+  MOCK_PAGOS,
   User,
   Worker,
   CheckInOut,
   Incidencia,
   NormalCleanRecord,
   InitialCleanRecord,
-  HandymanRecord
+  HandymanRecord,
+  PagoRecord
 } from './mockData';
 
 // Simulación de persistencia en localStorage para el MVP
@@ -111,6 +113,12 @@ export const appsScriptApi = {
   getHandymanRecords: async (): Promise<HandymanRecord[]> => {
     await delay(400);
     return MOCK_HANDYMAN_RECORDS;
+  },
+
+  getPagos: async (desde: string, hasta: string): Promise<PagoRecord[]> => {
+    await delay(400);
+    return MOCK_PAGOS.filter(p => p.fecha >= desde && p.fecha <= hasta)
+      .sort((a, b) => b.fecha.localeCompare(a.fecha));
   }
 };
 
