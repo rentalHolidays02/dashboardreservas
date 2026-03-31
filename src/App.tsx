@@ -57,13 +57,21 @@ function App() {
           } 
         />
 
-        <Route 
-          path="/cleans" 
+        <Route
+          path="/cleans"
           element={
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
                 <Cleans />
-          path="/workers" 
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/workers"
           element={
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
@@ -72,7 +80,7 @@ function App() {
             ) : (
               <Navigate to="/login" />
             )
-          } 
+          }
         />
 
         <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />

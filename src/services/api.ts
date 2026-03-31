@@ -1,12 +1,15 @@
-import { MOCK_USERS, MOCK_WORKERS, MOCK_CHECKINS, MOCK_INCIDENCIAS, User, Worker, CheckInOut, Incidencia } from './mockData';
-import { 
-  MOCK_USERS, 
-  MOCK_WORKERS, 
+import {
+  MOCK_USERS,
+  MOCK_WORKERS,
+  MOCK_CHECKINS,
+  MOCK_INCIDENCIAS,
   MOCK_NORMAL_CLEANS,
   MOCK_INITIAL_CLEANS,
   MOCK_HANDYMAN_RECORDS,
-  User, 
+  User,
   Worker,
+  CheckInOut,
+  Incidencia,
   NormalCleanRecord,
   InitialCleanRecord,
   HandymanRecord
