@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  LayoutDashboard, 
-  Users, 
-  Calendar, 
-  Settings, 
+import {
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  Users,
+  Calendar,
   LogOut,
-  BarChart3
+  Banknote,
+  AlertTriangle
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
@@ -23,12 +23,11 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose, isCollapsed, onCollapse }) => {
 
   const menuItems = [
-    
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard', active: false },
-    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '/cleans', active: true },
-    { icon: <Users size={20} />, label: 'Trabajadores', path: '/workers', active: false },
-    { icon: <BarChart3 size={20} />, label: 'Reportes', path: '#', active: false },
-   
+    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard' },
+    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '/cleans' },
+    { icon: <Users size={20} />, label: 'Trabajadores', path: '/workers' },
+    { icon: <Banknote size={20} />, label: 'Pagos', path: '/pagos' },
+    { icon: <AlertTriangle size={20} />, label: 'Incidencias', path: '/incidencias' },
   ];
 
   return (
