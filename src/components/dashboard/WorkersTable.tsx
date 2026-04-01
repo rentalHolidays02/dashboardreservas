@@ -18,12 +18,12 @@ const AccommodationTags: React.FC<{ items: string[] }> = ({ items }) => {
   return (
     <div className="flex items-center gap-1.5">
       {visible.map((a) => (
-        <span key={a} className="inline-block bg-slate-100 text-slate-500 text-[11px] px-2 py-0.5 rounded-md truncate max-w-[120px]">
+        <span key={a} className="inline-block bg-white text-slate-500 text-[11px] px-2.5 py-1 rounded-md max-w-[120px] truncate soft-shadow">
           {a}
         </span>
       ))}
       {extra > 0 && (
-        <span className="inline-block bg-slate-100 text-slate-400 text-[11px] px-2 py-0.5 rounded-md flex-shrink-0">
+        <span className="inline-block bg-white text-slate-400 text-[11px] px-2 py-1 rounded-md flex-shrink-0 soft-shadow">
           +{extra}
         </span>
       )}
@@ -135,7 +135,7 @@ return (
         </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-md border border-white rounded-2xl overflow-hidden flex flex-col">
+      <div className="bg-white/80 backdrop-blur-md border border-white/60 rounded-2xl overflow-hidden flex flex-col">
         <div className={`grid ${COL_WORKERS} gap-4 px-6 py-3 border-b border-white/40`}>
           <span className="text-xs text-slate-400">Nombre</span>
           <span className="text-xs text-slate-400">Alojamientos</span>
@@ -164,10 +164,10 @@ return (
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-normal border flex-shrink-0 transition-colors ${
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-normal flex-shrink-0 transition-colors soft-shadow ${
                       isSelected
-                        ? 'bg-orange-100 text-orange-600 border-orange-200'
-                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                        ? 'bg-orange-100 text-orange-600 border-none'
+                        : 'bg-white text-slate-500 border-none'
                     }`}>
                       {worker.fullName.charAt(0)}
                     </div>
@@ -191,14 +191,14 @@ return (
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-medium text-slate-600 hover:text-orange-600 bg-white/60 hover:bg-white/80 backdrop-blur-sm border border-white/80 px-2.5 py-1.5 rounded-lg"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 hover:text-orange-600 bg-white backdrop-blur-sm px-2.5 py-1.5 rounded-lg soft-shadow"
                     >
                       <Info size={12} />
                       Info
                     </button>
                     <button
                       onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-white/60 hover:bg-white/80 backdrop-blur-sm border border-white/80 px-2.5 py-1.5 rounded-lg"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white backdrop-blur-sm px-2.5 py-1.5 rounded-lg soft-shadow"
                     >
                       <Pencil size={12} />
                       Editar

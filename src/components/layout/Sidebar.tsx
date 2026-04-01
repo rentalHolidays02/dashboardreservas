@@ -144,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
                           text-sm tracking-tight transition-all duration-200
                           ${active
-                            ? 'bg-white/80 backdrop-blur-md border border-white text-slate-900'
+                            ? 'bg-white/60 backdrop-blur-md border border-white/60 text-slate-900'
                             : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
                           }`}
                       >
@@ -167,8 +167,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
           {/* User card — same pl-2 offset, icon never moves */}
-          <div className="flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 bg-slate-200/60 rounded-xl">
-            <div className="shrink-0 w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs">
+          <div className="flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 bg-white/60 backdrop-blur-sm border border-white/60 rounded-xl">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
               {userRole === 'admin' ? 'A' : 'V'}
             </div>
             <div className="sidebar-fade min-w-0">

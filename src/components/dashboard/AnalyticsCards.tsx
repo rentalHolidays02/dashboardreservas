@@ -24,8 +24,8 @@ const WorkingBadge: React.FC = () => {
     return () => clearInterval(id);
   }, []);
   return (
-    <span className="inline-flex items-center text-xs">
-      <span className="working-badge">
+    <span className="inline-flex items-center text-[11px]">
+      <span className="working-badge font-medium">
         Trabajando
         <span style={{ opacity: step >= 1 ? 1 : 0 }}>.</span>
         <span style={{ opacity: step >= 2 ? 1 : 0 }}>.</span>
@@ -358,13 +358,17 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             <span className="text-xs text-slate-400">Sin actividad registrada</span>
           </div>
         ) : (
-          checkIns.slice(0, 4).map(entry => (
-            <div
-              key={entry.id}
-              className="bg-white/80 backdrop-blur-sm border border-white rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white shadow-sm"
-            >
+          checkIns.slice(0, 4).map(entry => {
+            const isFinished = entry.type === 'check-out';
+            return (
+              <div
+                key={entry.id}
+                className={`bg-white/60 backdrop-blur-sm border border-white/60 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white/80 ${
+                  isFinished ? 'opacity-30' : 'opacity-100'
+                }`}
+              >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs text-slate-500 font-medium flex-shrink-0">
+                <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-xs text-slate-500 font-medium flex-shrink-0 soft-shadow">
                   {entry.cleanerName.charAt(0)}
                 </div>
                 <div className="min-w-0">
@@ -380,9 +384,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
                     : <span className="text-[11px] text-slate-400">Finalizado</span>
                   }
                 </span>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
 
         <button className="text-xs text-slate-400 hover:text-slate-600 transition-colors text-center py-1 cursor-not-allowed select-none">

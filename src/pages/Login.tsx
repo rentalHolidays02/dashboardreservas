@@ -43,7 +43,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden z-10 relative animate-in zoom-in duration-500">
         <div className="p-6 sm:p-10">
           <div className="mb-8 text-center">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/20">
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <LogIn className="text-white" size={32} />
             </div>
             <h1 className="text-2xl font-bold text-slate-900">Bienvenido</h1>
