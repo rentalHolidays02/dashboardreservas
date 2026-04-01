@@ -12,23 +12,25 @@ export default async function handler(req, res) {
       skipEmptyLines: true,
     });
 
-    // 1. FILTRADO: Solo Booking y Airbnb (ignorando mayúsculas/minúsculas)
+    // 1. FILTRADO ESTRICTO: Solo Booking y Airbnb
+    // Usamos .includes para capturar si escribes "BOOKING.COM" o similares
     const filteredData = parsed.data.filter(reserva => {
-      const origen = (reserva['ORIGEN'] || '').toUpperCase();
+      const origen = (reserva['ORIGEN'] || '').toUpperCase().trim();
       return origen.includes('BOOKING') || origen.includes('AIRBNB');
     });
 
-    // 2. MAPEO DE COLUMNAS (Asegúrate que coincidan con tu Excel)
+    // 2. MAPEO DE COLUMNAS (Ajustado según tu captura de pantalla)
+    // Si en tu Excel las columnas se llaman distinto, cámbialas AQUÍ a la derecha:
     const keys = {
       alojamiento: 'ALOJAMIENTO', 
       origen: 'ORIGEN',
-      entrada: 'FECHA ENTRADA',
-      salida: 'FECHA SALIDA',
+      entrada: 'FECHA ENTRADA', // Revisa si en tu Excel tiene espacio o tilde
+      salida: 'FECHA SALIDA',   // Revisa si en tu Excel tiene espacio o tilde
       nombre: 'NOMBRE',
-      observaciones: 'OBSERVACIONES'
+      observaciones: 'OBSERVACIONES',
+      datosKiko: 'DATOS KIKO'
     };
 
-    // Enviamos los datos ya filtrados al Dashboard
     res.status(200).json({ data: filteredData, keys });
   } catch (error) {
     res.status(500).json({ error: "Error al conectar con la hoja de reservas" });
