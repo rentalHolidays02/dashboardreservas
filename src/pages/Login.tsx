@@ -40,7 +40,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-orange-400/10 rounded-full blur-3xl opacity-50"></div>
       </div>
 
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 relative animate-in zoom-in duration-500">
+      <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden z-10 relative animate-in zoom-in duration-500">
         <div className="p-6 sm:p-10">
           <div className="mb-8 text-center">
             <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/20">
@@ -90,7 +90,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/30 transition-all transform hover:-translate-y-1 disabled:opacity-70 disabled:transform-none flex items-center justify-center space-x-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all transform hover:-translate-y-1 disabled:opacity-70 disabled:transform-none flex items-center justify-center space-x-2"
             >
               {loading ? (
                 <>

@@ -144,8 +144,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                         className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
                           text-sm tracking-tight transition-all duration-200
                           ${active
-                            ? 'bg-white/50 backdrop-blur-md border border-white/70 text-slate-900'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
+                            ? 'bg-white/80 backdrop-blur-md border border-white text-slate-900'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
                           }`}
                       >
                         <span className="shrink-0 w-8 h-8 flex items-center justify-center">

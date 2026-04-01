@@ -42,15 +42,15 @@ const PulseDot: React.FC<{
   if (cx == null || cy == null) return null;
   return (
     <g>
-      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#3b82f6" strokeWidth={1.5}>
+      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#f97316" strokeWidth={1.5}>
         <animate attributeName="r"       from="5"   to="16"  dur="0.55s" fill="freeze" />
         <animate attributeName="opacity" from="0.5" to="0"   dur="0.55s" fill="freeze" />
       </circle>
-      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#3b82f6" strokeWidth={1}>
+      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#f97316" strokeWidth={1}>
         <animate attributeName="r"       from="5"   to="22"  begin="0.1s" dur="0.55s" fill="freeze" />
         <animate attributeName="opacity" from="0.25" to="0"  begin="0.1s" dur="0.55s" fill="freeze" />
       </circle>
-      <circle cx={cx} cy={cy} r={4.5} fill="#3b82f6" stroke="#fff" strokeWidth={2.5} />
+      <circle cx={cx} cy={cy} r={4.5} fill="#f97316" stroke="#fff" strokeWidth={2.5} />
     </g>
   );
 };
@@ -166,7 +166,7 @@ const CustomTooltip: React.FC<{
 }> = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm text-xs">
+    <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs">
       <p className="text-slate-400 mb-0.5">{label}</p>
       <p className="font-normal text-slate-800">{fmtEur(payload[0].value)}</p>
     </div>
@@ -235,21 +235,21 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             <TrendingUp size={15} className="text-slate-800 flex-shrink-0" />
             <p className="text-base font-normal font-display tracking-tight text-slate-800">Pagos</p>
             {selectedWorker && (
-              <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 border border-blue-100 rounded-md px-2 py-0.5 truncate max-w-[160px]">
+              <span className="inline-flex items-center gap-1 text-xs bg-orange-50 text-orange-600 border border-orange-100 rounded-md px-2 py-0.5 truncate max-w-[160px]">
                 {selectedWorker.fullName}
               </span>
             )}
           </div>
 
-          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+          <div className="flex items-center bg-white/40 backdrop-blur-md border border-white/60 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
             {PERIODS.map(p => (
               <button
                 key={p.id}
                 onClick={() => handlePeriod(p.id)}
                 className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all duration-200 ${
                   period === p.id
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-600'
+                    ? 'bg-white/90 text-slate-900 border border-white'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
                 }`}
               >
                 {p.label}
@@ -261,7 +261,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
         {/* Selector de fechas personalizadas */}
         {period === 'personalizado' && (
           <div className="flex items-center gap-2 mb-3 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
               <CalendarRange size={13} className="text-slate-400 flex-shrink-0" />
               <input
                 type="date"
@@ -295,7 +295,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             <span className="text-2xl font-medium text-slate-900 tabular-nums tracking-tight">
               {fmtEur(animatedTotal)}
             </span>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500">
               total {periodLabel}
               {selectedWorker ? ` · ${selectedWorker.fullName}` : ''}
             </span>
@@ -311,7 +311,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             <div key={chartKey} className="chart-enter flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.03)" vertical={false} />
                   <XAxis
                     dataKey="label"
                     tick={{ fontSize: 10, fill: '#94a3b8' }}
@@ -337,7 +337,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
                   <Line
                     type="monotone"
                     dataKey="valor"
-                    stroke="#3b82f6"
+                    stroke="#f97316"
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -361,7 +361,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
           checkIns.slice(0, 4).map(entry => (
             <div
               key={entry.id}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between"
+              className="bg-white/80 backdrop-blur-sm border border-white rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white shadow-sm"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs text-slate-500 font-medium flex-shrink-0">
