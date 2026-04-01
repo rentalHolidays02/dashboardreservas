@@ -167,9 +167,9 @@ const CustomTooltip: React.FC<{
 }> = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs">
+    <div className="bg-white border-2 border-white rounded-xl px-3 py-2 text-xs soft-shadow">
       <p className="text-slate-400 mb-0.5">{label}</p>
-      <p className="font-normal text-slate-800">{fmtEur(payload[0].value)}</p>
+      <p className="font-medium text-slate-800">{fmtEur(payload[0].value)}</p>
     </div>
   );
 };
@@ -257,7 +257,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
                 onClick={() => handlePeriod(p.id)}
                 className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all duration-200 ${
                   period === p.id
-                    ? 'bg-white/90 text-slate-900 border border-white'
+                    ? 'bg-white/90 text-orange-600 border border-white'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
                 }`}
               >
