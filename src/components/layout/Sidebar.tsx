@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   PanelLeft,
   LayoutDashboard,
@@ -7,6 +7,7 @@ import {
   LogOut,
   Banknote,
   AlertTriangle,
+  type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import logoFull from '../../assets/logo/LogoEstandar.png';
@@ -21,25 +22,27 @@ interface SidebarProps {
   onHoverChange: (v: boolean) => void;
 }
 
-const categories = [
+type IconComponent = React.FC<LucideProps>;
+
+const categories: { label: string; items: { Icon: IconComponent; label: string; path: string }[] }[] = [
   {
     label: 'PRINCIPAL',
     items: [
-      { icon: <LayoutDashboard size={18} />, label: 'Dashboard', path: '/dashboard' },
+      { Icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     ],
   },
   {
     label: 'OPERACIONES',
     items: [
-      { icon: <Calendar size={18} />, label: 'Limpiezas', path: '/cleans' },
-      { icon: <Users size={18} />, label: 'Trabajadores', path: '/workers' },
+      { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
+      { Icon: Users, label: 'Trabajadores', path: '/workers' },
     ],
   },
   {
     label: 'FINANZAS',
     items: [
-      { icon: <Banknote size={18} />, label: 'Pagos', path: '/pagos' },
-      { icon: <AlertTriangle size={18} />, label: 'Incidencias', path: '/incidencias' },
+      { Icon: Banknote, label: 'Pagos', path: '/pagos' },
+      { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
     ],
   },
 ];
@@ -56,25 +59,10 @@ const Sidebar: React.FC<SidebarProps> = ({
   const location = useLocation();
   const [isHovered, setIsHovered] = useState(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
-  const layoutTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const collapsed = isCollapsed && !isOpen && !isHovered;
   const isHoverExpanded = isCollapsed && isHovered && !isOpen;
 
-  // miniLayout: ONLY controls which element gets the highlight bg.
-  // Switches to true AFTER the collapse animation ends (icon already at rest).
-  // Switches to false IMMEDIATELY on expand so layout is ready as width grows.
-  // The icon x-position NEVER changes — always pl-2 inside px-3.
-  const [miniLayout, setMiniLayout] = useState(isCollapsed);
-  useEffect(() => {
-    clearTimeout(layoutTimer.current);
-    if (collapsed) {
-      layoutTimer.current = setTimeout(() => setMiniLayout(true), 420);
-    } else {
-      setMiniLayout(false);
-    }
-    return () => clearTimeout(layoutTimer.current);
-  }, [collapsed]);
 
   const handleMouseEnter = () => {
     clearTimeout(leaveTimer.current);
@@ -102,19 +90,17 @@ const Sidebar: React.FC<SidebarProps> = ({
         className={`sidebar-panel fixed left-0 top-0 h-full bg-slate-50 z-50 flex flex-col overflow-hidden
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
-        style={{ width: isOpen ? '240px' : collapsed ? '80px' : '240px' }}
+        style={{ width: isOpen ? '240px' : collapsed ? '73px' : '240px' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
 
         {/* ── Header ───────────────────────────────────────────────────── */}
-        {/* pl-[18px] puts the logo at the same left edge as the icon in nav items:
-            nav px-3 (12px) + link pl-2 (8px) - half-logo-offset ≈ 18px            */}
         <div className="flex items-center h-16 pl-[18px] pr-3 shrink-0">
           <img
             src={logoFull}
             alt="RH Pagos"
-            className="h-7 w-auto object-contain shrink-0"
+            className="h-9 w-auto object-contain shrink-0"
           />
           <div className="flex-1" />
           <button
@@ -147,45 +133,28 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               <ul className="space-y-0.5 px-3">
-                {cat.items.map((item) => {
-                  const active = location.pathname === item.path;
+                {cat.items.map(({ Icon, label, path }) => {
+                  const active = location.pathname === path;
                   return (
-                    <li key={item.path}>
-                      {/*
-                        Layout NEVER changes: always flex, w-full, gap-3, pl-2, pr-3, h-10.
-                        miniLayout only decides whether the bg is on this link (expanded)
-                        or on the icon span (mini). Icon x-position: 12+8=20px. Always.
-                      */}
+                    <li key={path}>
                       <Link
-                        to={item.path}
+                        to={path}
                         onClick={() => { if (window.innerWidth < 1024) onClose(); }}
-                        title={miniLayout ? item.label : undefined}
-                        className={`group flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
+                        title={collapsed ? label : undefined}
+                        className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
                           text-sm tracking-tight transition-colors duration-150
-                          ${!miniLayout
-                            ? active
-                              ? 'bg-slate-700 text-white'
-                              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
-                            : active
-                              ? 'text-white'
-                              : 'text-slate-500 hover:text-slate-800'
+                          ${active
+                            ? 'bg-slate-100 text-slate-900'
+                            : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
                           }`}
                       >
-                        {/* Icon span: gets the square bg in mini mode */}
-                        <span
-                          className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150
-                            ${miniLayout
-                              ? active
-                                ? 'bg-slate-700 text-white'
-                                : 'text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-700'
-                              : active
-                                ? 'text-white'
-                                : 'text-slate-400'
-                            }`}
-                        >
-                          {item.icon}
+                        <span className="shrink-0 w-8 h-8 flex items-center justify-center">
+                          <Icon size={18} />
                         </span>
-                        <span className="sidebar-fade whitespace-nowrap">{item.label}</span>
+                        <span className={`sidebar-fade whitespace-nowrap
+                          ${active ? 'font-medium' : 'font-normal text-slate-500'}`}>
+                          {label}
+                        </span>
                       </Link>
                     </li>
                   );
@@ -213,16 +182,11 @@ const Sidebar: React.FC<SidebarProps> = ({
           {/* Logout — same layout, icon span gets bg in mini */}
           <button
             onClick={onLogout}
-            title={miniLayout ? 'Cerrar sesión' : undefined}
-            className={`group flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg transition-colors
-              ${!miniLayout
-                ? 'text-slate-500 hover:bg-red-50 hover:text-red-500'
-                : 'text-slate-500 hover:text-red-500'
-              }`}
+            title={collapsed ? 'Cerrar sesión' : undefined}
+            className="flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
+              text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
           >
-            <span className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-lg transition-colors duration-150
-              ${miniLayout ? 'group-hover:bg-red-50 group-hover:text-red-500 text-slate-400' : ''}`}
-            >
+            <span className="shrink-0 w-8 h-8 flex items-center justify-center">
               <LogOut size={18} />
             </span>
             <span className="sidebar-fade text-sm tracking-tight whitespace-nowrap">

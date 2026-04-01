@@ -46,7 +46,7 @@
 :root {
   --radius: 16px;
   --sidebar-width: 240px;
-  --sidebar-mini: 80px;
+  --sidebar-mini: 73px;
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 420ms;
 }
