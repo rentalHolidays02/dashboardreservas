@@ -40,7 +40,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
         onHoverChange={setIsSidebarHovered}
       />
 
-      {/* Main Content — margin matches sidebar width with same transition */}
+      {/* Main Content */}
       <main
         className="flex-1 p-4 md:p-8 sidebar-main-content"
         style={{ marginLeft: isEffectivelyCollapsed ? '80px' : '240px' }}
