@@ -87,7 +87,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       <div
         data-collapsed={collapsed ? 'true' : 'false'}
-        className={`sidebar-panel fixed left-0 top-0 h-full bg-slate-50 z-50 flex flex-col overflow-hidden
+        className={`sidebar-panel fixed left-0 top-0 h-full bg-transparent border-r border-slate-200/20 z-50 flex flex-col overflow-hidden
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
         style={{ width: isOpen ? '240px' : collapsed ? '73px' : '240px' }}
@@ -142,10 +142,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => { if (window.innerWidth < 1024) onClose(); }}
                         title={collapsed ? label : undefined}
                         className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
-                          text-sm tracking-tight transition-colors duration-150
+                          text-sm tracking-tight transition-all duration-200
                           ${active
-                            ? 'bg-slate-100 text-slate-900'
-                            : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                            ? 'bg-white/50 backdrop-blur-md border border-white/70 text-slate-900'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
                           }`}
                       >
                         <span className="shrink-0 w-8 h-8 flex items-center justify-center">

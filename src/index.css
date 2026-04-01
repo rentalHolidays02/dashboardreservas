@@ -49,6 +49,7 @@
   --sidebar-mini: 73px;
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 420ms;
+  --app-bg: linear-gradient(135deg, #FFF5F2 0%, #FFF9EB 100%);
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────────
@@ -136,10 +137,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
+  background: var(--app-bg);
+  background-attachment: fixed;
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
+  background: transparent;
 }
 
