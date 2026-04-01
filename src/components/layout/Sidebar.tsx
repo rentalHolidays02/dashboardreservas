@@ -87,7 +87,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       <div
         data-collapsed={collapsed ? 'true' : 'false'}
-        className={`sidebar-panel fixed left-0 top-0 h-full bg-slate-50 z-50 flex flex-col overflow-hidden
+        className={`sidebar-panel fixed left-0 top-0 h-full bg-transparent border-r border-slate-200/20 z-50 flex flex-col overflow-hidden
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
         style={{ width: isOpen ? '240px' : collapsed ? '73px' : '240px' }}
@@ -107,8 +107,8 @@ const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => { onCollapse(!isCollapsed); setIsHovered(false); onHoverChange(false); }}
             className={`hidden lg:flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0 sidebar-fade
               ${isHoverExpanded
-                ? 'bg-slate-900 text-white hover:bg-slate-700'
-                : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                ? 'text-orange-700 hover:bg-white/40'
+                : 'text-slate-400 hover:bg-white/40'
               }`}
           >
             <PanelLeft size={16} />
@@ -142,17 +142,17 @@ const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => { if (window.innerWidth < 1024) onClose(); }}
                         title={collapsed ? label : undefined}
                         className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
-                          text-sm tracking-tight transition-colors duration-150
+                          text-sm tracking-tight transition-all duration-200
                           ${active
-                            ? 'bg-slate-100 text-slate-900'
-                            : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                            ? 'text-orange-700'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
                           }`}
                       >
-                        <span className="shrink-0 w-8 h-8 flex items-center justify-center">
+                        <span className={`shrink-0 w-8 h-8 flex items-center justify-center ${active ? 'text-orange-700' : ''}`}>
                           <Icon size={18} />
                         </span>
                         <span className={`sidebar-fade whitespace-nowrap
-                          ${active ? 'font-medium' : 'font-normal text-slate-500'}`}>
+                          ${active ? 'font-normal' : 'font-normal text-slate-500'}`}>
                           {label}
                         </span>
                       </Link>
@@ -167,8 +167,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
           {/* User card — same pl-2 offset, icon never moves */}
-          <div className="flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 bg-slate-200/60 rounded-xl">
-            <div className="shrink-0 w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs">
+          <div className="flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 bg-white/80 backdrop-blur-sm border border-white/60 rounded-xl">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
               {userRole === 'admin' ? 'A' : 'V'}
             </div>
             <div className="sidebar-fade min-w-0">

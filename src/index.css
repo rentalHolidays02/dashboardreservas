@@ -12,6 +12,10 @@
     @apply px-5 hover:bg-slate-50 transition-colors;
     height: 64px;
   }
+
+  .soft-shadow {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.01);
+  }
 }
 
 @keyframes chart-enter {
@@ -30,11 +34,11 @@
 
 .working-badge {
   background: linear-gradient(90deg,
-    rgba(5, 150, 105, 1)   0%,
-    rgba(5, 150, 105, 1)   35%,
-    rgba(5, 150, 105, 0.5) 50%,
-    rgba(5, 150, 105, 1)   65%,
-    rgba(5, 150, 105, 1)   100%
+    rgba(249, 115, 22, 1)   0%,
+    rgba(249, 115, 22, 1)   35%,
+    rgba(249, 115, 22, 0.5) 50%,
+    rgba(249, 115, 22, 1)   65%,
+    rgba(249, 115, 22, 1)   100%
   );
   background-size: 200% auto;
   -webkit-background-clip: text;
@@ -49,6 +53,7 @@
   --sidebar-mini: 73px;
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 420ms;
+  --app-bg: linear-gradient(135deg, #FFF5F2 0%, #FFF9EB 100%);
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────────
@@ -136,10 +141,13 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
+  background: var(--app-bg);
+  background-attachment: fixed;
 }
 
 #root {
   width: 100%;
   min-height: 100vh;
+  background: transparent;
 }
 

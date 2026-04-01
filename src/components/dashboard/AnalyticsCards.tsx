@@ -9,6 +9,7 @@ import {
 interface AnalyticsCardsProps {
   checkIns: CheckInOut[];
   selectedWorker?: Worker | null;
+  onWorkerSelect?: (worker: Worker | null) => void;
 }
 
 const fmtTime = (iso: string) =>
@@ -24,8 +25,8 @@ const WorkingBadge: React.FC = () => {
     return () => clearInterval(id);
   }, []);
   return (
-    <span className="inline-flex items-center text-xs">
-      <span className="working-badge">
+    <span className="inline-flex items-center text-[11px]">
+      <span className="working-badge font-medium">
         Trabajando
         <span style={{ opacity: step >= 1 ? 1 : 0 }}>.</span>
         <span style={{ opacity: step >= 2 ? 1 : 0 }}>.</span>
@@ -42,15 +43,15 @@ const PulseDot: React.FC<{
   if (cx == null || cy == null) return null;
   return (
     <g>
-      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#3b82f6" strokeWidth={1.5}>
+      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#f97316" strokeWidth={1.5}>
         <animate attributeName="r"       from="5"   to="16"  dur="0.55s" fill="freeze" />
         <animate attributeName="opacity" from="0.5" to="0"   dur="0.55s" fill="freeze" />
       </circle>
-      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#3b82f6" strokeWidth={1}>
+      <circle cx={cx} cy={cy} r={5} fill="none" stroke="#f97316" strokeWidth={1}>
         <animate attributeName="r"       from="5"   to="22"  begin="0.1s" dur="0.55s" fill="freeze" />
         <animate attributeName="opacity" from="0.25" to="0"  begin="0.1s" dur="0.55s" fill="freeze" />
       </circle>
-      <circle cx={cx} cy={cy} r={4.5} fill="#3b82f6" stroke="#fff" strokeWidth={2.5} />
+      <circle cx={cx} cy={cy} r={4.5} fill="#f97316" stroke="#fff" strokeWidth={2.5} />
     </g>
   );
 };
@@ -166,15 +167,15 @@ const CustomTooltip: React.FC<{
 }> = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm text-xs">
+    <div className="bg-white border-2 border-white rounded-xl px-3 py-2 text-xs soft-shadow">
       <p className="text-slate-400 mb-0.5">{label}</p>
-      <p className="font-normal text-slate-800">{fmtEur(payload[0].value)}</p>
+      <p className="font-medium text-slate-800">{fmtEur(payload[0].value)}</p>
     </div>
   );
 };
 
 
-const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker }) => {
+const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker, onWorkerSelect }) => {
   const [period, setPeriod]         = useState<Period>('semanal');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
@@ -231,25 +232,33 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
       {/* Módulo 1: Gráfica dinero × días */}
       <div className="flex flex-col">
         <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <TrendingUp size={15} className="text-slate-800 flex-shrink-0" />
-            <p className="text-base font-normal font-display tracking-tight text-slate-800">Pagos</p>
+          <div className="flex items-baseline gap-3 min-w-0">
+            <span className="text-xl font-normal text-slate-800 tracking-tight tabular-nums font-display">
+              {fmtEur(animatedTotal)}
+            </span>
+            <span className="text-xs text-slate-400 font-normal">
+              total {periodLabel}
+            </span>
             {selectedWorker && (
-              <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-600 border border-blue-100 rounded-md px-2 py-0.5 truncate max-w-[160px]">
-                {selectedWorker.fullName}
-              </span>
+              <button
+                onClick={() => onWorkerSelect && onWorkerSelect(null)}
+                className="inline-flex items-center gap-1.5 text-[11px] bg-orange-50/50 text-orange-600 border border-orange-200/50 rounded-lg px-2 py-1 transition-all hover:bg-orange-100/50 group"
+              >
+                <span className="font-medium">{selectedWorker.fullName}</span>
+                <X size={12} className="text-orange-400 group-hover:text-orange-600" />
+              </button>
             )}
           </div>
 
-          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+          <div className="flex items-center bg-white/40 backdrop-blur-md border border-white/60 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
             {PERIODS.map(p => (
               <button
                 key={p.id}
                 onClick={() => handlePeriod(p.id)}
                 className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all duration-200 ${
                   period === p.id
-                    ? 'bg-white text-slate-800 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-600'
+                    ? 'bg-white/90 text-orange-600 border border-white'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
                 }`}
               >
                 {p.label}
@@ -261,7 +270,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
         {/* Selector de fechas personalizadas */}
         {period === 'personalizado' && (
           <div className="flex items-center gap-2 mb-3 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
+            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
               <CalendarRange size={13} className="text-slate-400 flex-shrink-0" />
               <input
                 type="date"
@@ -290,16 +299,6 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
         )}
 
         <div className="flex flex-col flex-1 min-h-0 px-1">
-          {/* Resumen total */}
-          <div className="flex items-baseline gap-2 mb-4 flex-shrink-0">
-            <span className="text-2xl font-medium text-slate-900 tabular-nums tracking-tight">
-              {fmtEur(animatedTotal)}
-            </span>
-            <span className="text-xs text-slate-400">
-              total {periodLabel}
-              {selectedWorker ? ` · ${selectedWorker.fullName}` : ''}
-            </span>
-          </div>
 
           {/* Gráfica */}
           {period === 'personalizado' && (!customDesde || !customHasta) ? (
@@ -311,7 +310,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             <div key={chartKey} className="chart-enter flex-1 min-h-0">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.03)" vertical={false} />
                   <XAxis
                     dataKey="label"
                     tick={{ fontSize: 10, fill: '#94a3b8' }}
@@ -337,7 +336,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
                   <Line
                     type="monotone"
                     dataKey="valor"
-                    stroke="#3b82f6"
+                    stroke="#f97316"
                     strokeWidth={2.5}
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -358,13 +357,17 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             <span className="text-xs text-slate-400">Sin actividad registrada</span>
           </div>
         ) : (
-          checkIns.slice(0, 4).map(entry => (
-            <div
-              key={entry.id}
-              className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between"
-            >
+          checkIns.slice(0, 4).map(entry => {
+            const isFinished = entry.type === 'check-out';
+            return (
+              <div
+                key={entry.id}
+                className={`bg-white/80 backdrop-blur-sm border border-white/60 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white ${
+                  isFinished ? 'opacity-30' : 'opacity-100'
+                }`}
+              >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs text-slate-500 font-medium flex-shrink-0">
+                <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-xs text-slate-500 font-medium flex-shrink-0 soft-shadow">
                   {entry.cleanerName.charAt(0)}
                 </div>
                 <div className="min-w-0">
@@ -380,9 +383,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
                     : <span className="text-[11px] text-slate-400">Finalizado</span>
                   }
                 </span>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
 
         <button className="text-xs text-slate-400 hover:text-slate-600 transition-colors text-center py-1 cursor-not-allowed select-none">
