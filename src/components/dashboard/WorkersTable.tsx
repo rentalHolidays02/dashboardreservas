@@ -91,7 +91,7 @@ return (
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Buscar nombre..."
-              className="pl-8 pr-3 py-1.5 w-44 text-xs text-slate-700 bg-white/60 border border-white rounded-lg outline-none focus:bg-white focus:border-white transition-all placeholder:text-slate-400"
+              className="pl-8 pr-3 py-1.5 w-44 text-xs text-slate-700 bg-white/80 border border-white/60 rounded-lg outline-none focus:bg-white focus:border-white transition-all placeholder:text-slate-400"
             />
           </div>
 
@@ -99,7 +99,7 @@ return (
             <select
               value={accommodation}
               onChange={e => setAccommodation(e.target.value)}
-              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/60 border border-white rounded-lg outline-none focus:bg-white focus:border-white transition-all cursor-pointer"
+              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/80 border border-white/60 rounded-lg outline-none focus:bg-white focus:border-white transition-all cursor-pointer"
             >
               <option value="">Todos los alojamientos</option>
               {allAccommodations.map(a => (
@@ -113,7 +113,7 @@ return (
             <select
               value={sort}
               onChange={e => setSort(e.target.value as SortKey)}
-              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white border border-slate-200 rounded-lg outline-none focus:border-slate-400 transition-colors cursor-pointer"
+              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/80 border border-white/60 rounded-lg outline-none focus:bg-white focus:border-white transition-colors cursor-pointer"
             >
               <option value="none">Ordenar por...</option>
               <option value="net_desc">Mayor dinero neto</option>

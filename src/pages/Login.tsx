@@ -40,10 +40,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-orange-400/10 rounded-full blur-3xl opacity-50"></div>
       </div>
 
-      <div className="w-full max-w-md bg-white rounded-3xl overflow-hidden z-10 relative animate-in zoom-in duration-500">
+      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl border border-white/60 rounded-3xl overflow-hidden z-10 relative animate-in zoom-in duration-500 soft-shadow">
         <div className="p-6 sm:p-10">
           <div className="mb-8 text-center">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 soft-shadow">
               <LogIn className="text-white" size={32} />
             </div>
             <h1 className="text-2xl font-bold text-slate-900">Bienvenido</h1>
@@ -56,11 +56,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Correo Electrónico
               </label>
-              <input
+               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-3 rounded-xl bg-white/80 border border-white/60 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
                 placeholder="admin@rh.local"
                 required
               />
@@ -74,7 +74,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full px-4 py-3 rounded-xl bg-white/80 border border-white/60 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
                 placeholder="••••••••"
                 required
               />
@@ -90,7 +90,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all transform hover:-translate-y-1 disabled:opacity-70 disabled:transform-none flex items-center justify-center space-x-2"
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition-all transform hover:-translate-y-1 disabled:opacity-70 disabled:transform-none flex items-center justify-center space-x-2 soft-shadow shadow-orange-200/50"
             >
               {loading ? (
                 <>
@@ -104,7 +104,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           </form>
         </div>
         
-        <div className="bg-slate-50 p-6 text-center border-t border-slate-100">
+        <div className="bg-white/40 p-6 text-center border-t border-white/40">
           <p className="text-xs text-slate-400">
             Acceso restringido para personal de Rental Holidays
           </p>

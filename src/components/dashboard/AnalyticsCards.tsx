@@ -9,6 +9,7 @@ import {
 interface AnalyticsCardsProps {
   checkIns: CheckInOut[];
   selectedWorker?: Worker | null;
+  onWorkerSelect?: (worker: Worker | null) => void;
 }
 
 const fmtTime = (iso: string) =>
@@ -174,7 +175,7 @@ const CustomTooltip: React.FC<{
 };
 
 
-const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker }) => {
+const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker, onWorkerSelect }) => {
   const [period, setPeriod]         = useState<Period>('semanal');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
@@ -231,13 +232,21 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
       {/* Módulo 1: Gráfica dinero × días */}
       <div className="flex flex-col">
         <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <TrendingUp size={15} className="text-slate-800 flex-shrink-0" />
-            <p className="text-base font-normal font-display tracking-tight text-slate-800">Pagos</p>
+          <div className="flex items-baseline gap-3 min-w-0">
+            <span className="text-xl font-normal text-slate-800 tracking-tight tabular-nums font-display">
+              {fmtEur(animatedTotal)}
+            </span>
+            <span className="text-xs text-slate-400 font-normal">
+              total {periodLabel}
+            </span>
             {selectedWorker && (
-              <span className="inline-flex items-center gap-1 text-xs bg-orange-50 text-orange-600 border border-orange-100 rounded-md px-2 py-0.5 truncate max-w-[160px]">
-                {selectedWorker.fullName}
-              </span>
+              <button
+                onClick={() => onWorkerSelect && onWorkerSelect(null)}
+                className="inline-flex items-center gap-1.5 text-[11px] bg-orange-50/50 text-orange-600 border border-orange-200/50 rounded-lg px-2 py-1 transition-all hover:bg-orange-100/50 group"
+              >
+                <span className="font-medium">{selectedWorker.fullName}</span>
+                <X size={12} className="text-orange-400 group-hover:text-orange-600" />
+              </button>
             )}
           </div>
 
@@ -290,16 +299,6 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
         )}
 
         <div className="flex flex-col flex-1 min-h-0 px-1">
-          {/* Resumen total */}
-          <div className="flex items-baseline gap-2 mb-4 flex-shrink-0">
-            <span className="text-2xl font-medium text-slate-900 tabular-nums tracking-tight">
-              {fmtEur(animatedTotal)}
-            </span>
-            <span className="text-xs text-slate-500">
-              total {periodLabel}
-              {selectedWorker ? ` · ${selectedWorker.fullName}` : ''}
-            </span>
-          </div>
 
           {/* Gráfica */}
           {period === 'personalizado' && (!customDesde || !customHasta) ? (
@@ -363,7 +362,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             return (
               <div
                 key={entry.id}
-                className={`bg-white/60 backdrop-blur-sm border border-white/60 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white/80 ${
+                className={`bg-white/80 backdrop-blur-sm border border-white/60 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white ${
                   isFinished ? 'opacity-30' : 'opacity-100'
                 }`}
               >
