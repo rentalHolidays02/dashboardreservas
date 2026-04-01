@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
-  ChevronLeft,
-  ChevronRight,
+  PanelLeft,
   LayoutDashboard,
   Users,
   Calendar,
   LogOut,
   Banknote,
-  AlertTriangle
+  AlertTriangle,
+  type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import logoFull from '../../assets/logo/LogoEstandar.png';
 
 interface SidebarProps {
   userRole: 'admin' | 'viewer';
@@ -18,103 +19,185 @@ interface SidebarProps {
   onClose: () => void;
   isCollapsed: boolean;
   onCollapse: (v: boolean) => void;
+  onHoverChange: (v: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ userRole, onLogout, isOpen, onClose, isCollapsed, onCollapse }) => {
+type IconComponent = React.FC<LucideProps>;
 
-  const menuItems = [
-    { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/dashboard' },
-    { icon: <Calendar size={20} />, label: 'Limpiezas', path: '/cleans' },
-    { icon: <Users size={20} />, label: 'Trabajadores', path: '/workers' },
-    { icon: <Banknote size={20} />, label: 'Pagos', path: '/pagos' },
-    { icon: <AlertTriangle size={20} />, label: 'Incidencias', path: '/incidencias' },
-  ];
+const categories: { label: string; items: { Icon: IconComponent; label: string; path: string }[] }[] = [
+  {
+    label: 'PRINCIPAL',
+    items: [
+      { Icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    ],
+  },
+  {
+    label: 'OPERACIONES',
+    items: [
+      { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
+      { Icon: Users, label: 'Trabajadores', path: '/workers' },
+    ],
+  },
+  {
+    label: 'FINANZAS',
+    items: [
+      { Icon: Banknote, label: 'Pagos', path: '/pagos' },
+      { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
+    ],
+  },
+];
+
+const Sidebar: React.FC<SidebarProps> = ({
+  userRole,
+  onLogout,
+  isOpen,
+  onClose,
+  isCollapsed,
+  onCollapse,
+  onHoverChange,
+}) => {
+  const location = useLocation();
+  const [isHovered, setIsHovered] = useState(false);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const collapsed = isCollapsed && !isOpen && !isHovered;
+  const isHoverExpanded = isCollapsed && isHovered && !isOpen;
+
+
+  const handleMouseEnter = () => {
+    clearTimeout(leaveTimer.current);
+    setIsHovered(true);
+    onHoverChange(true);
+  };
+  const handleMouseLeave = () => {
+    leaveTimer.current = setTimeout(() => {
+      setIsHovered(false);
+      onHoverChange(false);
+    }, 60);
+  };
 
   return (
     <>
-      {/* Overlay for mobile */}
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden"
+        <div
+          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
 
-      <div 
-        className={`fixed left-0 top-0 h-full bg-slate-900 text-white transition-all duration-300 z-50 flex flex-col ${
-          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        } ${
-          isCollapsed ? 'lg:w-20' : 'lg:w-64 w-64'
-        }`}
+      <div
+        data-collapsed={collapsed ? 'true' : 'false'}
+        className={`sidebar-panel fixed left-0 top-0 h-full bg-slate-50 z-50 flex flex-col overflow-hidden
+          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+        style={{ width: isOpen ? '240px' : collapsed ? '73px' : '240px' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        {/* Header */}
-        <div className="p-6 flex items-center justify-between border-b border-slate-800">
-          {(!isCollapsed || isOpen) && <span className="font-bold text-xl tracking-tight">RH Pagos</span>}
-          <button 
-            onClick={() => onCollapse(!isCollapsed)}
-            className="hidden lg:block p-1 hover:bg-slate-800 rounded-md transition-colors"
+
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        <div className="flex items-center h-16 pl-[18px] pr-3 shrink-0">
+          <img
+            src={logoFull}
+            alt="RH Pagos"
+            className="h-9 w-auto object-contain shrink-0"
+          />
+          <div className="flex-1" />
+          <button
+            onClick={() => { onCollapse(!isCollapsed); setIsHovered(false); onHoverChange(false); }}
+            className={`hidden lg:flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0 sidebar-fade
+              ${isHoverExpanded
+                ? 'bg-slate-900 text-white hover:bg-slate-700'
+                : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+              }`}
           >
-            {isCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            <PanelLeft size={16} />
           </button>
-          
-          {/* Close button for mobile */}
-          <button 
+          <button
             onClick={onClose}
-            className="lg:hidden p-1 hover:bg-slate-800 rounded-md transition-colors"
+            className="lg:hidden flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100"
           >
-            <ChevronLeft size={24} />
+            <PanelLeft size={18} />
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 mt-6 px-3">
-          <ul className="space-y-2">
-            {menuItems.map((item, index) => (
-              <li key={index}>
-                <Link
-                  to={item.path}
-                  onClick={() => { if(window.innerWidth < 1024) onClose(); }}
-                  className={`flex items-center p-3 rounded-lg transition-all ${
-                    location.pathname === item.path
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                  } ${isCollapsed && !isOpen ? 'lg:justify-center' : 'space-x-3'}`}
-                >
-                  {item.icon}
-                  {(!isCollapsed || isOpen) && <span className="font-medium">{item.label}</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
+        {/* ── Navigation ───────────────────────────────────────────────── */}
+        {/* nav px-3 + link pl-2 = 20px from sidebar edge. Never changes. */}
+        <nav className="flex-1 overflow-y-auto py-2 space-y-4">
+          {categories.map((cat) => (
+            <div key={cat.label}>
+              <div className="h-5 pl-5 mb-1 flex items-center">
+                <span className="sidebar-fade text-[10px] tracking-widest text-slate-400 uppercase whitespace-nowrap">
+                  {cat.label}
+                </span>
+              </div>
+
+              <ul className="space-y-0.5 px-3">
+                {cat.items.map(({ Icon, label, path }) => {
+                  const active = location.pathname === path;
+                  return (
+                    <li key={path}>
+                      <Link
+                        to={path}
+                        onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+                        title={collapsed ? label : undefined}
+                        className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
+                          text-sm tracking-tight transition-colors duration-150
+                          ${active
+                            ? 'bg-slate-100 text-slate-900'
+                            : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+                          }`}
+                      >
+                        <span className="shrink-0 w-8 h-8 flex items-center justify-center">
+                          <Icon size={18} />
+                        </span>
+                        <span className={`sidebar-fade whitespace-nowrap
+                          ${active ? 'font-medium' : 'font-normal text-slate-500'}`}>
+                          {label}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </nav>
 
-        {/* Footer / User info */}
-        <div className="p-4 border-t border-slate-800">
-          <div className={`flex items-center ${isCollapsed && !isOpen ? 'lg:justify-center' : 'space-x-3'} mb-4`}>
-            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm">
+        {/* ── Footer ───────────────────────────────────────────────────── */}
+        <div className="px-3 pb-4 pt-3 shrink-0">
+          {/* User card — same pl-2 offset, icon never moves */}
+          <div className="flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 bg-slate-200/60 rounded-xl">
+            <div className="shrink-0 w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs">
               {userRole === 'admin' ? 'A' : 'V'}
             </div>
-            {(!isCollapsed || isOpen) && (
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">Usuario {userRole}</span>
-                <span className="text-xs text-slate-500 capitalize">{userRole}</span>
-              </div>
-            )}
+            <div className="sidebar-fade min-w-0">
+              <p className="text-sm tracking-tight text-slate-800 whitespace-nowrap leading-tight">
+                {userRole === 'admin' ? 'Administrador' : 'Visualizador'}
+              </p>
+              <p className="text-xs text-slate-400 capitalize leading-tight">{userRole}</p>
+            </div>
           </div>
-          <button 
+
+          {/* Logout — same layout, icon span gets bg in mini */}
+          <button
             onClick={onLogout}
-            className={`flex items-center w-full p-3 text-slate-400 hover:text-red-400 hover:bg-red-950/20 rounded-lg transition-colors ${
-              isCollapsed && !isOpen ? 'lg:justify-center' : 'space-x-3'
-            }`}
+            title={collapsed ? 'Cerrar sesión' : undefined}
+            className="flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
+              text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
           >
-            <LogOut size={20} />
-            {(!isCollapsed || isOpen) && <span className="font-medium text-sm">Cerrar sesión</span>}
+            <span className="shrink-0 w-8 h-8 flex items-center justify-center">
+              <LogOut size={18} />
+            </span>
+            <span className="sidebar-fade text-sm tracking-tight whitespace-nowrap">
+              Cerrar sesión
+            </span>
           </button>
         </div>
+
       </div>
     </>
   );
 };
-
 
 export default Sidebar;

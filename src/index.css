@@ -44,13 +44,98 @@
 }
 
 :root {
-  --radius: 16px; /* macOS large container radius */
+  --radius: 16px;
+  --sidebar-width: 240px;
+  --sidebar-mini: 73px;
+  --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --sidebar-duration: 420ms;
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────────────────────
+   Timing strategy (sequential, not simultaneous):
+     Collapsing: text fades out (100ms) → width shrinks after 60ms delay (360ms)
+     Expanding:  width grows (360ms)    → text fades in after 280ms delay (150ms)
+   Icons NEVER change position — layout is static, overflow-hidden clips the rest.
+──────────────────────────────────────────────────────────────────────────── */
+
+.sidebar-panel {
+  /* Width transition: varies by direction (see below). Transform always same. */
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Collapsing: width shrinks 60ms after text is already fading */
+[data-collapsed="true"] .sidebar-panel,
+.sidebar-panel[data-collapsed="true"] {
+  transition:
+    width 360ms 60ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Expanding: width grows immediately */
+[data-collapsed="false"] .sidebar-panel,
+.sidebar-panel[data-collapsed="false"] {
+  transition:
+    width 360ms 0ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The data-collapsed attr is on the panel itself */
+.sidebar-panel[data-collapsed="true"] {
+  transition:
+    width 360ms 60ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-panel[data-collapsed="false"] {
+  transition:
+    width 360ms 0ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Text / fade elements ─────────────────────────────────────────────────── */
+.sidebar-fade {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+/* When collapsed=true: text starts fading immediately (before width moves) */
+.sidebar-panel[data-collapsed="true"] .sidebar-fade {
+  max-width: 0;
+  opacity: 0;
+  transition:
+    max-width 100ms 0ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity    100ms 0ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When collapsed=false: text fades in after width has grown */
+.sidebar-panel[data-collapsed="false"] .sidebar-fade {
+  max-width: 200px;
+  opacity: 1;
+  transition:
+    max-width 150ms 280ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity    150ms 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Main content ─────────────────────────────────────────────────────────── */
+.sidebar-main-content {
+  /* Expanding: shift immediately with width (360ms).
+     Collapsing: shift after text is gone, same delay as width (60ms). */
+  transition: margin-left 360ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 1023px) {
+  .sidebar-main-content {
+    margin-left: 0 !important;
+    transition: none;
+  }
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  font-family: 'Inter', sans-serif;
 }
 
 #root {
