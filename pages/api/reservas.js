@@ -12,20 +12,26 @@ export default async function handler(req, res) {
       skipEmptyLines: true,
     });
 
-    // 1. FILTRADO ESTRICTO: Solo Booking y Airbnb
-    // Usamos .includes para capturar si escribes "BOOKING.COM" o similares
+    // 1. Buscamos los nombres reales de tus columnas dinámicamente
+    const firstRow = parsed.data[0] || {};
+    const colNames = Object.keys(firstRow);
+    
+    const realColEntrada = colNames.find(c => c.toUpperCase().includes('ENTRADA')) || 'FECHA ENTRADA';
+    const realColSalida = colNames.find(c => c.toUpperCase().includes('SALIDA')) || 'FECHA SALIDA';
+    const realColOrigen = colNames.find(c => c.toUpperCase().includes('ORIGEN')) || 'ORIGEN';
+
+    // 2. FILTRADO: Solo Booking y Airbnb
     const filteredData = parsed.data.filter(reserva => {
-      const origen = (reserva['ORIGEN'] || '').toUpperCase().trim();
+      const origen = (reserva[realColOrigen] || '').toUpperCase().trim();
       return origen.includes('BOOKING') || origen.includes('AIRBNB');
     });
 
-    // 2. MAPEO DE COLUMNAS (Ajustado según tu captura de pantalla)
-    // Si en tu Excel las columnas se llaman distinto, cámbialas AQUÍ a la derecha:
+    // 3. MAPEO: Vinculamos lo que el Dashboard espera con lo que tu Excel tiene
     const keys = {
       alojamiento: 'ALOJAMIENTO', 
-      origen: 'ORIGEN',
-      entrada: 'FECHA ENTRADA', // Revisa si en tu Excel tiene espacio o tilde
-      salida: 'FECHA SALIDA',   // Revisa si en tu Excel tiene espacio o tilde
+      origen: realColOrigen,
+      entrada: realColEntrada, // <--- Aquí es donde se arreglan las fechas
+      salida: realColSalida,   // <--- Aquí es donde se arreglan las fechas
       nombre: 'NOMBRE',
       observaciones: 'OBSERVACIONES',
       datosKiko: 'DATOS KIKO'
