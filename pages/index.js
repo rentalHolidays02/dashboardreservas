@@ -70,63 +70,45 @@ function safeGet(row, key) {
   return (val !== undefined && val !== null && String(val).trim() !== '') ? val : '—';
 }
 
-// Sonido de ENTRADA — ascendente, luminoso, tipo fanfarria de bienvenida
+// Sonido ENTRADA — ascendente, luminoso (Do→Mi→Sol→Do6)
 function playEntrada(ctx) {
   const now = ctx.currentTime;
-  // Tres notas ascendentes: Do → Mi → Sol (acorde mayor ascendente)
-  [
-    [0,    523, 0.55],   // Do5
-    [0.18, 659, 0.5 ],   // Mi5
-    [0.34, 784, 0.65],   // Sol5
-    [0.5,  1047,0.45],   // Do6 — nota final aguda
-  ].forEach(([t, freq, vol]) => {
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
+  [[0, 523, 0.55], [0.18, 659, 0.5], [0.34, 784, 0.65], [0.5, 1047, 0.45]].forEach(([t, freq, vol]) => {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, now + t);
     gain.gain.setValueAtTime(vol, now + t);
     gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.28);
-    osc.start(now + t);
-    osc.stop(now + t + 0.3);
+    osc.start(now + t); osc.stop(now + t + 0.3);
   });
 }
 
-// Sonido de SALIDA — descendente, suave, tipo recordatorio de checkout
+// Sonido SALIDA — descendente, suave (Sol→Mi→Do→Sol4)
 function playSalida(ctx) {
   const now = ctx.currentTime;
-  // Tres notas descendentes: Sol → Mi → Do (acorde mayor invertido)
-  [
-    [0,    784, 0.45],   // Sol5
-    [0.22, 659, 0.4 ],   // Mi5
-    [0.42, 523, 0.5 ],   // Do5
-    [0.6,  392, 0.35],   // Sol4 — nota final grave
-  ].forEach(([t, freq, vol]) => {
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
+  [[0, 784, 0.45], [0.22, 659, 0.4], [0.42, 523, 0.5], [0.6, 392, 0.35]].forEach(([t, freq, vol]) => {
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, now + t);
     gain.gain.setValueAtTime(vol, now + t);
     gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.32);
-    osc.start(now + t);
-    osc.stop(now + t + 0.35);
+    osc.start(now + t); osc.stop(now + t + 0.35);
   });
 }
 
-// Reproduce el sonido correcto según qué tipo de evento hay hoy
+// Dispatcher: toca el sonido correcto según qué tipo de evento hay hoy
 function playAlarmFor(ctx, hasIn, hasOut) {
-  if (hasIn)  playEntrada(ctx);
-  if (hasOut) {
-    // Si hay entrada también, espera un momento para no solapar
-    const delay = hasIn ? 1000 : 0;
-    setTimeout(() => playSalida(ctx), delay);
-  }
+  if (hasIn) playEntrada(ctx);
+  if (hasOut) setTimeout(() => playSalida(ctx), hasIn ? 1000 : 0);
 }
 
 export default function Home() {
   const [data, setData] = useState([]);
   const [keys, setKeys] = useState({});
+  const [detectedCols, setDetectedCols] = useState([]);
+  const [showDebug, setShowDebug] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -146,6 +128,8 @@ export default function Home() {
   const headerRef = useRef(null);
   const bannerRef = useRef(null);
   const tabsRef = useRef(null);
+  const statsRef = useRef(null);
+  const controlsRef = useRef(null);
 
   // FIX 4 — fetchData con sanitización defensiva de keys.
   // Garantiza que todos los valores del mapa sean strings y nunca undefined.
@@ -158,6 +142,7 @@ export default function Home() {
         Object.entries(json.keys || {}).map(([k, v]) => [k, typeof v === 'string' ? v : String(v ?? '')])
       );
       setKeys(safeKeys);
+      setDetectedCols(json._cols || []);
       const enriched = (json.data || []).map((row, i) => ({
         ...row,
         _id: i,
@@ -190,17 +175,21 @@ export default function Home() {
   // eliminando el salto visual del primer frame.
   useEffect(() => {
     function measure() {
-      const hH = headerRef.current?.offsetHeight || 0;
-      const bH = bannerRef.current?.offsetHeight || 0;
-      const tH = tabsRef.current?.offsetHeight || 0;
-      if (hH === 0 && tH === 0) return; // DOM no listo aún
-      document.documentElement.style.setProperty('--header-h', `${hH}px`);
-      document.documentElement.style.setProperty('--header-tabs-h', `${hH + bH}px`);
-      document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH}px`);
+      const hH = headerRef.current?.offsetHeight   || 0;
+      const bH = bannerRef.current?.offsetHeight   || 0;
+      const tH = tabsRef.current?.offsetHeight     || 0;
+      const sH = statsRef.current?.offsetHeight    || 0;
+      const cH = controlsRef.current?.offsetHeight || 0;
+      if (hH === 0 && tH === 0) return;
+      document.documentElement.style.setProperty('--header-h',     `${hH}px`);
+      document.documentElement.style.setProperty('--header-tabs-h',`${hH + bH}px`);
+      // --tbl-top = todo lo que está encima del scroll de la tabla
+      document.documentElement.style.setProperty('--tbl-top',      `${hH + bH + tH + sH + cH}px`);
     }
     requestAnimationFrame(measure);
     const obs = new ResizeObserver(measure);
-    [headerRef, bannerRef, tabsRef].forEach(r => r.current && obs.observe(r.current));
+    [headerRef, bannerRef, tabsRef, statsRef, controlsRef]
+      .forEach(r => r.current && obs.observe(r.current));
     return () => obs.disconnect();
   }, []);
 
@@ -262,7 +251,7 @@ export default function Home() {
       --green: #34d399; --yellow: #fbbf24; --red: #f87171; --purple: #a78bfa;
       --header-h: 56px;
       --header-tabs-h: 96px;
-      --thead-top: 134px;
+      --tbl-top: 310px;
     }
     body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
     .mono { font-family: 'DM Mono', monospace; }
@@ -341,9 +330,17 @@ export default function Home() {
     .ml-auto { margin-left: auto; }
     .sep { width: 1px; height: 22px; background: var(--border); }
 
-    /* Tabla: scroll horizontal simple y fiable. Sin sticky en thead
-       (el sticky dentro de overflow-x:auto es el origen del caos visual). */
-    .tbl-wrap { padding: 0 1.5rem 3rem; overflow-x: auto; }
+    /* Sticky thead — patrón correcto:
+       .tbl-wrap: solo padding, sin overflow (overflow rompe sticky en hijos)
+       .tbl-scroll: maneja AMBOS ejes de scroll → thead { top:0 } funciona dentro */
+    .tbl-wrap { padding: 0 1.5rem 1rem; }
+    .tbl-scroll {
+      overflow: auto;
+      max-height: calc(100vh - var(--tbl-top, 310px));
+      min-height: 200px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 
@@ -352,6 +349,7 @@ export default function Home() {
       padding: 0.6rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
+      position: sticky; top: 0; z-index: 10;
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
@@ -429,13 +427,14 @@ export default function Home() {
     .exp-item label { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 0.1rem; }
     .exp-item span { font-size: 0.77rem; font-family: 'DM Mono', monospace; }
 
-    /* fin-table thead sin sticky (overflow-x:auto lo rompe) */
+    /* fin-table — mismo patrón sticky dentro de .tbl-scroll */
     .fin-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
     .fin-table th {
       background: var(--s1); border-bottom: 2px solid var(--border2);
       padding: 0.58rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
+      position: sticky; top: 0; z-index: 10;
     }
     .fin-table td { padding: 0.62rem 0.85rem; border-bottom: 1px solid var(--border); }
     .fin-table tr:hover td { background: var(--s2); }
@@ -489,24 +488,15 @@ export default function Home() {
       {hasToday && alarmsEnabled && (
         <div className="alarm-banner" ref={bannerRef}>
           <span className="bell">🔔</span>
-          <div style={{ flex: 1 }}>
+          <div>
             <div className="alarm-title">
-              {todayIn.length > 0 && `✈ ${todayIn.length} ENTRADA${todayIn.length > 1 ? 'S' : ''} HOY`}
-              {todayIn.length > 0 && todayOut.length > 0 && <span style={{ color: 'var(--muted)', margin: '0 0.4rem' }}>·</span>}
-              {todayOut.length > 0 && `🚪 ${todayOut.length} SALIDA${todayOut.length > 1 ? 'S' : ''} HOY`}
+              {todayIn.length > 0 && `${todayIn.length} ENTRADA${todayIn.length > 1 ? 'S' : ''} HOY`}
+              {todayIn.length > 0 && todayOut.length > 0 && ' · '}
+              {todayOut.length > 0 && `${todayOut.length} SALIDA${todayOut.length > 1 ? 'S' : ''} HOY`}
             </div>
             <div className="alarm-detail">
-              {todayIn.length > 0 && (
-                <span style={{ color: 'var(--green)' }}>
-                  ✈ {todayIn.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}
-                </span>
-              )}
-              {todayIn.length > 0 && todayOut.length > 0 && <span style={{ margin: '0 0.4rem', color: 'var(--muted)' }}>·</span>}
-              {todayOut.length > 0 && (
-                <span style={{ color: 'var(--yellow)' }}>
-                  🚪 {todayOut.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}
-                </span>
-              )}
+              {/* FIX 4 — safeGet para no romper si keys.alojamiento es undefined */}
+              {[...todayIn, ...todayOut].map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(' · ') || 'Contacta al cliente'}
             </div>
           </div>
         </div>
@@ -519,8 +509,8 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Stats — FIX 4: usa safeGet para alojamiento en sub-labels */}
-      <div className="stats">
+      {/* Stats */}
+      <div className="stats" ref={statsRef}>
         <div className="stat">
           <div className="stat-label">Total reservas</div>
           <div className="stat-val" style={{ color: 'var(--accent)' }}>{data.length}</div>
@@ -552,7 +542,7 @@ export default function Home() {
       </div>
 
       {/* Controls */}
-      <div className="controls">
+      <div className="controls" ref={controlsRef}>
         <input className="search" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
         {[
           { key: 'all', label: 'Todas', cls: 'def' },
@@ -571,7 +561,25 @@ export default function Home() {
         ))}
       </div>
 
-      {loading ? (
+      {/* Debug bar — muestra qué columnas detectó la API del Sheet.
+          Si NOMBRE o TELEFONO no aparecen aquí, el tab o la URL del Sheet es incorrecto. */}
+      {detectedCols.length > 0 && (
+        <div style={{ padding: '0 1.5rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setShowDebug(v => !v)}
+            style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 5, padding: '0.15rem 0.5rem', color: 'var(--muted)', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'DM Mono, monospace' }}
+          >
+            {showDebug ? '▲' : '▼'} cols Sheet ({detectedCols.length})
+          </button>
+          {showDebug && detectedCols.map(c => (
+            <span key={c} style={{
+              fontSize: '0.58rem', fontFamily: 'DM Mono, monospace', padding: '0.1rem 0.35rem',
+              borderRadius: 4, background: 'var(--s2)', border: '1px solid var(--border)',
+              color: ['NOMBRE','TELEFONO','TELÉFONO'].includes(c.toUpperCase().trim()) ? 'var(--green)' : 'var(--muted)'
+            }}>{c}</span>
+          ))}
+        </div>
+      )}
         <div className="center"><div className="spinner" /><span className="empty-txt">Cargando datos del Google Sheet…</span></div>
       ) : error ? (
         <div className="center">
@@ -585,6 +593,7 @@ export default function Home() {
             {displayed.length === 0 ? (
               <div className="center"><div className="empty-icon">🏖️</div><div className="empty-txt">Sin reservas con ese filtro.</div></div>
             ) : (
+              <div className="tbl-scroll">
               <table>
                   {/* FIX 1 — thead con exactamente 9 columnas, numeradas para auditoría */}
                   <thead>
@@ -743,6 +752,7 @@ export default function Home() {
                     })}
                   </tbody>
                 </table>
+              </div>
             )}
           </div>
           <div className="footer-bar">
@@ -752,6 +762,7 @@ export default function Home() {
       ) : (
         /* Financiero */
         <div className="tbl-wrap">
+          <div className="tbl-scroll">
           <table className="fin-table">
               {/* FIX 1 — 12 columnas exactas, comentadas para auditoría futura */}
               <thead>
@@ -821,6 +832,7 @@ export default function Home() {
                 </tr>
               </tbody>
             </table>
+          </div>
           <div className="footer-bar">
             {displayed.length} reservas · Columnas: COBRADO A, COBRADO B, TOTAL COBRADO, INGRESO CANAL NETO, DATOS KIKO
           </div>
