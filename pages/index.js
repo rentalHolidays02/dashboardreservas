@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Head from 'next/head';
 
+// --- FUNCIONES DE UTILIDAD ---
 function parseDate(str) {
   if (!str) return null;
   const m1 = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
@@ -38,36 +39,13 @@ function daysDiff(date) {
   return Math.round((d - now) / 86400000);
 }
 
-// FIX 5 — formatMoney más robusto.
-// Detecta formato europeo (1.234,56) vs americano (1,234.56) antes de parsear.
-// Soporta múltiples símbolos y evita que replace(',','.') rompa con varias comas.
 function formatMoney(val) {
-  if (val === null || val === undefined || val === '') return '—';
-  const str = String(val).trim();
-  if (!str || str === '—') return '—';
-  const cleaned = str.replace(/[€$£\s]/g, '').trim();
-  if (!cleaned) return '—';
-  let num;
-  if (/^-?\d{1,3}(\.\d{3})*(,\d+)?$/.test(cleaned)) {
-    // Europeo: "1.234,56" → eliminar puntos de miles, cambiar coma decimal
-    num = parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
-  } else if (/^-?\d{1,3}(,\d{3})*(\.\d+)?$/.test(cleaned)) {
-    // Americano: "1,234.56" → eliminar comas de miles
-    num = parseFloat(cleaned.replace(/,/g, ''));
-  } else {
-    // Fallback: reemplazar todas las comas (no solo la primera)
-    num = parseFloat(cleaned.replace(/,/g, '.'));
-  }
-  if (isNaN(num)) return str || '—';
+  if (val === undefined || val === null || val === '') return '—';
+  // Limpieza robusta de strings de moneda (ej: "1.200,50 €" -> 1200.50)
+  const cleanStr = String(val).replace(/[€$\s]/g, '').replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(cleanStr);
+  if (isNaN(num)) return val || '—';
   return num.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
-}
-
-// FIX 4 — Helper de acceso seguro a campos a través de keys.
-// Devuelve '—' cuando la clave del mapping o el valor del campo son undefined/null/vacío.
-function safeGet(row, key) {
-  if (!key) return '—';
-  const val = row[key];
-  return (val !== undefined && val !== null && String(val).trim() !== '') ? val : '—';
 }
 
 function playAlarm(ctx) {
@@ -85,6 +63,7 @@ function playAlarm(ctx) {
   });
 }
 
+// --- COMPONENTE PRINCIPAL ---
 export default function Home() {
   const [data, setData] = useState([]);
   const [keys, setKeys] = useState({});
@@ -108,23 +87,21 @@ export default function Home() {
   const bannerRef = useRef(null);
   const tabsRef = useRef(null);
 
-  // FIX 4 — fetchData con sanitización defensiva de keys.
-  // Garantiza que todos los valores del mapa sean strings y nunca undefined.
   const fetchData = useCallback(async () => {
     try {
       const r = await fetch('/api/reservas');
       const json = await r.json();
       if (json.error && !json.data) throw new Error(json.error);
-      const safeKeys = Object.fromEntries(
-        Object.entries(json.keys || {}).map(([k, v]) => [k, typeof v === 'string' ? v : String(v ?? '')])
-      );
-      setKeys(safeKeys);
+      
+      const newKeys = json.keys || {};
+      setKeys(newKeys);
+      
       const enriched = (json.data || []).map((row, i) => ({
         ...row,
         _id: i,
-        _entrada: parseDate(safeKeys.entrada ? row[safeKeys.entrada] : null),
-        _salida: parseDate(safeKeys.salida ? row[safeKeys.salida] : null),
-        _origen: (safeKeys.origen ? (row[safeKeys.origen] || '') : '').toLowerCase(),
+        _entrada: parseDate(row[newKeys.entrada]),
+        _salida: parseDate(row[newKeys.salida]),
+        _origen: (row[newKeys.origen] || '').toLowerCase(),
       }));
       setData(enriched);
       setLastUpdate(new Date());
@@ -146,24 +123,18 @@ export default function Home() {
   const todayOut = data.filter(r => isToday(r._salida));
   const hasToday = todayIn.length > 0 || todayOut.length > 0;
 
-  // FIX 3 — ResizeObserver con disparo inmediato vía requestAnimationFrame.
-  // El :root ya incluye valores por defecto, pero esto los afina en cuanto el DOM esté listo,
-  // eliminando el salto visual del primer frame.
   useEffect(() => {
-    function measure() {
+    const obs = new ResizeObserver(() => {
       const hH = headerRef.current?.offsetHeight || 0;
       const bH = bannerRef.current?.offsetHeight || 0;
       const tH = tabsRef.current?.offsetHeight || 0;
-      if (hH === 0 && tH === 0) return; // DOM no listo aún
       document.documentElement.style.setProperty('--header-h', `${hH}px`);
       document.documentElement.style.setProperty('--header-tabs-h', `${hH + bH}px`);
       document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH}px`);
-    }
-    requestAnimationFrame(measure);
-    const obs = new ResizeObserver(measure);
+    });
     [headerRef, bannerRef, tabsRef].forEach(r => r.current && obs.observe(r.current));
     return () => obs.disconnect();
-  }, []);
+  }, [hasToday, alarmsEnabled]); // Se recalcula si aparece/desaparece el banner de alarma
 
   useEffect(() => {
     clearInterval(alarmInterval.current);
@@ -209,9 +180,6 @@ export default function Home() {
 
   const CSS = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    /* FIX 3 — Variables sticky con valores por defecto sensatos en :root.
-       Evitan el solapamiento en el primer frame antes de que ResizeObserver mida. */
     :root {
       --bg: #080b10; --s1: #0f1319; --s2: #161c26; --s3: #1e2635;
       --border: #252e42; --border2: #2e3a52;
@@ -219,11 +187,9 @@ export default function Home() {
       --booking: #1a56db; --airbnb: #ff385c;
       --text: #e8edf5; --muted: #6b7a99;
       --green: #34d399; --yellow: #fbbf24; --red: #f87171; --purple: #a78bfa;
-      --header-h: 56px;
-      --header-tabs-h: 96px;
-      --thead-top: 134px;
+      --header-h: 60px; --header-tabs-h: 60px; --thead-top: 100px;
     }
-    body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; }
+    body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; min-height: 100vh; overflow-x: hidden; }
     .mono { font-family: 'DM Mono', monospace; }
 
     .header {
@@ -237,25 +203,24 @@ export default function Home() {
     .hdr-r { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
     .last-upd { font-family: 'DM Mono', monospace; font-size: 0.67rem; color: var(--muted); }
 
-    /* FIX 3 — alarm-banner con valor por defecto explícito en top */
     .alarm-banner {
       position: sticky;
-      top: var(--header-h, 56px);
+      top: var(--header-h);
       z-index: 99;
-      background: rgba(248,113,113,0.07);
-      border-bottom: 1px solid rgba(248,113,113,0.25);
+      background: rgba(248,113,113,0.1);
+      border-bottom: 1px solid rgba(248,113,113,0.3);
       padding: 0.65rem 1.5rem;
       display: flex; align-items: center; gap: 0.75rem;
+      backdrop-filter: blur(8px);
     }
     .bell { font-size: 1.2rem; animation: ring 0.55s ease-in-out infinite; display: inline-block; }
     @keyframes ring { 0%,100%{transform:rotate(-12deg)} 50%{transform:rotate(12deg)} }
     .alarm-title { font-weight: 700; font-size: 0.85rem; color: var(--red); }
     .alarm-detail { font-size: 0.7rem; color: #fca5a5; margin-top: 0.1rem; }
 
-    /* FIX 3 — tabs con valor por defecto explícito en top */
     .tabs {
       position: sticky;
-      top: var(--header-tabs-h, 96px);
+      top: var(--header-tabs-h);
       z-index: 98;
       display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1.5rem;
     }
@@ -300,32 +265,15 @@ export default function Home() {
     .ml-auto { margin-left: auto; }
     .sep { width: 1px; height: 22px; background: var(--border); }
 
-    /* FIX 2 — .tbl-wrap ya no lleva overflow-x: auto.
-       El scroll lo maneja .tbl-scroll internamente, lo que permite que
-       thead th { top:0 } funcione como sticky dentro de su contenedor correcto. */
-    .tbl-wrap { padding: 0 1.5rem 3rem; }
-
-    /* FIX 2 — Contenedor de scroll real. Gestiona ambos ejes.
-       max-height = viewport - altura acumulada de los elementos sticky de página. */
-    .tbl-scroll {
-      overflow-x: auto;
-      overflow-y: auto;
-      max-height: calc(100vh - var(--thead-top, 134px));
-      min-height: 200px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
-
-    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-
-    /* FIX 3 — thead sticky a top:0 dentro de .tbl-scroll.
-       Al tener su propio scroll container, overflow-x no rompe el sticky. */
+    .tbl-wrap { padding: 0 1.5rem 3rem; overflow-x: auto; width: 100%; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 1000px; }
     thead th {
-      background: var(--s1); border-bottom: 2px solid var(--border2);
+      background: var(--s1); border-bottom: 1px solid var(--border2);
       padding: 0.6rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
-      position: sticky; top: 0; z-index: 10;
+      position: sticky; z-index: 10;
+      top: var(--thead-top);
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
@@ -334,17 +282,8 @@ export default function Home() {
     tbody tr.is-called td:not(.ac) { opacity: 0.4; }
     td { padding: 0.68rem 0.85rem; vertical-align: middle; }
 
-    /* FIX 2 — Clases helper para truncado de texto en celdas largas.
-       CSS en <td> no trunca en tablas; el <div> interno sí lo hace. */
-    .cell-truncate {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .cell-aloj { max-width: 160px; font-weight: 700; }
-    .cell-obs  { max-width: 160px; color: var(--muted); font-size: 0.71rem; }
-    .cell-kiko { max-width: 140px; color: var(--muted); font-size: 0.71rem; }
+    /* Truncado de texto corregido */
+    .trunc { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 
     .bdg {
       display: inline-flex; align-items: center; gap: 0.3rem;
@@ -399,19 +338,9 @@ export default function Home() {
     .exp-item label { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 0.1rem; }
     .exp-item span { font-size: 0.77rem; font-family: 'DM Mono', monospace; }
 
-    /* FIX 3 — fin-table thead sticky a top:0 dentro de su .tbl-scroll */
-    .fin-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-    .fin-table th {
-      background: var(--s1); border-bottom: 2px solid var(--border2);
-      padding: 0.58rem 0.85rem; text-align: left;
-      font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-      color: var(--muted); white-space: nowrap;
-      position: sticky; top: 0; z-index: 10;
-    }
-    .fin-table td { padding: 0.62rem 0.85rem; border-bottom: 1px solid var(--border); }
-    .fin-table tr:hover td { background: var(--s2); }
+    .fin-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; min-width: 1200px; }
     .money { font-family: 'DM Mono', monospace; text-align: right; color: var(--green); }
-    .total-row td { background: var(--s2); font-weight: 700; }
+    .total-row td { background: var(--s2); font-weight: 700; border-top: 2px solid var(--border2); }
 
     .center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 2rem; gap: 1rem; }
     .spinner { width: 34px; height: 34px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.65s linear infinite; }
@@ -423,7 +352,7 @@ export default function Home() {
     @media(max-width:700px){
       .header,.tabs,.stats,.controls,.tbl-wrap{padding-left:1rem;padding-right:1rem;}
       .stats{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));}
-      .search{width:100%;}
+      .search { width: 100%; }
     }
   `;
 
@@ -436,7 +365,6 @@ export default function Home() {
         <style>{CSS}</style>
       </Head>
 
-      {/* Header */}
       <header className="header" ref={headerRef}>
         <div className="logo">
           <div className="logo-dot" />
@@ -456,7 +384,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Alarm banner */}
       {hasToday && alarmsEnabled && (
         <div className="alarm-banner" ref={bannerRef}>
           <span className="bell">🔔</span>
@@ -467,21 +394,18 @@ export default function Home() {
               {todayOut.length > 0 && `${todayOut.length} SALIDA${todayOut.length > 1 ? 'S' : ''} HOY`}
             </div>
             <div className="alarm-detail">
-              {/* FIX 4 — safeGet para no romper si keys.alojamiento es undefined */}
-              {[...todayIn, ...todayOut].map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(' · ') || 'Contacta al cliente'}
+              {[...todayIn, ...todayOut].map(r => r[keys.alojamiento]).filter(Boolean).join(' · ') || 'Contacta al cliente'}
             </div>
           </div>
         </div>
       )}
 
-      {/* Tabs */}
       <div className="tabs" ref={tabsRef}>
         {[['reservas', '📅 Reservas'], ['financiero', '💶 Financiero']].map(([k, l]) => (
           <button key={k} className={`tab-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
 
-      {/* Stats — FIX 4: usa safeGet para alojamiento en sub-labels */}
       <div className="stats">
         <div className="stat">
           <div className="stat-label">Total reservas</div>
@@ -491,12 +415,12 @@ export default function Home() {
         <div className="stat">
           <div className="stat-label">Entradas hoy</div>
           <div className="stat-val" style={{ color: 'var(--green)' }}>{todayIn.length}</div>
-          <div className="stat-sub">{todayIn.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || 'Ninguna'}</div>
+          <div className="stat-sub">{todayIn.map(r => r[keys.alojamiento]).filter(Boolean).join(', ') || 'Ninguna'}</div>
         </div>
         <div className="stat">
           <div className="stat-label">Salidas hoy</div>
           <div className="stat-val" style={{ color: 'var(--yellow)' }}>{todayOut.length}</div>
-          <div className="stat-sub">{todayOut.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || 'Ninguna'}</div>
+          <div className="stat-sub">{todayOut.map(r => r[keys.alojamiento]).filter(Boolean).join(', ') || 'Ninguna'}</div>
         </div>
         <div className="stat">
           <div className="stat-label">Booking</div>
@@ -513,7 +437,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Controls */}
       <div className="controls">
         <input className="search" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
         {[
@@ -543,240 +466,198 @@ export default function Home() {
         </div>
       ) : tab === 'reservas' ? (
         <>
-          {/* FIX 2 — .tbl-scroll es el contenedor de scroll real.
-              thead { top:0 } funciona dentro de él correctamente. */}
           <div className="tbl-wrap">
             {displayed.length === 0 ? (
               <div className="center"><div className="empty-icon">🏖️</div><div className="empty-txt">Sin reservas con ese filtro.</div></div>
             ) : (
-              <div className="tbl-scroll">
-                <table>
-                  {/* FIX 1 — thead con exactamente 9 columnas, numeradas para auditoría */}
-                  <thead>
-                    <tr>
-                      <th>Alojamiento</th>                        {/* 1 */}
-                      <th>Origen</th>                             {/* 2 */}
-                      <th>Entrada</th>                            {/* 3 */}
-                      <th>Salida</th>                             {/* 4 */}
-                      <th style={{ textAlign: 'center' }}>Noches</th> {/* 5 */}
-                      <th>Teléfono</th>                           {/* 6 */}
-                      <th>Acción</th>                             {/* 7 */}
-                      <th>Observaciones</th>                      {/* 8 */}
-                      <th>Datos Kiko</th>                         {/* 9 */}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayed.flatMap(row => {
-                      const id = row._id;
-                      const isExp = expandedRow === id;
-                      const eHoy = isToday(row._entrada);
-                      const sHoy = isToday(row._salida);
-                      const dIn = daysDiff(row._entrada);
-                      const dOut = daysDiff(row._salida);
-                      const isCalled = called[id];
-                      const phone = phones[id] || '';
-                      let nights = '—';
-                      if (row._entrada && row._salida)
-                        nights = Math.round((row._salida - row._entrada) / 86400000);
+              <table>
+                <thead>
+                  <tr>
+                    <th>Alojamiento</th>
+                    <th>Origen</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th style={{ textAlign: 'center' }}>Noches</th>
+                    <th>Teléfono</th>
+                    <th>Acción</th>
+                    <th>Observaciones</th>
+                    <th>Datos Kiko</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayed.flatMap(row => {
+                    const id = row._id;
+                    const isExp = expandedRow === id;
+                    const eHoy = isToday(row._entrada);
+                    const sHoy = isToday(row._salida);
+                    const dIn = daysDiff(row._entrada);
+                    const dOut = daysDiff(row._salida);
+                    const isCalled = called[id];
+                    const phone = phones[id] || '';
+                    let nights = '—';
+                    if (row._entrada && row._salida)
+                      nights = Math.round((row._salida - row._entrada) / 86400000);
 
-                      return [
-                        <tr
-                          key={`r${id}`}
-                          className={`${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`}
-                          onClick={() => setExpandedRow(isExp ? null : id)}
-                        >
-                          {/* FIX 1+2+4 — TD 1: Alojamiento con div truncador */}
-                          <td>
-                            <div className="cell-truncate cell-aloj">
-                              {safeGet(row, keys.alojamiento)}
-                            </div>
-                          </td>
-
-                          {/* FIX 4 — TD 2: Origen con safeGet */}
-                          <td>
-                            <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
-                              {row._origen.includes('booking') ? '✈' : '🏠'} {safeGet(row, keys.origen)}
-                            </span>
-                          </td>
-
-                          {/* TD 3: Entrada */}
-                          <td>
-                            <span className="mono">{formatDate(row._entrada)}</span>
-                            {eHoy && <span className="tag tag-in">HOY ✈</span>}
-                            {!eHoy && dIn !== null && dIn > 0 && dIn <= 30 && <span className="days-lbl">+{dIn}d</span>}
-                          </td>
-
-                          {/* TD 4: Salida */}
-                          <td>
-                            <span className="mono">{formatDate(row._salida)}</span>
-                            {sHoy && <span className="tag tag-out">HOY 🚪</span>}
-                            {!sHoy && dOut !== null && dOut > 0 && dOut <= 30 && <span className="days-lbl">+{dOut}d</span>}
-                          </td>
-
-                          {/* TD 5: Noches */}
-                          <td className="mono" style={{ textAlign: 'center', color: 'var(--muted)' }}>{nights}</td>
-
-                          {/* TD 6: Teléfono */}
-                          <td className="ac" onClick={e => e.stopPropagation()}>
-                            <div className="phone-cell">
-                              {editingPhone === id ? (
-                                <>
-                                  <input
-                                    className="phone-input"
-                                    value={phoneInput}
-                                    placeholder="+34 600 000 000"
-                                    onChange={e => setPhoneInput(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') savePhone(id); if (e.key === 'Escape') setEditingPhone(null); }}
-                                    autoFocus
-                                  />
-                                  <button className="btn btn-accent btn-xs" onClick={() => savePhone(id)}>✓</button>
-                                  <button className="btn btn-ghost btn-xs" onClick={() => setEditingPhone(null)}>✕</button>
-                                </>
-                              ) : (
-                                <>
-                                  {phone ? <span className="phone-val">{phone}</span> : <span className="phone-empty">Sin tel.</span>}
-                                  <button className="btn btn-ghost btn-xs" onClick={() => { setEditingPhone(id); setPhoneInput(phone); }}>✏️</button>
-                                </>
+                    return [
+                      <tr
+                        key={`r${id}`}
+                        className={`${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`}
+                        onClick={() => setExpandedRow(isExp ? null : id)}
+                      >
+                        <td style={{ fontWeight: 700 }}>
+                          <span className="trunc">{row[keys.alojamiento] || '—'}</span>
+                        </td>
+                        <td>
+                          <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
+                            {row._origen.includes('booking') ? '✈' : '🏠'} {row[keys.origen] || '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="mono">{formatDate(row._entrada)}</span>
+                          {eHoy && <span className="tag tag-in">HOY ✈</span>}
+                          {!eHoy && dIn !== null && dIn > 0 && dIn <= 30 && <span className="days-lbl">+{dIn}d</span>}
+                        </td>
+                        <td>
+                          <span className="mono">{formatDate(row._salida)}</span>
+                          {sHoy && <span className="tag tag-out">HOY 🚪</span>}
+                          {!sHoy && dOut !== null && dOut > 0 && dOut <= 30 && <span className="days-lbl">+{dOut}d</span>}
+                        </td>
+                        <td className="mono" style={{ textAlign: 'center', color: 'var(--muted)' }}>{nights}</td>
+                        <td className="ac" onClick={e => e.stopPropagation()}>
+                          <div className="phone-cell">
+                            {editingPhone === id ? (
+                              <>
+                                <input
+                                  className="phone-input"
+                                  value={phoneInput}
+                                  placeholder="+34"
+                                  onChange={e => setPhoneInput(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') savePhone(id); if (e.key === 'Escape') setEditingPhone(null); }}
+                                  autoFocus
+                                />
+                                <button className="btn btn-accent btn-xs" onClick={() => savePhone(id)}>✓</button>
+                              </>
+                            ) : (
+                              <>
+                                {phone ? <span className="phone-val">{phone}</span> : <span className="phone-empty">Sin tel.</span>}
+                                <button className="btn btn-ghost btn-xs" onClick={() => { setEditingPhone(id); setPhoneInput(phone); }}>✏️</button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="ac" onClick={e => e.stopPropagation()}>
+                          <button
+                            className={`btn btn-xs ${isCalled ? 'btn-called' : 'btn-call'}`}
+                            onClick={() => setCalled(p => ({ ...p, [id]: !p[id] }))}
+                          >
+                            {isCalled ? '✅ Llamado' : '📞 Llamar'}
+                          </button>
+                        </td>
+                        <td>
+                          <span className="trunc" style={{ color: 'var(--muted)', fontSize: '0.71rem' }}>
+                            {row[keys.observaciones] || '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="trunc" style={{ color: 'var(--muted)', fontSize: '0.71rem' }}>
+                            {row[keys.datosKiko] || '—'}
+                          </span>
+                        </td>
+                      </tr>,
+                      isExp && (
+                        <tr key={`e${id}`}>
+                          <td colSpan={9} className="exp-td">
+                            <div className="exp-grid">
+                              {Object.entries(row)
+                                .filter(([k]) => !k.startsWith('_'))
+                                .filter(([, v]) => v)
+                                .map(([k, v]) => (
+                                  <div className="exp-item" key={k}>
+                                    <label>{k}</label>
+                                    <span>{v}</span>
+                                  </div>
+                                ))}
+                              {phones[id] && (
+                                <div className="exp-item">
+                                  <label>Teléfono (manual)</label>
+                                  <span>{phones[id]}</span>
+                                </div>
                               )}
                             </div>
                           </td>
-
-                          {/* TD 7: Acción */}
-                          <td className="ac" onClick={e => e.stopPropagation()}>
-                            <button
-                              className={`btn btn-xs ${isCalled ? 'btn-called' : 'btn-call'}`}
-                              onClick={() => setCalled(p => ({ ...p, [id]: !p[id] }))}
-                            >
-                              {isCalled ? '✅ Llamado' : '📞 Llamar'}
-                            </button>
-                          </td>
-
-                          {/* FIX 1+2+4 — TD 8: Observaciones con div truncador y safeGet */}
-                          <td>
-                            <div className="cell-truncate cell-obs">
-                              {safeGet(row, keys.observaciones)}
-                            </div>
-                          </td>
-
-                          {/* FIX 1+2+4 — TD 9: Datos Kiko con div truncador y safeGet */}
-                          <td>
-                            <div className="cell-truncate cell-kiko">
-                              {safeGet(row, keys.datosKiko)}
-                            </div>
-                          </td>
-                        </tr>,
-
-                        isExp && (
-                          <tr key={`e${id}`}>
-                            <td colSpan={9} className="exp-td">
-                              <div className="exp-grid">
-                                {Object.entries(row)
-                                  .filter(([k]) => !k.startsWith('_'))
-                                  .filter(([, v]) => v)
-                                  .map(([k, v]) => (
-                                    <div className="exp-item" key={k}>
-                                      <label>{k}</label>
-                                      <span>{v}</span>
-                                    </div>
-                                  ))}
-                                {phones[id] && (
-                                  <div className="exp-item">
-                                    <label>Teléfono (manual)</label>
-                                    <span>{phones[id]}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      ];
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                        </tr>
+                      )
+                    ];
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
           <div className="footer-bar">
-            {displayed.length} reservas · {data.length} total Booking + Airbnb · Haz clic en una fila para ver todos los datos
+            {displayed.length} reservas filtradas · {data.length} total · Clic para expandir detalles
           </div>
         </>
       ) : (
-        /* Financiero */
+        /* --- TABA FINANCIERO CORREGIDA --- */
         <div className="tbl-wrap">
-          <div className="tbl-scroll">
-            <table className="fin-table">
-              {/* FIX 1 — 12 columnas exactas, comentadas para auditoría futura */}
-              <thead>
-                <tr>
-                  <th>Alojamiento</th>        {/* 1  */}
-                  <th>Origen</th>             {/* 2  */}
-                  <th>Entrada</th>            {/* 3  */}
-                  <th>Salida</th>             {/* 4  */}
-                  <th>Cobrado A</th>          {/* 5  */}
-                  <th>Cobrado B</th>          {/* 6  */}
-                  <th>Total Cobrado</th>      {/* 7  */}
-                  <th>Ingreso Canal Neto</th> {/* 8  */}
-                  <th>Fecha Pago</th>         {/* 9  */}
-                  <th>2º Ingreso Neto</th>    {/* 10 */}
-                  <th>Fecha Pago 2</th>       {/* 11 */}
-                  <th>Reportes</th>           {/* 12 */}
+          <table className="fin-table">
+            <thead>
+              <tr>
+                <th>Alojamiento</th>
+                <th>Origen</th>
+                <th>Entrada</th>
+                <th>Salida</th>
+                <th>Cobrado A</th>
+                <th>Cobrado B</th>
+                <th>Total Cobrado</th>
+                <th>Canal Neto</th>
+                <th>F. Pago</th>
+                <th>2º Ingreso</th>
+                <th>F. Pago 2</th>
+                <th>Reportes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map(row => (
+                <tr key={row._id}>
+                  <td style={{ fontWeight: 600 }}>
+                    <span className="trunc">{row[keys.alojamiento] || '—'}</span>
+                  </td>
+                  <td>
+                    <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
+                      {row[keys.origen] || '—'}
+                    </span>
+                  </td>
+                  <td className="mono" style={{ fontSize: '0.73rem' }}>{formatDate(row._entrada)}</td>
+                  <td className="mono" style={{ fontSize: '0.73rem' }}>{formatDate(row._salida)}</td>
+                  <td className="money">{formatMoney(row[keys.cobradoA])}</td>
+                  <td className="money">{formatMoney(row[keys.cobradoB])}</td>
+                  <td className="money" style={{ fontWeight: 700 }}>{formatMoney(row[keys.totalCobrado])}</td>
+                  <td className="money">{formatMoney(row[keys.ingresoCanal])}</td>
+                  <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{row[keys.fechaPago] || '—'}</td>
+                  <td className="money">{formatMoney(row[keys.segundoIngreso])}</td>
+                  <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{row[keys.fechaPago2] || '—'}</td>
+                  <td><span className="trunc" style={{ fontSize: '0.7rem' }}>{row[keys.reportes] || '—'}</span></td>
                 </tr>
-              </thead>
-              <tbody>
-                {/* FIX 4 — todas las celdas usan safeGet; formatMoney usa la v5 robusta */}
-                {displayed.map(row => (
-                  <tr key={row._id}>
-                    <td style={{ fontWeight: 600 }}>{safeGet(row, keys.alojamiento)}</td>            {/* 1  */}
-                    <td>
-                      <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
-                        {safeGet(row, keys.origen)}
-                      </span>
-                    </td>                                                                              {/* 2  */}
-                    <td className="mono" style={{ fontSize: '0.73rem' }}>{formatDate(row._entrada)}</td> {/* 3  */}
-                    <td className="mono" style={{ fontSize: '0.73rem' }}>{formatDate(row._salida)}</td>  {/* 4  */}
-                    <td className="money">{formatMoney(row[keys.cobradoA])}</td>                      {/* 5  */}
-                    <td className="money">{formatMoney(row[keys.cobradoB])}</td>                      {/* 6  */}
-                    <td className="money" style={{ fontWeight: 700 }}>{formatMoney(row[keys.totalCobrado])}</td> {/* 7  */}
-                    <td className="money">{formatMoney(row[keys.ingresoCanal])}</td>                  {/* 8  */}
-                    <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{safeGet(row, keys.fechaPago)}</td>   {/* 9  */}
-                    <td className="money">{formatMoney(row[keys.segundoIngreso])}</td>               {/* 10 */}
-                    <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{safeGet(row, keys.fechaPago2)}</td>  {/* 11 */}
-                    <td style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{safeGet(row, keys.reportes)}</td> {/* 12 */}
-                  </tr>
-                ))}
-
-                {/* FIX 1 — Fila TOTALES: colSpan auditado → 4 + 1 + 1 + 1 + 1 + 4 = 12 ✓
-                    FIX 5 — Acumuladores usando formatMoney robusto con detección europea */}
-                <tr className="total-row">
-                  <td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    TOTALES — {displayed.length} reservas
-                  </td>                                                                {/* cols 1-4 */}
-                  <td className="money" style={{ color: 'var(--muted)' }}>—</td>      {/* col 5  */}
-                  <td className="money" style={{ color: 'var(--muted)' }}>—</td>      {/* col 6  */}
-                  <td className="money" style={{ color: 'var(--accent)', fontWeight: 800 }}>
-                    {formatMoney(
-                      displayed.reduce((s, r) => {
-                        const raw = String(r[keys.totalCobrado] || '').replace(/[€$£\s]/g, '').replace(/\./g, '').replace(',', '.');
-                        return s + (parseFloat(raw) || 0);
-                      }, 0)
-                    )}
-                  </td>                                                                {/* col 7  */}
-                  <td className="money" style={{ color: 'var(--green)', fontWeight: 800 }}>
-                    {formatMoney(
-                      displayed.reduce((s, r) => {
-                        const raw = String(r[keys.ingresoCanal] || '').replace(/[€$£\s]/g, '').replace(/\./g, '').replace(',', '.');
-                        return s + (parseFloat(raw) || 0);
-                      }, 0)
-                    )}
-                  </td>                                                                {/* col 8  */}
-                  <td colSpan={4} />                                                   {/* cols 9-12 */}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div className="footer-bar">
-            {displayed.length} reservas · Columnas: COBRADO A, COBRADO B, TOTAL COBRADO, INGRESO CANAL NETO, DATOS KIKO
-          </div>
+              ))}
+              <tr className="total-row">
+                <td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.06em', paddingRight: '1rem' }}>
+                  TOTALES ({displayed.length} res.)
+                </td>
+                <td className="money" style={{ color: 'var(--muted)' }}>—</td>
+                <td className="money" style={{ color: 'var(--muted)' }}>—</td>
+                <td className="money" style={{ color: 'var(--accent)', fontWeight: 800 }}>
+                  {displayed.reduce((s, r) => s + (parseFloat(String(r[keys.totalCobrado] || '').replace(/[€\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0), 0)
+                    .toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                </td>
+                <td className="money" style={{ color: 'var(--green)', fontWeight: 800 }}>
+                  {displayed.reduce((s, r) => s + (parseFloat(String(r[keys.ingresoCanal] || '').replace(/[€\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0), 0)
+                    .toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                </td>
+                <td colSpan={4} />
+              </tr>
+            </tbody>
+          </table>
         </div>
       )}
     </>
