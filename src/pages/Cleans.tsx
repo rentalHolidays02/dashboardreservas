@@ -52,7 +52,7 @@ const Cleans: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <Loader2 className="animate-spin text-orange-600" size={32} />
-        <p className="text-slate-500 font-medium">Cargando registros...</p>
+        <p className="text-slate-500 dark:text-stone-400 font-medium">Cargando registros...</p>
       </div>
     );
   }
@@ -61,22 +61,22 @@ const Cleans: React.FC = () => {
     <div className="space-y-6 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-normal tracking-tight text-slate-600 font-display">Registros</h1>
-          <p className="text-slate-500 mt-1 text-sm font-light">Gestión de check-ins y check-outs de trabajadores.</p>
+          <h1 className="text-xl font-normal tracking-tight text-slate-600 dark:text-stone-400 font-display">Registros</h1>
+          <p className="text-slate-500 dark:text-stone-500 mt-1 text-sm font-light">Gestión de check-ins y check-outs de trabajadores.</p>
         </div>
 
         <div className="relative group">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" size={16} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 group-focus-within:text-orange-500 transition-colors" size={16} />
           <input
             type="text"
             placeholder="Buscar por apto o nombre..."
-            className="pl-10 pr-4 py-2 bg-white/80 backdrop-blur-sm border border-stone-100/60 rounded-xl focus:outline-none focus:bg-white focus:border-orange-200 w-full md:w-64 transition-all soft-shadow placeholder:text-slate-400 text-sm"
+            className="pl-10 pr-4 py-2 bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-stone-100/60 dark:border-stone-700/60 rounded-xl focus:outline-none focus:bg-white dark:focus:bg-stone-900 focus:border-orange-200 dark:focus:border-orange-700 w-full md:w-64 transition-all soft-shadow placeholder:text-stone-400 dark:placeholder:text-stone-400 text-sm text-slate-700 dark:text-stone-300"
           />
         </div>
       </header>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-8 border-b border-stone-100/20 w-full animate-in fade-in slide-in-from-left-4 duration-700">
+      <div className="flex items-center gap-8 border-b border-stone-100/20 dark:border-stone-700/30 w-full animate-in fade-in slide-in-from-left-4 duration-700">
         {tabs.map((tab) => {
           const active = activeTab === tab.id;
           return (
@@ -84,12 +84,12 @@ const Cleans: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
               className={`relative flex items-center gap-2 pb-3.5 px-0.5 text-xs font-normal transition-all duration-300 group
-                ${active ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                ${active ? 'text-slate-800 dark:text-stone-200' : 'text-slate-400 dark:text-stone-600 hover:text-slate-600 dark:hover:text-stone-400'}`}
             >
               <span className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-105'}`}>
                 {React.cloneElement(tab.icon as React.ReactElement, {
                   size: 16,
-                  className: active ? 'text-orange-500' : 'text-slate-400'
+                  className: active ? 'text-orange-500' : 'text-slate-400 dark:text-stone-600'
                 })}
               </span>
               <span>{tab.label}</span>
@@ -102,7 +102,7 @@ const Cleans: React.FC = () => {
       </div>
 
       {/* Content Area */}
-      <div className="bg-white/60 backdrop-blur-md border border-white rounded-2xl overflow-hidden">
+      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           {activeTab === 'normal' && <TableNormalCleans data={normalCleans} />}
           {activeTab === 'initial' && <TableInitialCleans data={initialCleans} />}
@@ -117,27 +117,27 @@ const Cleans: React.FC = () => {
 const UbicacionCell: React.FC<{ verified: boolean }> = ({ verified }) => (
   <div className="flex items-center gap-2">
     {verified
-      ? <CheckCircle2 size={15} className="text-slate-400 flex-shrink-0" />
-      : <XCircle size={15} className="text-slate-400 flex-shrink-0" />
+      ? <CheckCircle2 size={15} className="text-slate-400 dark:text-stone-500 flex-shrink-0" />
+      : <XCircle size={15} className="text-slate-400 dark:text-stone-500 flex-shrink-0" />
     }
     <button
       type="button"
       onClick={() => {}}
-      className="text-xs text-slate-400 underline"
+      className="text-xs text-slate-400 dark:text-stone-500 underline"
     >
       Mapa
     </button>
   </div>
 );
 
-const thClass = "px-6 py-5 sm:px-8 sm:py-6 text-xs font-normal text-slate-400 capitalize whitespace-nowrap";
+const thClass = "px-6 py-5 sm:px-8 sm:py-6 text-xs font-normal text-slate-400 dark:text-stone-500 capitalize whitespace-nowrap";
 const tdClass = "px-6 py-5 sm:px-8 sm:py-7";
 
 // Sub-components: Tables
 const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) => (
   <table className="w-full text-left border-collapse text-xs sm:text-sm">
     <thead>
-      <tr className="border-b border-stone-100">
+      <tr className="border-b border-stone-100 dark:border-stone-800">
         <th className={thClass}>Trabajador</th>
         <th className={thClass}>Apartamento</th>
         <th className={thClass}>Check-in</th>
@@ -147,41 +147,41 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) =>
         <th className={thClass}>Ubicación</th>
       </tr>
     </thead>
-    <tbody className="divide-y divide-stone-100">
+    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
       {data.map((r) => (
-        <tr key={r.id} className="hover:bg-stone-100/50 transition-colors duration-200">
+        <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
           <td className={tdClass}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white text-slate-500 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
                 {r.nombre.charAt(0)}
               </div>
               <div>
-                <div className="font-normal text-slate-800 leading-tight">{r.nombre} {r.apellidos}</div>
-                <div className="text-[11px] text-slate-400 italic font-light mt-0.5">{r.telefono}</div>
+                <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
+                <div className="text-[11px] text-slate-400 dark:text-stone-500 italic font-light mt-0.5">{r.telefono}</div>
               </div>
             </div>
           </td>
           <td className={tdClass}>
-            <span className="inline-block bg-white text-slate-500 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+            <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
               {r.apartamento}
             </span>
           </td>
           <td className={tdClass}>
-            <div className="flex items-center text-slate-600 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 flex-shrink-0" />
+            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
+              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
               {r.checkinFecha}
             </div>
           </td>
           <td className={tdClass}>
-            <div className="flex items-center text-slate-600 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 flex-shrink-0" />
+            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
+              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
               {r.checkoutFecha}
             </div>
           </td>
-          <td className={`${tdClass} text-slate-600 tabular-nums whitespace-nowrap`}>
+          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums whitespace-nowrap`}>
             {r.horaEntrada} — {r.horaSalida}
           </td>
-          <td className={`${tdClass} text-slate-600 tabular-nums`}>{r.km} km</td>
+          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
           <td className={tdClass}>
             <UbicacionCell verified={r.checked} />
           </td>
@@ -194,7 +194,7 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) =>
 const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) => (
   <table className="w-full text-left border-collapse text-xs sm:text-sm">
     <thead>
-      <tr className="border-b border-stone-100">
+      <tr className="border-b border-stone-100 dark:border-stone-800">
         <th className={thClass}>Trabajador</th>
         <th className={thClass}>Apartamento</th>
         <th className={thClass}>Check-in</th>
@@ -204,41 +204,41 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) 
         <th className={thClass}>Ubicación</th>
       </tr>
     </thead>
-    <tbody className="divide-y divide-stone-100">
+    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
       {data.map((r) => (
-        <tr key={r.id} className="hover:bg-stone-100/50 transition-colors duration-200">
+        <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
           <td className={tdClass}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white text-slate-500 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
                 {r.nombre.charAt(0)}
               </div>
               <div>
-                <div className="font-normal text-slate-800 leading-tight">{r.nombre} {r.apellidos}</div>
-                <div className="text-[11px] text-slate-400 italic font-light mt-0.5">{r.telefono}</div>
+                <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
+                <div className="text-[11px] text-slate-400 dark:text-stone-500 italic font-light mt-0.5">{r.telefono}</div>
               </div>
             </div>
           </td>
           <td className={tdClass}>
-            <span className="inline-block bg-white text-slate-500 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+            <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
               {r.apartamento}
             </span>
           </td>
           <td className={tdClass}>
-            <div className="flex items-center text-slate-600 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 flex-shrink-0" />
+            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
+              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
               {r.checkinFecha}
             </div>
           </td>
           <td className={tdClass}>
-            <div className="flex items-center text-slate-600 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 flex-shrink-0" />
+            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
+              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
               {r.checkoutFecha}
             </div>
           </td>
-          <td className={`${tdClass} text-slate-600 tabular-nums whitespace-nowrap`}>
+          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums whitespace-nowrap`}>
             {r.horaEntrada} — {r.horaSalida}
           </td>
-          <td className={`${tdClass} text-slate-600 tabular-nums`}>{r.km} km</td>
+          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
           <td className={tdClass}>
             <UbicacionCell verified={r.checked} />
           </td>
@@ -251,7 +251,7 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) 
 const TableHandyman: React.FC<{ data: HandymanRecord[] }> = ({ data }) => (
   <table className="w-full text-left border-collapse text-xs sm:text-sm">
     <thead>
-      <tr className="border-b border-stone-100">
+      <tr className="border-b border-stone-100 dark:border-stone-800">
         <th className={thClass}>Trabajador</th>
         <th className={thClass}>Apartamento</th>
         <th className={thClass}>Check-in</th>
@@ -261,41 +261,41 @@ const TableHandyman: React.FC<{ data: HandymanRecord[] }> = ({ data }) => (
         <th className={thClass}>Ubicación</th>
       </tr>
     </thead>
-    <tbody className="divide-y divide-stone-100">
+    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
       {data.map((r) => (
-        <tr key={r.id} className="hover:bg-stone-100/50 transition-colors duration-200">
+        <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
           <td className={tdClass}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white text-slate-500 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
                 {r.nombre.charAt(0)}
               </div>
               <div>
-                <div className="font-normal text-slate-800 leading-tight">{r.nombre} {r.apellidos}</div>
-                <div className="text-[11px] text-slate-400 italic font-light mt-0.5">{r.telefono}</div>
+                <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
+                <div className="text-[11px] text-slate-400 dark:text-stone-500 italic font-light mt-0.5">{r.telefono}</div>
               </div>
             </div>
           </td>
           <td className={tdClass}>
-            <span className="inline-block bg-white text-slate-500 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+            <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
               {r.alojamiento}
             </span>
           </td>
           <td className={tdClass}>
-            <div className="flex items-center text-slate-600 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 flex-shrink-0" />
+            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
+              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
               {r.fechaLlegada}
             </div>
           </td>
           <td className={tdClass}>
-            <div className="flex items-center text-slate-600 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 flex-shrink-0" />
+            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
+              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
               {r.fechaFin}
             </div>
           </td>
-          <td className={`${tdClass} text-slate-600 tabular-nums whitespace-nowrap`}>
+          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums whitespace-nowrap`}>
             {r.horaInicioTarea} — {r.horaFinTarea}
           </td>
-          <td className={`${tdClass} text-slate-600 tabular-nums`}>{r.cantidadMinutos} min</td>
+          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} min</td>
           <td className={tdClass}>
             <UbicacionCell verified={r.estadoCompletado === 'Completado'} />
           </td>

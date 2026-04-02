@@ -4,12 +4,12 @@
 
 @layer components {
   .module-header {
-    @apply px-5 border-b border-slate-100 flex items-center justify-between;
+    @apply px-5 border-b border-slate-100 dark:border-stone-800 flex items-center justify-between;
     height: 52px;
   }
 
   .module-item {
-    @apply px-8 py-5 hover:bg-stone-100/50 transition-colors;
+    @apply px-8 py-5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors;
   }
 
   .soft-shadow {
@@ -142,6 +142,74 @@ body {
   font-family: 'Inter', sans-serif;
   background: var(--app-bg);
   background-attachment: fixed;
+}
+
+html.dark body {
+  background: linear-gradient(135deg, #1c1a18 0%, #1f1d1a 100%);
+  background-attachment: fixed;
+  color: #e7e5e4;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK MODE — OVERRIDES GLOBALES
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Textos ───────────────────────────────────────────────── */
+html.dark .text-slate-900, html.dark .text-stone-900 { color: #ffffff !important; }
+html.dark .text-slate-800, html.dark .text-stone-800 { color: #fafaf9 !important; }
+html.dark .text-slate-700, html.dark .text-stone-700 { color: #f5f5f4 !important; }
+html.dark .text-slate-600, html.dark .text-stone-600 { color: #e7e5e4 !important; }
+html.dark .text-slate-500, html.dark .text-stone-500 { color: #d6d3d1 !important; }
+html.dark .text-slate-400, html.dark .text-stone-400 { color: #a8a29e !important; }
+
+/* ── Fondos sólidos ───────────────────────────────────────── */
+html.dark .bg-white      { background-color: #201e1b !important; }
+html.dark .bg-slate-50   { background-color: #2a2724 !important; }
+html.dark .bg-slate-100  { background-color: #333028 !important; }
+html.dark .bg-stone-100  { background-color: #333028 !important; }
+
+/* ── Fondos translúcidos white ────────────────────────────── */
+html.dark .bg-white\/80  { background-color: rgba(20,18,14,0.92) !important; }
+html.dark .bg-white\/60  { background-color: rgba(20,18,14,0.97) !important; }
+html.dark .bg-white\/40  { background-color: rgba(20,18,14,0.6)  !important; }
+html.dark .bg-white\/20  { background-color: rgba(20,18,14,0.3)  !important; }
+
+/* ── Fondos translúcidos stone-100 (hover/selección de filas) */
+html.dark .bg-stone-100\/70 { background-color: rgba(60,56,52,0.5)  !important; }
+html.dark .bg-stone-100\/90 { background-color: rgba(60,56,52,0.7)  !important; }
+html.dark .bg-stone-100\/50 { background-color: rgba(60,56,52,0.3)  !important; }
+
+/* ── Borders ──────────────────────────────────────────────── */
+html.dark .border-slate-200 { border-color: #3d3a36 !important; }
+html.dark .border-slate-100 { border-color: #2e2b27 !important; }
+html.dark .border-stone-100 { border-color: #2e2b27 !important; }
+html.dark .border-white     { border-color: rgba(255,255,255,0.06) !important; }
+html.dark .border-white\/60 { border-color: rgba(255,255,255,0.07) !important; }
+html.dark .border-white\/40 { border-color: rgba(255,255,255,0.05) !important; }
+html.dark .border-slate-300 { border-color: #3d3a36 !important; }
+
+/* ── Dividers ─────────────────────────────────────────────── */
+html.dark .divide-slate-100 > * + * { border-color: #2e2b27 !important; }
+html.dark .divide-stone-100 > * + * { border-color: #2e2b27 !important; }
+
+/* ── Hovers ───────────────────────────────────────────────── */
+html.dark .hover\:bg-slate-50:hover          { background-color: #2a2724 !important; }
+html.dark .hover\:bg-white:hover             { background-color: #2e2b27 !important; }
+html.dark .hover\:bg-stone-100\/50:hover     { background-color: rgba(60,56,52,0.3) !important; }
+
+/* ── Period tabs ─────────────────────────────────────────── */
+.tab-period-active {
+  background-color: #f5f5f4 !important; /* stone-100 — visible sobre fondo claro */
+  border-color: #d6d3d1 !important;     /* stone-300 */
+}
+html.dark .tab-period-active {
+  background-color: #000000 !important;
+  border-color: #52525b !important;     /* stone-600 */
+}
+
+/* ── Inputs y selects ─────────────────────────────────────── */
+html.dark input, html.dark select, html.dark textarea {
+  color-scheme: dark;
 }
 
 #root {

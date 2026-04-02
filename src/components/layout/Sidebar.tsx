@@ -7,9 +7,12 @@ import {
   LogOut,
   Banknote,
   AlertTriangle,
+  Moon,
+  Sun,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useTheme } from '../../context/ThemeContext';
 import logoFull from '../../assets/logo/LogoEstandar.png';
 
 interface SidebarProps {
@@ -57,6 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onHoverChange,
 }) => {
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
   const [isHovered, setIsHovered] = useState(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -87,7 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       <div
         data-collapsed={collapsed ? 'true' : 'false'}
-        className={`sidebar-panel fixed left-0 top-0 h-full bg-transparent border-r border-slate-200/20 z-50 flex flex-col overflow-hidden
+        className={`sidebar-panel fixed left-0 top-0 h-full bg-transparent border-r border-slate-200/20 dark:border-stone-700/20 z-50 flex flex-col overflow-hidden
           ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
         style={{ width: isOpen ? '240px' : collapsed ? '73px' : '240px' }}
@@ -144,8 +148,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                         className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md
                           text-sm tracking-tight transition-all duration-200
                           ${active
-                            ? 'text-orange-700'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/25'
+                            ? 'text-orange-600 dark:text-orange-500'
+                            : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 hover:bg-white/25 dark:hover:bg-stone-700/40'
                           }`}
                       >
                         <span className={`shrink-0 w-8 h-8 flex items-center justify-center ${active ? 'text-orange-700' : ''}`}>
@@ -166,16 +170,32 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
+
+          {/* Dark mode toggle */}
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            className="flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md mb-1
+              text-slate-400 dark:text-stone-500 hover:text-slate-700 dark:hover:text-stone-300 hover:bg-white/25 dark:hover:bg-stone-700/40 transition-colors"
+          >
+            <span className="shrink-0 w-8 h-8 flex items-center justify-center">
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </span>
+            <span className="sidebar-fade text-sm tracking-tight whitespace-nowrap">
+              {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+            </span>
+          </button>
+
           {/* User card — same pl-2 offset, icon never moves */}
-          <div className={`flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 rounded-xl transition-all ${collapsed ? '' : 'bg-white/20 border border-white/40'}`}>
+          <div className={`flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 rounded-xl transition-all ${collapsed ? '' : 'bg-white/20 dark:bg-stone-800/40 border border-white/40 dark:border-stone-700/40'}`}>
             <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
               {userRole === 'admin' ? 'A' : 'V'}
             </div>
             <div className="sidebar-fade min-w-0">
-              <p className="text-sm tracking-tight text-slate-800 whitespace-nowrap leading-tight">
+              <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight">
                 {userRole === 'admin' ? 'Administrador' : 'Visualizador'}
               </p>
-              <p className="text-xs text-slate-400 capitalize leading-tight">{userRole}</p>
+              <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">{userRole}</p>
             </div>
           </div>
 
@@ -184,7 +204,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             onClick={onLogout}
             title={collapsed ? 'Cerrar sesión' : undefined}
             className="flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
-              text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+              text-slate-400 dark:text-stone-500 hover:bg-black/5 dark:hover:bg-black/20 hover:text-red-500 transition-colors"
           >
             <span className="shrink-0 w-8 h-8 flex items-center justify-center">
               <LogOut size={18} />
