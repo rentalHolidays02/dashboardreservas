@@ -85,8 +85,8 @@ export default async function handler(req, res) {
       origen:        colOrigen,
       entrada:       colEntrada,
       salida:        colSalida,
-      nombre:        colNombre,
-      telefono:      colTelefono,
+      nombre:        colNOMBRE,
+      telefono:      colTELEFONO,
       observaciones: colObservacion,
       datosKiko:     colKiko,
       // Financieras
