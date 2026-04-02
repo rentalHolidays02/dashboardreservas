@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { HelpCircle, TrendingUp, CalendarRange, X } from 'lucide-react';
 import { CheckInOut, Worker } from '../../services/mockData';
+import { useTheme } from '../../context/ThemeContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
@@ -86,7 +87,6 @@ type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
 
 type ChartPoint = { label: string; valor: number };
 
-// Baseline mensual de referencia para escalar datos por trabajador
 const BASELINE_MONTHLY = 1250;
 
 const generateBaseData = (period: Exclude<Period, 'personalizado'>): ChartPoint[] => {
@@ -113,7 +113,6 @@ const generateBaseData = (period: Exclude<Period, 'personalizado'>): ChartPoint[
     return result;
   }
 
-  // Trimestral
   const vals = [640, 700, 720, 780, 760, 820, 850, 900, 880, 950, 980, 1040, 1090];
   const result: ChartPoint[] = [];
   for (let i = 12; i >= 0; i--) {
@@ -134,7 +133,6 @@ const generateCustomData = (desde: string, hasta: string): ChartPoint[] => {
   if (days <= 0) return [];
 
   const result: ChartPoint[] = [];
-  // Patrón determinista basado en la fecha de inicio
   const seed = start.getDate() + start.getMonth() * 31;
   for (let i = 0; i < Math.min(days, 90); i++) {
     const d = new Date(start);
@@ -167,9 +165,9 @@ const CustomTooltip: React.FC<{
 }> = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border-2 border-white rounded-xl px-3 py-2 text-xs soft-shadow">
-      <p className="text-slate-400 mb-0.5">{label}</p>
-      <p className="font-medium text-slate-800">{fmtEur(payload[0].value)}</p>
+    <div className="bg-white dark:bg-stone-800 border-2 border-white dark:border-stone-700 rounded-xl px-3 py-2 text-xs soft-shadow">
+      <p className="text-slate-400 dark:text-stone-500 mb-0.5">{label}</p>
+      <p className="font-medium text-slate-800 dark:text-stone-200">{fmtEur(payload[0].value)}</p>
     </div>
   );
 };
@@ -180,6 +178,12 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [chartKey, setChartKey]     = useState(0);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  const activeTabStyle: React.CSSProperties = isDark
+    ? { backgroundColor: '#000', borderColor: '#000', borderWidth: 1, borderStyle: 'solid' }
+    : { backgroundColor: '#f5f5f4', borderColor: '#fff', borderWidth: 1, borderStyle: 'solid' };
 
   const handlePeriod = (p: Period) => {
     if (p === period) return;
@@ -187,7 +191,6 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
     setChartKey(k => k + 1);
   };
 
-  // Re-animar cuando cambia el trabajador seleccionado
   const prevWorkerId = useRef(selectedWorker?.id);
   useEffect(() => {
     if (prevWorkerId.current !== selectedWorker?.id) {
@@ -207,7 +210,6 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
     return base.map(d => ({ ...d, valor: Math.round(d.valor * scale) }));
   }, [period, customDesde, customHasta, selectedWorker]);
 
-  // Re-animar cuando cambian las fechas personalizadas (con datos)
   const prevCustom = useRef('');
   useEffect(() => {
     if (period !== 'personalizado') return;
@@ -233,16 +235,16 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
       <div className="flex flex-col">
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-baseline gap-3 min-w-0">
-            <span className="text-xl font-normal text-slate-800 tracking-tight tabular-nums font-display">
+            <span className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight tabular-nums font-display">
               {fmtEur(animatedTotal)}
             </span>
-            <span className="text-xs text-slate-400 font-normal">
+            <span className="text-xs text-slate-400 dark:text-stone-500 font-normal">
               total {periodLabel}
             </span>
             {selectedWorker && (
               <button
                 onClick={() => onWorkerSelect && onWorkerSelect(null)}
-                className="inline-flex items-center gap-1.5 text-[11px] bg-orange-50/50 text-orange-600 border border-orange-200/50 rounded-lg px-2 py-1 transition-all hover:bg-orange-100/50 group"
+                className="inline-flex items-center gap-1.5 text-[11px] bg-orange-50/50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200/50 dark:border-orange-800/50 rounded-lg px-2 py-1 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/50 group"
               >
                 <span className="font-medium">{selectedWorker.fullName}</span>
                 <X size={12} className="text-orange-400 group-hover:text-orange-600" />
@@ -250,15 +252,16 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             )}
           </div>
 
-          <div className="flex items-center bg-white/40 backdrop-blur-md border border-white/60 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+          <div className="flex items-center bg-white/40 dark:bg-stone-800/60 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
             {PERIODS.map(p => (
               <button
                 key={p.id}
                 onClick={() => handlePeriod(p.id)}
-                className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all duration-200 ${
+                style={period === p.id ? activeTabStyle : {}}
+                className={`text-xs px-2.5 py-1 rounded-md font-normal transition-all duration-200 ${
                   period === p.id
-                    ? 'bg-white/90 text-orange-600 border border-white'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+                    ? 'text-orange-600 dark:text-orange-400 soft-shadow'
+                    : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 hover:bg-white/40 dark:hover:bg-stone-700/50'
                 }`}
               >
                 {p.label}
@@ -270,27 +273,27 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
         {/* Selector de fechas personalizadas */}
         {period === 'personalizado' && (
           <div className="flex items-center gap-2 mb-3 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-1.5">
-              <CalendarRange size={13} className="text-slate-400 flex-shrink-0" />
+            <div className="flex items-center gap-2 bg-white dark:bg-stone-800 border border-slate-200 dark:border-stone-700 rounded-lg px-3 py-1.5">
+              <CalendarRange size={13} className="text-slate-400 dark:text-stone-500 flex-shrink-0" />
               <input
                 type="date"
                 value={customDesde}
                 onChange={e => setCustomDesde(e.target.value)}
-                className="text-xs text-slate-700 focus:outline-none bg-transparent"
+                className="text-xs text-slate-700 dark:text-stone-300 focus:outline-none bg-transparent"
               />
-              <span className="text-slate-300 text-xs">—</span>
+              <span className="text-slate-300 dark:text-stone-600 text-xs">—</span>
               <input
                 type="date"
                 value={customHasta}
                 min={customDesde}
                 onChange={e => setCustomHasta(e.target.value)}
-                className="text-xs text-slate-700 focus:outline-none bg-transparent"
+                className="text-xs text-slate-700 dark:text-stone-300 focus:outline-none bg-transparent"
               />
             </div>
             {(customDesde || customHasta) && (
               <button
                 onClick={() => { setCustomDesde(''); setCustomHasta(''); }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
+                className="text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
               >
                 <X size={13} />
               </button>
@@ -299,12 +302,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
         )}
 
         <div className="flex flex-col flex-1 min-h-0 px-1">
-
-          {/* Gráfica */}
           {period === 'personalizado' && (!customDesde || !customHasta) ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-300 gap-2">
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-300 dark:text-stone-700 gap-2">
               <CalendarRange size={28} />
-              <p className="text-xs text-slate-400">Selecciona un rango de fechas</p>
+              <p className="text-xs text-slate-400 dark:text-stone-500">Selecciona un rango de fechas</p>
             </div>
           ) : (
             <div key={chartKey} className="chart-enter flex-1 min-h-0">
@@ -354,7 +355,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
       <div className="flex flex-col gap-2 min-h-0">
         {checkIns.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
-            <span className="text-xs text-slate-400">Sin actividad registrada</span>
+            <span className="text-xs text-slate-400 dark:text-stone-500">Sin actividad registrada</span>
           </div>
         ) : (
           checkIns.slice(0, 4).map(entry => {
@@ -362,25 +363,25 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             return (
               <div
                 key={entry.id}
-                className={`bg-white/80 backdrop-blur-sm border border-white/60 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white ${
+                className={`bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-white/60 dark:border-stone-700/50 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white dark:hover:bg-stone-900/80 ${
                   isFinished ? 'opacity-30' : 'opacity-100'
                 }`}
               >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-xs text-slate-500 font-medium flex-shrink-0 soft-shadow">
+                <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 flex items-center justify-center text-xs text-slate-500 dark:text-stone-400 font-medium flex-shrink-0 soft-shadow">
                   {entry.cleanerName.charAt(0)}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-700 truncate">{entry.cleanerName}</p>
-                  <p className="text-[11px] text-slate-400 truncate">{entry.accommodation}</p>
+                  <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{entry.cleanerName}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{entry.accommodation}</p>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-0.5 flex-shrink-0 pl-2">
-                <span className="text-[11px] text-slate-400 tabular-nums">{fmtTime(entry.timestamp)}</span>
+                <span className="text-[11px] text-slate-400 dark:text-stone-500 tabular-nums">{fmtTime(entry.timestamp)}</span>
                 <span className="text-xs">
                   {entry.type === 'check-in'
                     ? <WorkingBadge />
-                    : <span className="text-[11px] text-slate-400">Finalizado</span>
+                    : <span className="text-[11px] text-slate-400 dark:text-stone-500">Finalizado</span>
                   }
                 </span>
                 </div>
@@ -389,7 +390,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
           })
         )}
 
-        <button className="text-xs text-slate-400 hover:text-slate-600 transition-colors text-center py-1 cursor-not-allowed select-none">
+        <button className="text-xs text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors text-center py-1 cursor-not-allowed select-none">
           Mostrar más
         </button>
       </div>

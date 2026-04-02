@@ -70,24 +70,24 @@ const Pagos: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="pb-6 border-b border-slate-200">
+      <header className="pb-6 border-b border-slate-200 dark:border-stone-800">
         <div className="flex items-center gap-3">
-          <Banknote size={24} className="text-slate-800" />
-          <h1 className="text-3xl font-medium tracking-tight text-slate-900 font-display">Pagos</h1>
+          <Banknote size={24} className="text-slate-800 dark:text-stone-300" />
+          <h1 className="text-3xl font-medium tracking-tight text-slate-900 dark:text-stone-100 font-display">Pagos</h1>
         </div>
       </header>
 
       {/* Filtro de periodo */}
       <div className="flex flex-wrap gap-3 items-center">
-        <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
+        <div className="flex bg-slate-100 dark:bg-stone-800 p-1 rounded-xl gap-1">
           {PERIODS.map(p => (
             <button
               key={p.id}
               onClick={() => setPeriod(p.id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 period === p.id
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
+                  ? 'bg-white dark:bg-stone-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-500 dark:text-stone-400 hover:text-slate-700 dark:hover:text-stone-200'
               }`}
             >
               {p.label}
@@ -96,21 +96,21 @@ const Pagos: React.FC = () => {
         </div>
 
         {period === 'custom' && (
-          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2 shadow-sm">
-            <CalendarRange size={16} className="text-slate-400 shrink-0" />
+          <div className="flex items-center gap-2 bg-white dark:bg-stone-800 border border-slate-200 dark:border-stone-700 rounded-xl px-4 py-2 shadow-sm">
+            <CalendarRange size={16} className="text-slate-400 dark:text-stone-500 shrink-0" />
             <input
               type="date"
               value={desde}
               onChange={e => setDesde(e.target.value)}
-              className="text-sm text-slate-700 focus:outline-none bg-transparent"
+              className="text-sm text-slate-700 dark:text-stone-300 focus:outline-none bg-transparent"
             />
-            <span className="text-slate-400 text-sm">—</span>
+            <span className="text-slate-400 dark:text-stone-600 text-sm">—</span>
             <input
               type="date"
               value={hasta}
               min={desde}
               onChange={e => setHasta(e.target.value)}
-              className="text-sm text-slate-700 focus:outline-none bg-transparent"
+              className="text-sm text-slate-700 dark:text-stone-300 focus:outline-none bg-transparent"
             />
           </div>
         )}
@@ -119,16 +119,16 @@ const Pagos: React.FC = () => {
       {/* Tarjetas resumen */}
       {!loading && pagos.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total importe</p>
-            <p className="text-2xl font-bold text-slate-900 font-mono">{fmtCurrency(total)}</p>
+          <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl p-5">
+            <p className="text-xs text-slate-500 dark:text-stone-500 uppercase tracking-wider mb-1">Total importe</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-stone-100 font-mono">{fmtCurrency(total)}</p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-5">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Registros</p>
-            <p className="text-2xl font-bold text-slate-900">{pagos.length}</p>
+          <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl p-5">
+            <p className="text-xs text-slate-500 dark:text-stone-500 uppercase tracking-wider mb-1">Registros</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-stone-100">{pagos.length}</p>
           </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-5">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Pendientes</p>
+          <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl p-5">
+            <p className="text-xs text-slate-500 dark:text-stone-500 uppercase tracking-wider mb-1">Pendientes</p>
             <p className={`text-2xl font-bold ${pendientes > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
               {pendientes}
             </p>
@@ -140,65 +140,65 @@ const Pagos: React.FC = () => {
       {loading ? (
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4">
           <Loader2 className="animate-spin text-blue-600" size={40} />
-          <p className="text-slate-500 font-medium">Cargando pagos...</p>
+          <p className="text-slate-500 dark:text-stone-400 font-medium">Cargando pagos...</p>
         </div>
       ) : period === 'custom' && (!desde || !hasta) ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 flex flex-col items-center gap-3">
-          <CalendarRange size={32} className="text-slate-300" />
-          <p className="text-slate-400 text-sm">Selecciona un rango de fechas para ver los pagos</p>
+        <div className="bg-white dark:bg-stone-950 border border-dashed border-slate-300 dark:border-stone-700 rounded-2xl p-12 flex flex-col items-center gap-3">
+          <CalendarRange size={32} className="text-slate-300 dark:text-stone-700" />
+          <p className="text-slate-400 dark:text-stone-500 text-sm">Selecciona un rango de fechas para ver los pagos</p>
         </div>
       ) : pagos.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 flex flex-col items-center gap-3">
-          <Banknote size={32} className="text-slate-300" />
-          <p className="text-slate-400 text-sm">No hay pagos para el periodo seleccionado</p>
+        <div className="bg-white dark:bg-stone-950 border border-dashed border-slate-300 dark:border-stone-700 rounded-2xl p-12 flex flex-col items-center gap-3">
+          <Banknote size={32} className="text-slate-300 dark:text-stone-700" />
+          <p className="text-slate-400 dark:text-stone-500 text-sm">No hay pagos para el periodo seleccionado</p>
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
-                <tr className="bg-slate-50/70 border-b border-slate-200">
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Trabajador</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Teléfono</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">DNI</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Email</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Fecha</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Concepto</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Limpiezas</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Km</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-right">Importe</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Estado</th>
+                <tr className="bg-slate-50/70 dark:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800">
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">Trabajador</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">Teléfono</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">DNI</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">Email</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">Fecha</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">Concepto</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase text-center">Limpiezas</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase">Km</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase text-right">Importe</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 dark:text-stone-500 uppercase text-center">Estado</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
                 {pagos.map(pago => (
-                  <tr key={pago.id} className="hover:bg-slate-50 transition-colors text-sm">
-                    <td className="px-6 py-4">
+                  <tr key={pago.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors text-sm">
+                    <td className="px-8 py-6">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0">
                           {initials(pago.workerName)}
                         </div>
-                        <span className="font-medium text-slate-900 whitespace-nowrap">{pago.workerName}</span>
+                        <span className="font-medium text-slate-900 dark:text-stone-100 whitespace-nowrap">{pago.workerName}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{pago.telefono}</td>
-                    <td className="px-6 py-4 text-slate-600 font-mono text-xs">{pago.dni}</td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">{pago.email}</td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{fmtDate(pago.fecha)}</td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{pago.concepto}</td>
-                    <td className="px-6 py-4 text-slate-600 text-center">{pago.limpiezas}</td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{pago.km} km</td>
-                    <td className="px-6 py-4 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
+                    <td className="px-8 py-6 text-slate-600 dark:text-stone-400 whitespace-nowrap">{pago.telefono}</td>
+                    <td className="px-8 py-6 text-slate-600 dark:text-stone-400 font-mono text-xs">{pago.dni}</td>
+                    <td className="px-8 py-6 text-slate-500 dark:text-stone-500 text-xs">{pago.email}</td>
+                    <td className="px-8 py-6 text-slate-600 dark:text-stone-400 whitespace-nowrap">{fmtDate(pago.fecha)}</td>
+                    <td className="px-8 py-6 text-slate-600 dark:text-stone-400 whitespace-nowrap">{pago.concepto}</td>
+                    <td className="px-8 py-6 text-slate-600 dark:text-stone-400 text-center">{pago.limpiezas}</td>
+                    <td className="px-8 py-6 text-slate-600 dark:text-stone-400 whitespace-nowrap">{pago.km} km</td>
+                    <td className="px-8 py-6 text-right font-bold text-slate-900 dark:text-stone-100 font-mono whitespace-nowrap">
                       {fmtCurrency(pago.importe)}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-8 py-6 text-center">
                       {pago.estado === 'pagado' ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-normal uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-md px-2 py-0.5 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-normal uppercase tracking-wider bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/50 rounded-md px-2 py-0.5 whitespace-nowrap">
                           <CheckCircle2 size={10} />
                           Pagado
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-normal uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100 rounded-md px-2 py-0.5 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-normal uppercase tracking-wider bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-800/50 rounded-md px-2 py-0.5 whitespace-nowrap">
                           <Clock size={10} />
                           Pendiente
                         </span>

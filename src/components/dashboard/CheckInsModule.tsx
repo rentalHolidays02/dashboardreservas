@@ -14,35 +14,35 @@ const CheckInsModule: React.FC<Props> = ({ entries }) => {
     <section>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-800">Últimos Check-ins / Check-outs</h2>
-          <p className="text-sm text-slate-500">Actividad reciente de limpiadores en alojamientos</p>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-stone-200">Últimos Check-ins / Check-outs</h2>
+          <p className="text-sm text-slate-500 dark:text-stone-400">Actividad reciente de limpiadores en alojamientos</p>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <tr className="bg-slate-50 dark:bg-stone-800/50 border-b border-slate-200 dark:border-stone-800 text-left text-xs font-semibold text-slate-500 dark:text-stone-400 uppercase tracking-wide">
               <th className="px-5 py-3">Limpiador</th>
               <th className="px-5 py-3 hidden sm:table-cell">Alojamiento</th>
               <th className="px-5 py-3">Hora</th>
               <th className="px-5 py-3">Estado</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-stone-800">
             {entries.map((entry) => (
-              <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-5 py-3 font-medium text-slate-800">{entry.cleanerName}</td>
-                <td className="px-5 py-3 text-slate-500 hidden sm:table-cell">{entry.accommodation}</td>
-                <td className="px-5 py-3 text-slate-500 tabular-nums">{formatTime(entry.timestamp)}</td>
+              <tr key={entry.id} className="hover:bg-slate-50 dark:hover:bg-stone-800/50 transition-colors">
+                <td className="px-5 py-3 font-medium text-slate-800 dark:text-stone-200">{entry.cleanerName}</td>
+                <td className="px-5 py-3 text-slate-500 dark:text-stone-400 hidden sm:table-cell">{entry.accommodation}</td>
+                <td className="px-5 py-3 text-slate-500 dark:text-stone-400 tabular-nums">{formatTime(entry.timestamp)}</td>
                 <td className="px-5 py-3">
                   {entry.type === 'check-in' ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
                       <LogIn size={11} />
                       Check In
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
                       <LogOut size={11} />
                       Check Out
                     </span>

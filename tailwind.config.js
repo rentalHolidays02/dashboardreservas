@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -12,13 +13,13 @@ export default {
       },
       borderRadius: {
         none: '0',
-        sm: '8px',
+        sm: '3px',
         DEFAULT: 'var(--radius)',
         md: 'var(--radius)',
-        lg: '20px',
-        xl: '24px',
-        '2xl': '28px',
-        '3xl': '32px',
+        lg: '15px',
+        xl: '19px',
+        '2xl': '23px',
+        '3xl': '27px',
         full: '9999px',
       },
     },

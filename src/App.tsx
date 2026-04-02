@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Cleans from './pages/Cleans';
@@ -10,17 +11,10 @@ import MainLayout from './components/layout/MainLayout';
 import { User } from './services/mockData';
 
 function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticating, setIsAuthenticating] = useState(true);
-
-  useEffect(() => {
-    // Simular persistencia de sesión básica en localStorage para el MVP
-    const savedUser = localStorage.getItem('rh_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setIsAuthenticating(false);
-  }, []);
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('rh_user');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const handleLoginSuccess = (userData: User) => {
     setUser(userData);
@@ -32,13 +26,8 @@ function App() {
     localStorage.removeItem('rh_user');
   };
 
-  if (isAuthenticating) {
-    return <div className="min-h-screen bg-transparent flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-    </div>;
-  }
-
   return (
+    <ThemeProvider>
     <BrowserRouter>
       <Routes>
         <Route 
@@ -114,6 +103,7 @@ function App() {
         <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
       </Routes>
     </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

@@ -20,10 +20,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
     <div className="min-h-screen bg-transparent flex flex-col lg:flex-row">
       {/* Mobile Header */}
       <div className="lg:hidden bg-transparent p-4 flex items-center justify-between sticky top-0 z-40">
-        <span className="font-semibold text-slate-900 tracking-tight">RH Pagos</span>
+        <span className="font-semibold text-slate-900 dark:text-stone-100 tracking-tight">RH Pagos</span>
         <button
           onClick={() => setIsSidebarOpen(true)}
-          className="p-2 hover:bg-slate-100 rounded-md transition-colors text-slate-600"
+          className="p-2 hover:bg-slate-100 dark:hover:bg-stone-800 rounded-md transition-colors text-slate-600 dark:text-stone-400"
         >
           <Menu size={22} />
         </button>
