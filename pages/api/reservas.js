@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const colEntrada      = findCol('ENTRADA')                  ?? 'FECHA ENTRADA';
     const colSalida       = findCol('SALIDA')                   ?? 'FECHA SALIDA';
     const colNombre       = findCol('NOMBRE', 'CLIENTE')        ?? 'NOMBRE';
-    const colTelefono     = findCol('TELEFONO', 'TELÉFONO', 'TEL', 'PHONE') ?? null;
+    const colTelefono     = findCol('TELÉFONO', 'TELEFONO', 'TELÈFON', 'PHONE', 'MÓVIL', 'MOVIL') ?? 'TELEFONO';
     const colObservacion  = findCol('OBSERVACIONES', 'OBS')     ?? 'OBSERVACIONES';
     const colKiko         = findCol('KIKO')                     ?? 'DATOS KIKO';
 
