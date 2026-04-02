@@ -34,6 +34,7 @@ export default async function handler(req, res) {
     const colEntrada      = findCol('ENTRADA')                  ?? 'FECHA ENTRADA';
     const colSalida       = findCol('SALIDA')                   ?? 'FECHA SALIDA';
     const colNombre       = findCol('NOMBRE', 'CLIENTE')        ?? 'NOMBRE';
+    const colTelefono     = findCol('TELEFONO', 'TELÉFONO', 'TEL', 'PHONE') ?? null;
     const colObservacion  = findCol('OBSERVACIONES', 'OBS')     ?? 'OBSERVACIONES';
     const colKiko         = findCol('KIKO')                     ?? 'DATOS KIKO';
 
@@ -85,6 +86,7 @@ export default async function handler(req, res) {
       entrada:       colEntrada,
       salida:        colSalida,
       nombre:        colNombre,
+      telefono:      colTelefono,
       observaciones: colObservacion,
       datosKiko:     colKiko,
       // Financieras
