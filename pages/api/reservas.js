@@ -1,8 +1,8 @@
 import Papa from 'papaparse';
 
 export default async function handler(req, res) {
-  const SHEET_URL =
-    'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ9XN1hs2aSSFFCI9EOP4zCo_RILZY-SXIok-ourvii_sx64LzJsY3T-AGPcllJBUjFqcuMk0UcAhpQ/pub?output=csv';
+  // URL exacta confirmada por el usuario
+  const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ9XN1hs2aSSFFCI9EOP4zCo_RILZY-SXIok-ourvii_sx64LzJsY3T-AGPcllJBUjFqcuMk0UcAhpQ/pub?output=csv';
 
   try {
     const response = await fetch(SHEET_URL);
@@ -100,7 +100,13 @@ export default async function handler(req, res) {
       reportes:      colReportes,
     };
 
-    return res.status(200).json({ data: filteredData, keys });
+    return res.status(200).json({
+      data: filteredData,
+      keys,
+      // _debug: columnas que encontró el CSV — útil para diagnosticar
+      // si NOMBRE o TELEFONO no aparecen, verifica aquí que estén listadas
+      _cols: colNames,
+    });
 
   } catch (error) {
     console.error('[reservas API]', error);
