@@ -19,9 +19,11 @@ function parseDate(str) {
 function isToday(date) {
   if (!date) return false;
   const now = new Date();
-  return date.getFullYear() === now.getFullYear() &&
+  return (
+    date.getFullYear() === now.getFullYear() &&
     date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
+    date.getDate() === now.getDate()
+  );
 }
 
 function formatDate(date) {
@@ -74,8 +76,13 @@ export default function Home() {
   const [called, setCalled] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
   const [tab, setTab] = useState('reservas');
+  const [stickyTop, setStickyTop] = useState(0);
+
   const audioCtx = useRef(null);
   const alarmInterval = useRef(null);
+  const headerRef = useRef(null);
+  const bannerRef = useRef(null);
+  const tabsRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -109,6 +116,19 @@ export default function Home() {
   const todayIn = data.filter(r => isToday(r._entrada));
   const todayOut = data.filter(r => isToday(r._salida));
   const hasToday = todayIn.length > 0 || todayOut.length > 0;
+
+  // ── Recalculate sticky offset whenever layout may change ──────────────────
+  useEffect(() => {
+    function recalc() {
+      const hH = headerRef.current?.offsetHeight || 0;
+      const bH = bannerRef.current?.offsetHeight || 0;
+      const tH = tabsRef.current?.offsetHeight || 0;
+      setStickyTop(hH + bH + tH);
+    }
+    recalc();
+    window.addEventListener('resize', recalc);
+    return () => window.removeEventListener('resize', recalc);
+  }, [hasToday, alarmsEnabled, tab]); // re-run whenever these can change heights
 
   useEffect(() => {
     clearInterval(alarmInterval.current);
@@ -177,6 +197,7 @@ export default function Home() {
     .last-upd { font-family: 'DM Mono', monospace; font-size: 0.67rem; color: var(--muted); }
 
     .alarm-banner {
+      position: sticky; z-index: 99;
       background: rgba(248,113,113,0.07);
       border-bottom: 1px solid rgba(248,113,113,0.25);
       padding: 0.65rem 1.5rem;
@@ -187,7 +208,7 @@ export default function Home() {
     .alarm-title { font-weight: 700; font-size: 0.85rem; color: var(--red); }
     .alarm-detail { font-size: 0.7rem; color: #fca5a5; margin-top: 0.1rem; }
 
-    .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1.5rem; }
+    .tabs { position: sticky; z-index: 98; display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1.5rem; }
     .tab-btn {
       padding: 0.7rem 1.2rem; background: none; border: none; border-bottom: 2px solid transparent;
       cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700;
@@ -235,7 +256,9 @@ export default function Home() {
       background: var(--s1); border-bottom: 1px solid var(--border2);
       padding: 0.6rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-      color: var(--muted); white-space: nowrap; position: sticky; top: 55px; z-index: 10;
+      color: var(--muted); white-space: nowrap;
+      position: sticky; z-index: 10;
+      top: var(--thead-top, 0px);
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
@@ -298,7 +321,14 @@ export default function Home() {
     .exp-item span { font-size: 0.77rem; font-family: 'DM Mono', monospace; }
 
     .fin-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-    .fin-table th { background: var(--s1); border-bottom: 1px solid var(--border2); padding: 0.58rem 0.85rem; text-align: left; font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); white-space: nowrap; }
+    .fin-table th {
+      background: var(--s1); border-bottom: 1px solid var(--border2);
+      padding: 0.58rem 0.85rem; text-align: left;
+      font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted); white-space: nowrap;
+      position: sticky; z-index: 10;
+      top: var(--thead-top, 0px);
+    }
     .fin-table td { padding: 0.62rem 0.85rem; border-bottom: 1px solid var(--border); }
     .fin-table tr:hover td { background: var(--s2); }
     .money { font-family: 'DM Mono', monospace; text-align: right; color: var(--green); }
@@ -324,10 +354,12 @@ export default function Home() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
         <style>{CSS}</style>
+        {/* Inject the measured sticky top as a CSS variable so thead th can use it */}
+        <style>{`:root { --thead-top: ${stickyTop}px; }`}</style>
       </Head>
 
       {/* Header */}
-      <header className="header">
+      <header className="header" ref={headerRef}>
         <div className="logo">
           <div className="logo-dot" />
           Reservas Dashboard
@@ -346,9 +378,13 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Alarm */}
+      {/* Alarm banner */}
       {hasToday && alarmsEnabled && (
-        <div className="alarm-banner">
+        <div
+          className="alarm-banner"
+          ref={bannerRef}
+          style={{ top: headerRef.current?.offsetHeight || 0 }}
+        >
           <span className="bell">🔔</span>
           <div>
             <div className="alarm-title">
@@ -364,7 +400,13 @@ export default function Home() {
       )}
 
       {/* Tabs */}
-      <div className="tabs">
+      <div
+        className="tabs"
+        ref={tabsRef}
+        style={{
+          top: (headerRef.current?.offsetHeight || 0) + (bannerRef.current?.offsetHeight || 0),
+        }}
+      >
         {[['reservas', '📅 Reservas'], ['financiero', '💶 Financiero']].map(([k, l]) => (
           <button key={k} className={`tab-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
         ))}
