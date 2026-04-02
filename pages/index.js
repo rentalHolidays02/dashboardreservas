@@ -70,19 +70,58 @@ function safeGet(row, key) {
   return (val !== undefined && val !== null && String(val).trim() !== '') ? val : '—';
 }
 
-function playAlarm(ctx) {
-  [[0, 880, 440], [0.45, 1046, 523], [0.9, 880, 440]].forEach(([t, f1, f2]) => {
-    const osc = ctx.createOscillator();
+// Sonido de ENTRADA — ascendente, luminoso, tipo fanfarria de bienvenida
+function playEntrada(ctx) {
+  const now = ctx.currentTime;
+  // Tres notas ascendentes: Do → Mi → Sol (acorde mayor ascendente)
+  [
+    [0,    523, 0.55],   // Do5
+    [0.18, 659, 0.5 ],   // Mi5
+    [0.34, 784, 0.65],   // Sol5
+    [0.5,  1047,0.45],   // Do6 — nota final aguda
+  ].forEach(([t, freq, vol]) => {
+    const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(f1, ctx.currentTime + t);
-    osc.frequency.exponentialRampToValueAtTime(f2, ctx.currentTime + t + 0.35);
-    gain.gain.setValueAtTime(0.5, ctx.currentTime + t);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.38);
-    osc.start(ctx.currentTime + t);
-    osc.stop(ctx.currentTime + t + 0.4);
+    osc.frequency.setValueAtTime(freq, now + t);
+    gain.gain.setValueAtTime(vol, now + t);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.28);
+    osc.start(now + t);
+    osc.stop(now + t + 0.3);
   });
+}
+
+// Sonido de SALIDA — descendente, suave, tipo recordatorio de checkout
+function playSalida(ctx) {
+  const now = ctx.currentTime;
+  // Tres notas descendentes: Sol → Mi → Do (acorde mayor invertido)
+  [
+    [0,    784, 0.45],   // Sol5
+    [0.22, 659, 0.4 ],   // Mi5
+    [0.42, 523, 0.5 ],   // Do5
+    [0.6,  392, 0.35],   // Sol4 — nota final grave
+  ].forEach(([t, freq, vol]) => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now + t);
+    gain.gain.setValueAtTime(vol, now + t);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.32);
+    osc.start(now + t);
+    osc.stop(now + t + 0.35);
+  });
+}
+
+// Reproduce el sonido correcto según qué tipo de evento hay hoy
+function playAlarmFor(ctx, hasIn, hasOut) {
+  if (hasIn)  playEntrada(ctx);
+  if (hasOut) {
+    // Si hay entrada también, espera un momento para no solapar
+    const delay = hasIn ? 1000 : 0;
+    setTimeout(() => playSalida(ctx), delay);
+  }
 }
 
 export default function Home() {
@@ -168,20 +207,22 @@ export default function Home() {
   useEffect(() => {
     clearInterval(alarmInterval.current);
     if (!alarmsEnabled || !hasToday) return;
+    const hasIn  = todayIn.length > 0;
+    const hasOut = todayOut.length > 0;
     function fire() {
       if (!audioCtx.current)
         audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-      playAlarm(audioCtx.current);
+      playAlarmFor(audioCtx.current, hasIn, hasOut);
     }
     fire();
     alarmInterval.current = setInterval(fire, 5 * 60 * 1000);
     return () => clearInterval(alarmInterval.current);
-  }, [alarmsEnabled, hasToday]);
+  }, [alarmsEnabled, hasToday, todayIn.length, todayOut.length]);
 
   function triggerAlarm() {
     if (!audioCtx.current)
       audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
-    playAlarm(audioCtx.current);
+    playAlarmFor(audioCtx.current, todayIn.length > 0, todayOut.length > 0);
   }
 
   let displayed = [...data];
@@ -448,15 +489,24 @@ export default function Home() {
       {hasToday && alarmsEnabled && (
         <div className="alarm-banner" ref={bannerRef}>
           <span className="bell">🔔</span>
-          <div>
+          <div style={{ flex: 1 }}>
             <div className="alarm-title">
-              {todayIn.length > 0 && `${todayIn.length} ENTRADA${todayIn.length > 1 ? 'S' : ''} HOY`}
-              {todayIn.length > 0 && todayOut.length > 0 && ' · '}
-              {todayOut.length > 0 && `${todayOut.length} SALIDA${todayOut.length > 1 ? 'S' : ''} HOY`}
+              {todayIn.length > 0 && `✈ ${todayIn.length} ENTRADA${todayIn.length > 1 ? 'S' : ''} HOY`}
+              {todayIn.length > 0 && todayOut.length > 0 && <span style={{ color: 'var(--muted)', margin: '0 0.4rem' }}>·</span>}
+              {todayOut.length > 0 && `🚪 ${todayOut.length} SALIDA${todayOut.length > 1 ? 'S' : ''} HOY`}
             </div>
             <div className="alarm-detail">
-              {/* FIX 4 — safeGet para no romper si keys.alojamiento es undefined */}
-              {[...todayIn, ...todayOut].map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(' · ') || 'Contacta al cliente'}
+              {todayIn.length > 0 && (
+                <span style={{ color: 'var(--green)' }}>
+                  ✈ {todayIn.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}
+                </span>
+              )}
+              {todayIn.length > 0 && todayOut.length > 0 && <span style={{ margin: '0 0.4rem', color: 'var(--muted)' }}>·</span>}
+              {todayOut.length > 0 && (
+                <span style={{ color: 'var(--yellow)' }}>
+                  🚪 {todayOut.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}
+                </span>
+              )}
             </div>
           </div>
         </div>
