@@ -76,7 +76,6 @@ export default function Home() {
   const [called, setCalled] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
   const [tab, setTab] = useState('reservas');
-  const [stickyTop, setStickyTop] = useState(0);
 
   const audioCtx = useRef(null);
   const alarmInterval = useRef(null);
@@ -118,17 +117,18 @@ export default function Home() {
   const hasToday = todayIn.length > 0 || todayOut.length > 0;
 
   // ── Recalculate sticky offset whenever layout may change ──────────────────
-  useEffect(() => {
-    function recalc() {
-      const hH = headerRef.current?.offsetHeight || 0;
-      const bH = bannerRef.current?.offsetHeight || 0;
-      const tH = tabsRef.current?.offsetHeight || 0;
-      setStickyTop(hH + bH + tH);
-    }
-    recalc();
-    window.addEventListener('resize', recalc);
-    return () => window.removeEventListener('resize', recalc);
-  }, [hasToday, alarmsEnabled, tab]); // re-run whenever these can change heights
+useEffect(() => {
+  const obs = new ResizeObserver(() => {
+    const hH = headerRef.current?.offsetHeight || 0;
+    const bH = bannerRef.current?.offsetHeight || 0;
+    const tH = tabsRef.current?.offsetHeight || 0;
+    document.documentElement.style.setProperty('--header-h', `${hH}px`);
+    document.documentElement.style.setProperty('--header-tabs-h', `${hH + bH}px`);
+    document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH}px`);
+  });
+  [headerRef, bannerRef, tabsRef].forEach(r => r.current && obs.observe(r.current));
+  return () => obs.disconnect();
+}, []);
 
   useEffect(() => {
     clearInterval(alarmInterval.current);
