@@ -300,32 +300,17 @@ export default function Home() {
     .ml-auto { margin-left: auto; }
     .sep { width: 1px; height: 22px; background: var(--border); }
 
-    /* FIX 2 — .tbl-wrap ya no lleva overflow-x: auto.
-       El scroll lo maneja .tbl-scroll internamente, lo que permite que
-       thead th { top:0 } funcione como sticky dentro de su contenedor correcto. */
-    .tbl-wrap { padding: 0 1.5rem 3rem; }
-
-    /* FIX 2 — Contenedor de scroll real. Gestiona ambos ejes.
-       max-height = viewport - altura acumulada de los elementos sticky de página. */
-    .tbl-scroll {
-      overflow-x: auto;
-      overflow-y: auto;
-      max-height: calc(100vh - var(--thead-top, 134px));
-      min-height: 200px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-    }
+    /* Tabla: scroll horizontal simple y fiable. Sin sticky en thead
+       (el sticky dentro de overflow-x:auto es el origen del caos visual). */
+    .tbl-wrap { padding: 0 1.5rem 3rem; overflow-x: auto; }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 
-    /* FIX 3 — thead sticky a top:0 dentro de .tbl-scroll.
-       Al tener su propio scroll container, overflow-x no rompe el sticky. */
     thead th {
       background: var(--s1); border-bottom: 2px solid var(--border2);
       padding: 0.6rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
-      position: sticky; top: 0; z-index: 10;
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
@@ -334,7 +319,7 @@ export default function Home() {
     tbody tr.is-called td:not(.ac) { opacity: 0.4; }
     td { padding: 0.68rem 0.85rem; vertical-align: middle; }
 
-    /* FIX 2 — Clases helper para truncado de texto en celdas largas.
+    /* Clases helper para truncado de texto en celdas largas.
        CSS en <td> no trunca en tablas; el <div> interno sí lo hace. */
     .cell-truncate {
       display: block;
@@ -342,9 +327,13 @@ export default function Home() {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .cell-aloj { max-width: 160px; font-weight: 700; }
-    .cell-obs  { max-width: 160px; color: var(--muted); font-size: 0.71rem; }
-    .cell-kiko { max-width: 140px; color: var(--muted); font-size: 0.71rem; }
+    .cell-aloj  { max-width: 160px; font-weight: 700; }
+    .cell-nombre{ max-width: 160px; font-size: 0.65rem; color: var(--muted); margin-top: 0.15rem; font-style: italic; }
+    .cell-obs   { max-width: 160px; color: var(--muted); font-size: 0.71rem; }
+    .cell-kiko  { max-width: 140px; color: var(--muted); font-size: 0.71rem; }
+
+    /* Teléfono del sheet (solo lectura, diferenciado del manual) */
+    .phone-sheet { font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--accent2); }
 
     .bdg {
       display: inline-flex; align-items: center; gap: 0.3rem;
@@ -399,14 +388,13 @@ export default function Home() {
     .exp-item label { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 0.1rem; }
     .exp-item span { font-size: 0.77rem; font-family: 'DM Mono', monospace; }
 
-    /* FIX 3 — fin-table thead sticky a top:0 dentro de su .tbl-scroll */
+    /* fin-table thead sin sticky (overflow-x:auto lo rompe) */
     .fin-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
     .fin-table th {
       background: var(--s1); border-bottom: 2px solid var(--border2);
       padding: 0.58rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
-      position: sticky; top: 0; z-index: 10;
     }
     .fin-table td { padding: 0.62rem 0.85rem; border-bottom: 1px solid var(--border); }
     .fin-table tr:hover td { background: var(--s2); }
@@ -543,14 +531,11 @@ export default function Home() {
         </div>
       ) : tab === 'reservas' ? (
         <>
-          {/* FIX 2 — .tbl-scroll es el contenedor de scroll real.
-              thead { top:0 } funciona dentro de él correctamente. */}
           <div className="tbl-wrap">
             {displayed.length === 0 ? (
               <div className="center"><div className="empty-icon">🏖️</div><div className="empty-txt">Sin reservas con ese filtro.</div></div>
             ) : (
-              <div className="tbl-scroll">
-                <table>
+              <table>
                   {/* FIX 1 — thead con exactamente 9 columnas, numeradas para auditoría */}
                   <thead>
                     <tr>
@@ -585,11 +570,16 @@ export default function Home() {
                           className={`${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`}
                           onClick={() => setExpandedRow(isExp ? null : id)}
                         >
-                          {/* FIX 1+2+4 — TD 1: Alojamiento con div truncador */}
+                          {/* TD 1: Alojamiento + NOMBRE como subtítulo */}
                           <td>
                             <div className="cell-truncate cell-aloj">
                               {safeGet(row, keys.alojamiento)}
                             </div>
+                            {safeGet(row, keys.nombre) !== '—' && (
+                              <div className="cell-truncate cell-nombre">
+                                {safeGet(row, keys.nombre)}
+                              </div>
+                            )}
                           </td>
 
                           {/* FIX 4 — TD 2: Origen con safeGet */}
@@ -616,7 +606,7 @@ export default function Home() {
                           {/* TD 5: Noches */}
                           <td className="mono" style={{ textAlign: 'center', color: 'var(--muted)' }}>{nights}</td>
 
-                          {/* TD 6: Teléfono */}
+                          {/* TD 6: Teléfono — sheet primero, manual como override */}
                           <td className="ac" onClick={e => e.stopPropagation()}>
                             <div className="phone-cell">
                               {editingPhone === id ? (
@@ -632,12 +622,22 @@ export default function Home() {
                                   <button className="btn btn-accent btn-xs" onClick={() => savePhone(id)}>✓</button>
                                   <button className="btn btn-ghost btn-xs" onClick={() => setEditingPhone(null)}>✕</button>
                                 </>
-                              ) : (
-                                <>
-                                  {phone ? <span className="phone-val">{phone}</span> : <span className="phone-empty">Sin tel.</span>}
-                                  <button className="btn btn-ghost btn-xs" onClick={() => { setEditingPhone(id); setPhoneInput(phone); }}>✏️</button>
-                                </>
-                              )}
+                              ) : (() => {
+                                const sheetPhone = safeGet(row, keys.telefono) !== '—' ? safeGet(row, keys.telefono) : '';
+                                const displayPhone = phone || sheetPhone;
+                                return (
+                                  <>
+                                    {displayPhone
+                                      ? <span className={phone ? 'phone-val' : 'phone-sheet'}>{displayPhone}</span>
+                                      : <span className="phone-empty">Sin tel.</span>
+                                    }
+                                    <button
+                                      className="btn btn-ghost btn-xs"
+                                      onClick={() => { setEditingPhone(id); setPhoneInput(phone || sheetPhone); }}
+                                    >✏️</button>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </td>
 
@@ -693,7 +693,6 @@ export default function Home() {
                     })}
                   </tbody>
                 </table>
-              </div>
             )}
           </div>
           <div className="footer-bar">
@@ -703,8 +702,7 @@ export default function Home() {
       ) : (
         /* Financiero */
         <div className="tbl-wrap">
-          <div className="tbl-scroll">
-            <table className="fin-table">
+          <table className="fin-table">
               {/* FIX 1 — 12 columnas exactas, comentadas para auditoría futura */}
               <thead>
                 <tr>
@@ -773,7 +771,6 @@ export default function Home() {
                 </tr>
               </tbody>
             </table>
-          </div>
           <div className="footer-bar">
             {displayed.length} reservas · Columnas: COBRADO A, COBRADO B, TOTAL COBRADO, INGRESO CANAL NETO, DATOS KIKO
           </div>
