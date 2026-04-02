@@ -107,8 +107,8 @@ const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => { onCollapse(!isCollapsed); setIsHovered(false); onHoverChange(false); }}
             className={`hidden lg:flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0 sidebar-fade
               ${isHoverExpanded
-                ? 'text-orange-700 hover:bg-white/40'
-                : 'text-slate-400 hover:bg-white/40'
+                ? 'text-orange-700 hover:bg-white/50'
+                : 'text-slate-400 hover:bg-white/50'
               }`}
           >
             <PanelLeft size={16} />
@@ -141,11 +141,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                         to={path}
                         onClick={() => { if (window.innerWidth < 1024) onClose(); }}
                         title={collapsed ? label : undefined}
-                        className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
+                        className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md
                           text-sm tracking-tight transition-all duration-200
                           ${active
                             ? 'text-orange-700'
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/25'
                           }`}
                       >
                         <span className={`shrink-0 w-8 h-8 flex items-center justify-center ${active ? 'text-orange-700' : ''}`}>
@@ -167,7 +167,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
           {/* User card — same pl-2 offset, icon never moves */}
-          <div className="flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 bg-white/80 backdrop-blur-sm border border-white/60 rounded-xl">
+          <div className={`flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 rounded-xl transition-all ${collapsed ? '' : 'bg-white/20 border border-white/40'}`}>
             <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
               {userRole === 'admin' ? 'A' : 'V'}
             </div>

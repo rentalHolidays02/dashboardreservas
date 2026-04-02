@@ -153,27 +153,27 @@ const Pagos: React.FC = () => {
           <p className="text-slate-400 text-sm">No hay pagos para el periodo seleccionado</p>
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="bg-white/60 backdrop-blur-md border border-white rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
-                <tr className="bg-slate-50/70 border-b border-slate-200">
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Trabajador</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Teléfono</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">DNI</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Email</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Fecha</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Concepto</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Limpiezas</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase">Km</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-right">Importe</th>
-                  <th className="px-6 py-4 text-xs font-normal text-slate-500 uppercase text-center">Estado</th>
+                <tr className="bg-slate-50/70 border-b border-stone-100">
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">Trabajador</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">Teléfono</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">DNI</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">Email</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">Fecha</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">Concepto</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase text-center">Limpiezas</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase">Km</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase text-right">Importe</th>
+                  <th className="px-8 py-6 text-xs font-normal text-slate-500 uppercase text-center">Estado</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-stone-100">
                 {pagos.map(pago => (
-                  <tr key={pago.id} className="hover:bg-slate-50 transition-colors text-sm">
-                    <td className="px-6 py-4">
+                  <tr key={pago.id} className="hover:bg-stone-100/50 transition-colors text-sm">
+                    <td className="px-8 py-6">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
                           {initials(pago.workerName)}
@@ -181,17 +181,17 @@ const Pagos: React.FC = () => {
                         <span className="font-medium text-slate-900 whitespace-nowrap">{pago.workerName}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{pago.telefono}</td>
-                    <td className="px-6 py-4 text-slate-600 font-mono text-xs">{pago.dni}</td>
-                    <td className="px-6 py-4 text-slate-500 text-xs">{pago.email}</td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{fmtDate(pago.fecha)}</td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{pago.concepto}</td>
-                    <td className="px-6 py-4 text-slate-600 text-center">{pago.limpiezas}</td>
-                    <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{pago.km} km</td>
-                    <td className="px-6 py-4 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
+                    <td className="px-8 py-6 text-slate-600 whitespace-nowrap">{pago.telefono}</td>
+                    <td className="px-8 py-6 text-slate-600 font-mono text-xs">{pago.dni}</td>
+                    <td className="px-8 py-6 text-slate-500 text-xs">{pago.email}</td>
+                    <td className="px-8 py-6 text-slate-600 whitespace-nowrap">{fmtDate(pago.fecha)}</td>
+                    <td className="px-8 py-6 text-slate-600 whitespace-nowrap">{pago.concepto}</td>
+                    <td className="px-8 py-6 text-slate-600 text-center">{pago.limpiezas}</td>
+                    <td className="px-8 py-6 text-slate-600 whitespace-nowrap">{pago.km} km</td>
+                    <td className="px-8 py-6 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
                       {fmtCurrency(pago.importe)}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-8 py-6 text-center">
                       {pago.estado === 'pagado' ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-normal uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-md px-2 py-0.5 whitespace-nowrap">
                           <CheckCircle2 size={10} />

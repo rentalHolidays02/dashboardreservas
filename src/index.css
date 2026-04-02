@@ -9,8 +9,7 @@
   }
 
   .module-item {
-    @apply px-5 hover:bg-slate-50 transition-colors;
-    height: 64px;
+    @apply px-8 py-5 hover:bg-stone-100/50 transition-colors;
   }
 
   .soft-shadow {
@@ -48,12 +47,12 @@
 }
 
 :root {
-  --radius: 16px;
+  --radius: 11px;
   --sidebar-width: 240px;
   --sidebar-mini: 73px;
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 420ms;
-  --app-bg: linear-gradient(135deg, #FFF5F2 0%, #FFF9EB 100%);
+  --app-bg: linear-gradient(135deg, #F5F4F2 0%, #F7F5F0 100%);
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────────

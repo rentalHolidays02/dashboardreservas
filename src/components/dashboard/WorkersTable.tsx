@@ -91,7 +91,7 @@ return (
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Buscar nombre..."
-              className="pl-8 pr-3 py-1.5 w-44 text-xs text-slate-700 bg-white/80 border border-white/60 rounded-lg outline-none focus:bg-white focus:border-white transition-all placeholder:text-slate-400"
+              className="pl-8 pr-3 py-1.5 w-44 text-xs text-slate-700 bg-white/80 border border-stone-100/60 rounded-lg outline-none focus:bg-white focus:border-stone-100 transition-all placeholder:text-slate-400"
             />
           </div>
 
@@ -99,7 +99,7 @@ return (
             <select
               value={accommodation}
               onChange={e => setAccommodation(e.target.value)}
-              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/80 border border-white/60 rounded-lg outline-none focus:bg-white focus:border-white transition-all cursor-pointer"
+              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/80 border border-stone-100/60 rounded-lg outline-none focus:bg-white focus:border-stone-100 transition-all cursor-pointer"
             >
               <option value="">Todos los alojamientos</option>
               {allAccommodations.map(a => (
@@ -113,7 +113,7 @@ return (
             <select
               value={sort}
               onChange={e => setSort(e.target.value as SortKey)}
-              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/80 border border-white/60 rounded-lg outline-none focus:bg-white focus:border-white transition-colors cursor-pointer"
+              className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 bg-white/80 border border-stone-100/60 rounded-lg outline-none focus:bg-white focus:border-stone-100 transition-colors cursor-pointer"
             >
               <option value="none">Ordenar por...</option>
               <option value="net_desc">Mayor dinero neto</option>
@@ -135,8 +135,8 @@ return (
         </div>
       </div>
 
-      <div className="bg-white/80 backdrop-blur-md border border-white/60 rounded-2xl overflow-hidden flex flex-col">
-        <div className={`grid ${COL_WORKERS} gap-4 px-6 py-3 border-b border-white/40`}>
+      <div className="bg-white/60 backdrop-blur-md border border-white rounded-2xl overflow-hidden flex flex-col">
+        <div className={`grid ${COL_WORKERS} gap-4 px-8 py-6 border-b border-stone-100`}>
           <span className="text-xs text-slate-400">Nombre</span>
           <span className="text-xs text-slate-400">Alojamientos</span>
           <span className="text-xs text-slate-400">Dinero Neto</span>
@@ -145,7 +145,7 @@ return (
           <span />
         </div>
 
-        <ul className="divide-y divide-white/60">
+        <ul className="divide-y divide-stone-100">
           {filtered.length === 0 ? (
             <li className="module-item flex items-center justify-center">
               <span className="text-xs text-slate-400">Sin resultados</span>
@@ -159,19 +159,15 @@ return (
                   onClick={() => handleRowClick(worker)}
                   className={`group module-item grid ${COL_WORKERS} gap-4 items-center cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-orange-50/40 hover:bg-orange-50/60'
-                      : 'hover:bg-orange-50/40'
+                      ? 'bg-stone-100/70 hover:bg-stone-100/90'
+                      : 'hover:bg-stone-100/50'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-normal flex-shrink-0 transition-colors soft-shadow ${
-                      isSelected
-                        ? 'bg-orange-100 text-orange-600 border-none'
-                        : 'bg-white text-slate-500 border-none'
-                    }`}>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-normal flex-shrink-0 transition-colors soft-shadow bg-white text-slate-500 border-none">
                       {worker.fullName.charAt(0)}
                     </div>
-                    <p className={`text-sm truncate transition-colors ${isSelected ? 'text-orange-700 font-medium' : 'text-slate-800'}`}>
+                    <p className={`text-sm truncate transition-colors ${isSelected ? 'text-orange-500' : 'text-slate-800'}`}>
                       {worker.fullName}
                     </p>
                   </div>

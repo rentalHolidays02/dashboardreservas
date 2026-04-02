@@ -255,7 +255,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
               <button
                 key={p.id}
                 onClick={() => handlePeriod(p.id)}
-                className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all duration-200 ${
+                className={`text-xs px-2.5 py-1 rounded-md font-normal transition-all duration-200 ${
                   period === p.id
                     ? 'bg-white/90 text-orange-600 border border-white'
                     : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
