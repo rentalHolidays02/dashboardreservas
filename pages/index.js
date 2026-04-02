@@ -82,6 +82,8 @@ export default function Home() {
   const headerRef = useRef(null);
   const bannerRef = useRef(null);
   const tabsRef = useRef(null);
+  const statsRef = useRef(null);
+  const controlsRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -122,11 +124,13 @@ export default function Home() {
       const hH = headerRef.current?.offsetHeight || 0;
       const bH = bannerRef.current?.offsetHeight || 0;
       const tH = tabsRef.current?.offsetHeight || 0;
+      const sH = statsRef.current?.offsetHeight || 0;
+      const cH = controlsRef.current?.offsetHeight || 0;
       document.documentElement.style.setProperty('--header-h', `${hH}px`);
       document.documentElement.style.setProperty('--header-tabs-h', `${hH + bH}px`);
-      document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH}px`);
+      document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH + sH + cH}px`);
     });
-    [headerRef, bannerRef, tabsRef].forEach(r => r.current && obs.observe(r.current));
+    [headerRef, bannerRef, tabsRef, statsRef, controlsRef].forEach(r => r.current && obs.observe(r.current));
     return () => obs.disconnect();
   }, []);
 
@@ -257,15 +261,15 @@ export default function Home() {
     .ml-auto { margin-left: auto; }
     .sep { width: 1px; height: 22px; background: var(--border); }
 
-    .tbl-wrap { padding: 0 1.5rem 3rem; overflow-x: auto; }
+    .tbl-wrap { padding: 0 1.5rem 3rem; }
+    .tbl-scroll { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - var(--thead-top, 130px)); min-height: 200px; }
     table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
     thead th {
       background: var(--s1); border-bottom: 1px solid var(--border2);
       padding: 0.6rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
-      position: sticky; z-index: 10;
-      top: var(--thead-top, 0px);
+      position: sticky; top: 0; z-index: 10;
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
@@ -333,8 +337,7 @@ export default function Home() {
       padding: 0.58rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
       color: var(--muted); white-space: nowrap;
-      position: sticky; z-index: 10;
-      top: var(--thead-top, 0px);
+      position: sticky; top: 0; z-index: 10;
     }
     .fin-table td { padding: 0.62rem 0.85rem; border-bottom: 1px solid var(--border); }
     .fin-table tr:hover td { background: var(--s2); }
@@ -408,7 +411,7 @@ export default function Home() {
       </div>
 
       {/* Stats */}
-      <div className="stats">
+      <div className="stats" ref={statsRef}>
         <div className="stat">
           <div className="stat-label">Total reservas</div>
           <div className="stat-val" style={{ color: 'var(--accent)' }}>{data.length}</div>
@@ -440,7 +443,7 @@ export default function Home() {
       </div>
 
       {/* Controls */}
-      <div className="controls">
+      <div className="controls" ref={controlsRef}>
         <input className="search" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
         {[
           { key: 'all', label: 'Todas', cls: 'def' },
@@ -473,6 +476,7 @@ export default function Home() {
             {displayed.length === 0 ? (
               <div className="center"><div className="empty-icon">🏖️</div><div className="empty-txt">Sin reservas con ese filtro.</div></div>
             ) : (
+              <div className="tbl-scroll">
               <table>
                 <thead>
                   <tr>
@@ -591,6 +595,7 @@ export default function Home() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
           <div className="footer-bar">
@@ -600,6 +605,7 @@ export default function Home() {
       ) : (
         /* Financiero */
         <div className="tbl-wrap">
+          <div className="tbl-scroll">
           <table className="fin-table">
             <thead>
               <tr>
@@ -656,6 +662,7 @@ export default function Home() {
               </tr>
             </tbody>
           </table>
+          </div>
           <div className="footer-bar">
             {displayed.length} reservas · Columnas: COBRADO A, COBRADO B, TOTAL COBRADO, INGRESO CANAL NETO, DATOS KIKO
           </div>
