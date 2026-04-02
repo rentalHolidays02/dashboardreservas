@@ -116,19 +116,19 @@ export default function Home() {
   const todayOut = data.filter(r => isToday(r._salida));
   const hasToday = todayIn.length > 0 || todayOut.length > 0;
 
-  // ── Recalculate sticky offset whenever layout may change ──────────────────
-useEffect(() => {
-  const obs = new ResizeObserver(() => {
-    const hH = headerRef.current?.offsetHeight || 0;
-    const bH = bannerRef.current?.offsetHeight || 0;
-    const tH = tabsRef.current?.offsetHeight || 0;
-    document.documentElement.style.setProperty('--header-h', `${hH}px`);
-    document.documentElement.style.setProperty('--header-tabs-h', `${hH + bH}px`);
-    document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH}px`);
-  });
-  [headerRef, bannerRef, tabsRef].forEach(r => r.current && obs.observe(r.current));
-  return () => obs.disconnect();
-}, []);
+  // ── ResizeObserver: actualiza las variables CSS de sticky en tiempo real ───
+  useEffect(() => {
+    const obs = new ResizeObserver(() => {
+      const hH = headerRef.current?.offsetHeight || 0;
+      const bH = bannerRef.current?.offsetHeight || 0;
+      const tH = tabsRef.current?.offsetHeight || 0;
+      document.documentElement.style.setProperty('--header-h', `${hH}px`);
+      document.documentElement.style.setProperty('--header-tabs-h', `${hH + bH}px`);
+      document.documentElement.style.setProperty('--thead-top', `${hH + bH + tH}px`);
+    });
+    [headerRef, bannerRef, tabsRef].forEach(r => r.current && obs.observe(r.current));
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     clearInterval(alarmInterval.current);
@@ -197,7 +197,9 @@ useEffect(() => {
     .last-upd { font-family: 'DM Mono', monospace; font-size: 0.67rem; color: var(--muted); }
 
     .alarm-banner {
-      position: sticky; z-index: 99;
+      position: sticky;
+      top: var(--header-h, 0px);
+      z-index: 99;
       background: rgba(248,113,113,0.07);
       border-bottom: 1px solid rgba(248,113,113,0.25);
       padding: 0.65rem 1.5rem;
@@ -208,7 +210,12 @@ useEffect(() => {
     .alarm-title { font-weight: 700; font-size: 0.85rem; color: var(--red); }
     .alarm-detail { font-size: 0.7rem; color: #fca5a5; margin-top: 0.1rem; }
 
-    .tabs { position: sticky; z-index: 98; display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1.5rem; }
+    .tabs {
+      position: sticky;
+      top: var(--header-tabs-h, 0px);
+      z-index: 98;
+      display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1.5rem;
+    }
     .tab-btn {
       padding: 0.7rem 1.2rem; background: none; border: none; border-bottom: 2px solid transparent;
       cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700;
@@ -354,8 +361,6 @@ useEffect(() => {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
         <style>{CSS}</style>
-        {/* Inject the measured sticky top as a CSS variable so thead th can use it */}
-     
       </Head>
 
       {/* Header */}
@@ -380,11 +385,7 @@ useEffect(() => {
 
       {/* Alarm banner */}
       {hasToday && alarmsEnabled && (
-        <div
-          className="alarm-banner"
-          ref={bannerRef}
-          style={{ top: headerRef.current?.offsetHeight || 0 }}
-        >
+        <div className="alarm-banner" ref={bannerRef}>
           <span className="bell">🔔</span>
           <div>
             <div className="alarm-title">
@@ -400,13 +401,7 @@ useEffect(() => {
       )}
 
       {/* Tabs */}
-      <div
-        className="tabs"
-        ref={tabsRef}
-        style={{
-          top: (headerRef.current?.offsetHeight || 0) + (bannerRef.current?.offsetHeight || 0),
-        }}
-      >
+      <div className="tabs" ref={tabsRef}>
         {[['reservas', '📅 Reservas'], ['financiero', '💶 Financiero']].map(([k, l]) => (
           <button key={k} className={`tab-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
         ))}
