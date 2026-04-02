@@ -1,3 +1,4 @@
+// api/reservas.js
 import Papa from 'papaparse';
 
 export default async function handler(req, res) {
@@ -13,13 +14,13 @@ export default async function handler(req, res) {
 
     const colNames = Object.keys(parsed.data[0] || {});
 
-    // Busca columna cuyo nombre (sin espacios, mayúsculas) contenga alguna keyword
+    // Función para buscar columnas por palabras clave
     const findCol = (...keywords) =>
       colNames.find(c =>
         keywords.some(kw => c.toUpperCase().trim().includes(kw.toUpperCase()))
       ) ?? null;
 
-    // Busca la N-ésima columna que coincide (para duplicados como FECHA DE PAGO)
+    // Función para buscar la N-ésima coincidencia (útil para FECHA DE PAGO)
     const findColN = (n, ...keywords) => {
       let count = 0;
       for (const c of colNames) {
@@ -30,56 +31,40 @@ export default async function handler(req, res) {
       return null;
     };
 
-    // ── Columnas confirmadas del sheet real ───────────────────────────────────
-    // Columna exacta en el sheet → lo que buscamos
-    // 'ALOJAMIENTO'          → findCol('ALOJAMIENTO')
-    // 'ORIGEN'               → findCol('ORIGEN')
-    // 'observaciones'        → findCol('OBSERVACIONES','OBS')   [lowercase en sheet]
-    // 'ENTRADA 2026'         → findCol('ENTRADA')
-    // 'SALIDA 2026'          → findCol('SALIDA')
-    // 'REPORTES '            → findCol('REPORTES')              [trailing space]
-    // 'NOMBRE'               → findCol('NOMBRE')
-    // 'TELEFONO '            → findCol('TELEFONO','TELÉFONO')   [trailing space]
-    // 'COBRADO A'            → findCol('COBRADO A')
-    // 'COBRADO B'            → findCol('COBRADO B')
-    // 'TOTAL COBRADO'        → findCol('TOTAL COBRADO','TOTAL')
-    // 'DATOS KIKO '          → findCol('KIKO')                  [trailing space]
-    // 'INGRESO CANAL NETO'   → findCol('INGRESO CANAL')
-    // 'FECHA DE PAGO'        → findColN(1,'FECHA DE PAGO','FECHA PAGO')
-    // 'SEGUNDO INGRESO NETO '→ findCol('SEGUNDO INGRESO','2º INGRESO')
-    // 'FECHA DE PAGO '       → findColN(2,'FECHA DE PAGO','FECHA PAGO')
-    // 'OBSERVACIONES '       → findColN(2,'OBSERVACIONES','OBS') [segunda columna]
+    // --- MAREO DE COLUMNAS ACTUALIZADO ---
+    const colAlojamiento = findCol('ALOJAMIENTO')                             ?? 'ALOJAMIENTO';
+    const colOrigen      = findCol('ORIGEN')                                  ?? 'ORIGEN';
+    const colEntrada     = findCol('ENTRADA')                                 ?? 'ENTRADA 2026';
+    const colSalida      = findCol('SALIDA')                                  ?? 'SALIDA 2026';
+    const colNombre      = findCol('NOMBRE', 'CLIENTE')                       ?? 'NOMBRE';
+    const colTelefono    = findCol('TELÉFONO', 'TELEFONO', 'PHONE', 'MÓVIL') ?? 'TELEFONO ';
+    
+    // NUEVAS COLUMNAS DE OBSERVACIONES (Reemplazan a 'Observaciones' y 'Kiko')
+    const colObsEntrada  = findCol('OBSERVACION ENTRADA', 'OBS ENTRADA', 'NOTA ENTRADA');
+    const colObsSalida   = findCol('OBSERVACION SALIDA', 'OBS SALIDA', 'NOTA SALIDA');
 
-    const colAlojamiento  = findCol('ALOJAMIENTO')                             ?? 'ALOJAMIENTO';
-    const colOrigen       = findCol('ORIGEN')                                  ?? 'ORIGEN';
-    const colEntrada      = findCol('ENTRADA')                                 ?? 'ENTRADA 2026';
-    const colSalida       = findCol('SALIDA')                                  ?? 'SALIDA 2026';
-    const colNombre       = findCol('NOMBRE', 'CLIENTE')                       ?? 'NOMBRE';
-    const colTelefono     = findCol('TELÉFONO', 'TELEFONO', 'PHONE', 'MÓVIL') ?? 'TELEFONO ';
-    const colObservacion  = findCol('OBSERVACIONES', 'OBS')                   ?? 'observaciones';
-    const colReportes     = findCol('REPORTES')                               ?? null;
-    const colKiko         = findCol('KIKO')                                    ?? null;
-    const colCobradoA     = findCol('COBRADO A', 'COBRADOA')                  ?? null;
-    const colCobradoB     = findCol('COBRADO B', 'COBRADOB')                  ?? null;
-    const colTotal        = findCol('TOTAL COBRADO', 'TOTAL')                 ?? null;
-    const colIngreso      = findCol('INGRESO CANAL')                           ?? null;
-    const colFechaPago    = findColN(1, 'FECHA DE PAGO', 'FECHA PAGO')        ?? null;
-    const colSegundo      = findCol('SEGUNDO INGRESO', '2º INGRESO')          ?? null;
-    const colFechaPago2   = findColN(2, 'FECHA DE PAGO', 'FECHA PAGO')        ?? null;
+    const colReportes    = findCol('REPORTES')                               ?? null;
+    const colCobradoA    = findCol('COBRADO A', 'COBRADOA')                  ?? null;
+    const colCobradoB    = findCol('COBRADO B', 'COBRADOB')                  ?? null;
+    const colTotal       = findCol('TOTAL COBRADO', 'TOTAL')                 ?? null;
+    const colIngreso     = findCol('INGRESO CANAL')                           ?? null;
+    const colFechaPago   = findColN(1, 'FECHA DE PAGO', 'FECHA PAGO')        ?? null;
+    const colSegundo     = findCol('SEGUNDO INGRESO', '2º INGRESO')          ?? null;
+    const colFechaPago2  = findColN(2, 'FECHA DE PAGO', 'FECHA PAGO')        ?? null;
 
-    // ── Filtrado ──────────────────────────────────────────────────────────────
     const FORMULA_ERROR = /^#(N\/A|REF!|VALUE!|DIV\/0!|NAME\?|NUM!|NULL!|ERROR!)/i;
 
     const filteredData = parsed.data
       .filter(row => {
         const origen      = String(row[colOrigen]       ?? '').toUpperCase().trim();
         const alojamiento = String(row[colAlojamiento]  ?? '').trim();
+        // Filtramos para quedarnos solo con Booking/Airbnb y evitar errores de fórmula
         if (!origen.includes('BOOKING') && !origen.includes('AIRBNB')) return false;
         if (FORMULA_ERROR.test(alojamiento) || !alojamiento) return false;
         return true;
       })
       .map(row => {
-        // Normalizar teléfono: convertir notación científica a string limpio
+        // Limpiar teléfono (evitar notación científica de Excel)
         const rawTel = row[colTelefono];
         if (rawTel !== undefined && rawTel !== null && rawTel !== '') {
           const telNum = parseFloat(String(rawTel).replace(/,/g, '.'));
@@ -97,9 +82,10 @@ export default async function handler(req, res) {
       salida:         colSalida,
       nombre:         colNombre,
       telefono:       colTelefono,
-      observaciones:  colObservacion,
+      // Mapeo para el frontend editable
+      obsEntrada:     colObsEntrada,
+      obsSalida:      colObsSalida,
       reportes:       colReportes,
-      datosKiko:      colKiko,
       cobradoA:       colCobradoA,
       cobradoB:       colCobradoB,
       totalCobrado:   colTotal,
