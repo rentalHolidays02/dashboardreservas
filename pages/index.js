@@ -355,7 +355,7 @@ useEffect(() => {
         <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
         <style>{CSS}</style>
         {/* Inject the measured sticky top as a CSS variable so thead th can use it */}
-        <style>{`:root { --thead-top: ${stickyTop}px; }`}</style>
+     
       </Head>
 
       {/* Header */}
