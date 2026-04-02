@@ -212,10 +212,8 @@ export default function Home() {
 
   const CSS = `
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     html, body { height: 100%; }
     #__next { height: 100%; display: flex; flex-direction: column; }
-
     :root {
       --bg: #080b10; --s1: #0f1319; --s2: #161c26;
       --border: #252e42; --border2: #2e3a52;
@@ -227,401 +225,114 @@ export default function Home() {
     }
     body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; }
     .mono { font-family: 'DM Mono', monospace; }
-
-    .header {
-      flex-shrink: 0;
-      position: sticky; top: 0; z-index: 100;
-      background: var(--s1); border-bottom: 1px solid var(--border);
-      padding: 0.7rem 1rem;
-      display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap;
-    }
+    .header { flex-shrink: 0; position: sticky; top: 0; z-index: 100; background: var(--s1); border-bottom: 1px solid var(--border); padding: 0.7rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
     .logo { font-size: 1rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem; }
     .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
     .hdr-r { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
     .last-upd { font-family: 'DM Mono', monospace; font-size: 0.67rem; color: var(--muted); }
-
-    /* Ocultar etiqueta "Alarmas" en móvil para ahorrar espacio */
     @media(max-width:480px) { .tog-lbl-text { display: none; } }
-
-    .alarm-banner {
-      flex-shrink: 0;
-      position: sticky; top: var(--header-h, 56px); z-index: 99;
-      background: rgba(248,113,113,0.07); border-bottom: 1px solid rgba(248,113,113,0.25);
-      padding: 0.55rem 1rem; display: flex; align-items: center; gap: 0.6rem;
-    }
+    .alarm-banner { flex-shrink: 0; position: sticky; top: var(--header-h, 56px); z-index: 99; background: rgba(248,113,113,0.07); border-bottom: 1px solid rgba(248,113,113,0.25); padding: 0.55rem 1rem; display: flex; align-items: center; gap: 0.6rem; }
     .bell { font-size: 1.1rem; animation: ring 0.55s ease-in-out infinite; display: inline-block; }
     @keyframes ring { 0%,100%{transform:rotate(-12deg)} 50%{transform:rotate(12deg)} }
     .alarm-title { font-weight: 700; font-size: 0.8rem; color: var(--red); }
     .alarm-detail { font-size: 0.68rem; margin-top: 0.1rem; }
-
-    .tabs {
-      flex-shrink: 0;
-      position: sticky; top: var(--header-tabs-h, 94px); z-index: 98;
-      display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1rem;
-    }
-    .tab-btn {
-      padding: 0.65rem 1rem; background: none; border: none; border-bottom: 2px solid transparent;
-      cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.72rem; font-weight: 700;
-      color: var(--muted); transition: all 0.15s; margin-bottom: -1px;
-      text-transform: uppercase; letter-spacing: 0.06em;
-    }
-    .tab-btn:hover { color: var(--text); }
+    .tabs { flex-shrink: 0; position: sticky; top: var(--header-tabs-h, 94px); z-index: 98; display: flex; border-bottom: 1px solid var(--border); background: var(--s1); padding: 0 1rem; }
+    .tab-btn { padding: 0.65rem 1rem; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.72rem; font-weight: 700; color: var(--muted); transition: all 0.15s; margin-bottom: -1px; text-transform: uppercase; letter-spacing: 0.06em; }
     .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-    .stats {
-      flex-shrink: 0;
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 0.5rem; padding: 0.75rem 1rem;
-    }
+    .stats { flex-shrink: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; padding: 0.75rem 1rem; }
     @media(min-width:600px) { .stats { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
     .stat { background: var(--s1); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.75rem; }
-    .stat-label { font-size: 0.58rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.25rem; }
+    .stat-label { font-size: 0.58rem; color: var(--muted); text-transform: uppercase; margin-bottom: 0.25rem; }
     .stat-val { font-size: 1.4rem; font-weight: 800; line-height: 1.1; }
-    .stat-sub { font-size: 0.58rem; color: var(--muted); margin-top: 0.12rem; font-family: 'DM Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    .controls {
-      flex-shrink: 0;
-      padding: 0 1rem 0.65rem; display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center;
-    }
-    .debug-bar { flex-shrink: 0; padding: 0 1rem 0.4rem; display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
-
-    .search {
-      background: var(--s1); border: 1px solid var(--border); border-radius: 7px;
-      padding: 0.42rem 0.85rem; color: var(--text);
-      font-family: 'DM Mono', monospace; font-size: 0.78rem;
-      width: 100%; outline: none; transition: border-color 0.2s;
-      flex: 1 1 160px;
-    }
-    .search:focus { border-color: var(--accent2); }
-    .search::placeholder { color: var(--muted); }
-    .fbtn {
-      background: var(--s1); border: 1px solid var(--border); border-radius: 7px;
-      padding: 0.36rem 0.65rem; color: var(--muted);
-      cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.68rem; font-weight: 700;
-      transition: all 0.15s; white-space: nowrap;
-    }
-    .fbtn:hover { color: var(--text); border-color: var(--border2); }
-    .fbtn.on { color: #fff; }
-    .fbtn.on.def { background: var(--accent); border-color: var(--accent); }
-    .fbtn.on.bk  { background: var(--booking); border-color: var(--booking); }
-    .fbtn.on.ab  { background: var(--airbnb); border-color: var(--airbnb); }
+    .stat-sub { font-size: 0.58rem; color: var(--muted); margin-top: 0.12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .controls { flex-shrink: 0; padding: 0 1rem 0.65rem; display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+    .search { background: var(--s1); border: 1px solid var(--border); border-radius: 7px; padding: 0.42rem 0.85rem; color: var(--text); font-family: 'DM Mono', monospace; font-size: 0.78rem; width: 100%; outline: none; flex: 1 1 160px; }
+    .fbtn { background: var(--s1); border: 1px solid var(--border); border-radius: 7px; padding: 0.36rem 0.65rem; color: var(--muted); cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.68rem; font-weight: 700; transition: all 0.15s; white-space: nowrap; }
+    .fbtn.on.def { background: var(--accent); border-color: var(--accent); color: #fff; }
     .fbtn.on.gr  { background: rgba(52,211,153,0.18); border-color: var(--green); color: var(--green); }
     .fbtn.on.yl  { background: rgba(251,191,36,0.18); border-color: var(--yellow); color: var(--yellow); }
     .fbtn.on.pu  { background: rgba(167,139,250,0.18); border-color: var(--purple); color: var(--purple); }
-    .ml-auto { margin-left: auto; }
-    .sep { width: 1px; height: 20px; background: var(--border); }
-
-    .tbl-area {
-      flex: 1;
-      overflow: auto;
-      min-height: 0;
-    }
-
-    /* ══════════════════════════════════════════════
-       TABLA DESKTOP (≥ 700px)
-    ══════════════════════════════════════════════ */
+    .fbtn.on.bk  { background: var(--booking); border-color: var(--booking); color: #fff; }
+    .fbtn.on.ab  { background: var(--airbnb); border-color: var(--airbnb); color: #fff; }
+    .tbl-area { flex: 1; overflow: auto; min-height: 0; }
     .desktop-table { display: none; }
-    @media(min-width:700px) {
-      .desktop-table { display: block; }
-      .mobile-cards  { display: none; }
-    }
-
+    @media(min-width:700px) { .desktop-table { display: block; } .mobile-cards { display: none; } }
     table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 820px; }
-    thead th {
-      position: sticky; top: 0; z-index: 10;
-      background: var(--s1); border-bottom: 2px solid var(--border2);
-      padding: 0.6rem 0.85rem; text-align: left;
-      font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-      color: var(--muted); white-space: nowrap;
-    }
-    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
+    thead th { position: sticky; top: 0; z-index: 10; background: var(--s1); border-bottom: 2px solid var(--border2); padding: 0.6rem 0.85rem; text-align: left; font-size: 0.63rem; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+    tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
-    tbody tr.in-today { border-left: 3px solid var(--green); }
-    tbody tr.out-today { border-left: 3px solid var(--yellow); }
-    tbody tr.is-called td:not(.ac) { opacity: 0.4; }
-    td { padding: 0.65rem 0.85rem; vertical-align: middle; }
-
+    .in-today { border-left: 3px solid var(--green); }
+    .out-today { border-left: 3px solid var(--yellow); }
     .cell-truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .cell-aloj   { max-width: 155px; font-weight: 700; }
-    .cell-nombre { max-width: 155px; font-size: 0.64rem; color: var(--muted); margin-top: 0.12rem; font-style: italic; }
-    .cell-obs    { max-width: 155px; color: var(--muted); font-size: 0.7rem; }
-    .cell-kiko   { max-width: 135px; color: var(--muted); font-size: 0.7rem; }
-
-    /* ══════════════════════════════════════════════
-       TARJETAS MÓVIL (< 700px)
-       Cada reserva = una card con toda la info
-    ══════════════════════════════════════════════ */
-    .mobile-cards {
-      display: flex; flex-direction: column; gap: 0; padding: 0;
-    }
-
-    .res-card {
-      background: var(--s1);
-      border-bottom: 1px solid var(--border);
-      padding: 0.85rem 1rem;
-      cursor: pointer;
-      transition: background 0.12s;
-      position: relative;
-    }
-    .res-card:active { background: var(--s2); }
-    .res-card.in-today  { border-left: 3px solid var(--green); }
-    .res-card.out-today { border-left: 3px solid var(--yellow); }
-    .res-card.is-called { opacity: 0.5; }
-
-    /* Fila superior: alojamiento + badge origen */
-    .card-top {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem;
-      margin-bottom: 0.45rem;
-    }
-    .card-aloj {
-      font-weight: 800; font-size: 0.92rem; line-height: 1.25;
-      flex: 1; min-width: 0;
-    }
-    .card-nombre {
-      font-size: 0.7rem; color: var(--muted); font-style: italic;
-      margin-top: 0.12rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-
-    /* Fila de fechas: entrada → salida con noches */
-    .card-dates {
-      display: flex; align-items: center; gap: 0.4rem;
-      margin-bottom: 0.45rem; flex-wrap: wrap;
-    }
-    .card-date-block { display: flex; flex-direction: column; }
-    .card-date-lbl { font-size: 0.55rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.08rem; }
-    .card-date-val { font-family: 'DM Mono', monospace; font-size: 0.82rem; font-weight: 600; }
-    .card-arrow { color: var(--muted); font-size: 0.75rem; margin-top: 0.75rem; }
-    .card-nights {
-      background: var(--s2); border: 1px solid var(--border); border-radius: 5px;
-      padding: 0.12rem 0.45rem; font-family: 'DM Mono', monospace;
-      font-size: 0.68rem; color: var(--muted); margin-left: auto; align-self: center;
-    }
-
-    /* Fila teléfono + acción */
-    .card-actions {
-      display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
-      margin-top: 0.45rem;
-    }
-    .card-phone {
-      flex: 1; min-width: 0;
-      display: flex; align-items: center; gap: 0.35rem;
-    }
-    .phone-val   { font-family: 'DM Mono', monospace; font-size: 0.78rem; }
-    .phone-sheet { font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--accent2); }
-    .phone-empty { color: var(--muted); font-size: 0.7rem; font-style: italic; }
-    .phone-input {
-      background: var(--bg); border: 1px solid var(--accent2); border-radius: 5px;
-      padding: 0.22rem 0.42rem; color: var(--text);
-      font-family: 'DM Mono', monospace; font-size: 0.78rem;
-      width: 140px; outline: none;
-    }
-
-    /* Fila observaciones / kiko */
-    .card-obs {
-      margin-top: 0.4rem; font-size: 0.7rem; color: var(--muted);
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .card-kiko {
-      margin-top: 0.2rem; font-size: 0.68rem; color: var(--muted);
-      display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-    }
-
-    /* Expansión de tarjeta */
-    .card-expanded {
-      background: var(--s2); border-top: 1px solid var(--border);
-      padding: 0.65rem 1rem 0.85rem; margin: 0 -1rem -0.85rem;
-    }
-    .exp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.5rem 1rem; }
-    .exp-item label { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 0.1rem; }
-    .exp-item span  { font-size: 0.77rem; font-family: 'DM Mono', monospace; }
-
-    /* Badges compartidos */
-    .bdg {
-      display: inline-flex; align-items: center; gap: 0.3rem;
-      padding: 0.15rem 0.48rem; border-radius: 5px;
-      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-      white-space: nowrap;
-    }
+    .cell-aloj { max-width: 155px; font-weight: 700; }
+    .cell-obs-in { max-width: 155px; color: var(--green); font-size: 0.7rem; }
+    .cell-obs-out { max-width: 155px; color: var(--yellow); font-size: 0.7rem; }
+    .mobile-cards { display: flex; flex-direction: column; padding: 0; }
+    .res-card { background: var(--s1); border-bottom: 1px solid var(--border); padding: 0.85rem 1rem; cursor: pointer; position: relative; }
+    .card-top { display: flex; justify-content: space-between; margin-bottom: 0.45rem; }
+    .card-aloj { font-weight: 800; font-size: 0.92rem; }
+    .card-dates { display: flex; gap: 0.4rem; margin-bottom: 0.45rem; align-items: center; }
+    .card-date-val { font-family: 'DM Mono', monospace; font-size: 0.82rem; }
+    .card-obs-box { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .card-obs-item { font-size: 0.72rem; padding-left: 0.6rem; }
+    .bdg { padding: 0.15rem 0.48rem; border-radius: 5px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; }
     .bdg-bk { background: rgba(26,86,219,0.18); color: #93c5fd; border: 1px solid rgba(26,86,219,0.35); }
     .bdg-ab { background: rgba(255,56,92,0.15); color: #fca5a5; border: 1px solid rgba(255,56,92,0.28); }
-
-    .tag { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.57rem; font-weight: 700; text-transform: uppercase; margin-left: 0.3rem; vertical-align: middle; }
-    .tag-in  { background: rgba(52,211,153,0.13); color: var(--green); border: 1px solid rgba(52,211,153,0.22); }
+    .tag { padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.57rem; font-weight: 700; margin-left: 0.3rem; }
+    .tag-in { background: rgba(52,211,153,0.13); color: var(--green); border: 1px solid rgba(52,211,153,0.22); }
     .tag-out { background: rgba(251,191,36,0.13); color: var(--yellow); border: 1px solid rgba(251,191,36,0.22); }
-    .days-lbl { font-family: 'DM Mono', monospace; font-size: 0.63rem; color: var(--muted); margin-left: 0.3rem; }
-
-    /* Botones */
-    .btn {
-      padding: 0.26rem 0.62rem; border-radius: 6px; border: none;
-      cursor: pointer; font-family: 'Syne', sans-serif; font-size: 0.7rem; font-weight: 700;
-      transition: all 0.15s; white-space: nowrap;
-    }
-    .btn-accent  { background: var(--accent); color: #fff; }
-    .btn-accent:hover { background: #ea6b10; }
-    .btn-ghost   { background: var(--s2); color: var(--text); border: 1px solid var(--border); }
-    .btn-ghost:hover { border-color: var(--border2); }
-    .btn-call    { background: rgba(56,189,248,0.1); color: var(--accent2); border: 1px solid rgba(56,189,248,0.22); }
-    .btn-called  { background: rgba(52,211,153,0.1); color: var(--green); border: 1px solid rgba(52,211,153,0.22); }
-    .btn-red     { background: var(--red); color: #fff; }
-    .btn-xs      { padding: 0.14rem 0.4rem; font-size: 0.62rem; }
-    /* Botón de llamar más grande en móvil para facilitar el toque */
-    @media(max-width:699px) { .btn-call, .btn-called { padding: 0.38rem 0.85rem; font-size: 0.78rem; } }
-
-    .tog-wrap { display: flex; align-items: center; gap: 0.4rem; }
-    .tog-lbl  { font-size: 0.7rem; color: var(--muted); }
-    .tog      { position: relative; width: 32px; height: 17px; cursor: pointer; }
-    .tog input { opacity: 0; width: 0; height: 0; }
-    .tog-sl   { position: absolute; inset: 0; background: var(--border2); border-radius: 17px; transition: 0.2s; }
-    .tog-sl::before { content:''; position: absolute; width:11px; height:11px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:0.2s; }
-    input:checked + .tog-sl { background: var(--green); }
-    input:checked + .tog-sl::before { transform: translateX(15px); }
-
-    /* Desktop: expanded row */
-    .exp-td { background: var(--s2) !important; padding: 0.5rem 0.85rem 1rem 2rem !important; }
-
-    /* Pestaña financiero */
-    .fin-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; min-width: 1000px; }
-    .fin-table th {
-      position: sticky; top: 0; z-index: 10;
-      background: var(--s1); border-bottom: 2px solid var(--border2);
-      padding: 0.56rem 0.85rem; text-align: left;
-      font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-      color: var(--muted); white-space: nowrap;
-    }
-    .fin-table td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); }
-    .fin-table tr:hover td { background: var(--s2); }
+    .btn { padding: 0.26rem 0.62rem; border-radius: 6px; cursor: pointer; font-size: 0.7rem; font-weight: 700; }
+    .btn-call { background: rgba(56,189,248,0.1); color: var(--accent2); border: 1px solid rgba(56,189,248,0.22); }
+    .btn-called { background: rgba(52,211,153,0.1); color: var(--green); border: 1px solid rgba(52,211,153,0.22); }
     .money { font-family: 'DM Mono', monospace; text-align: right; color: var(--green); }
-    .total-row td { background: var(--s2); font-weight: 700; }
-
-    .tbl-padding { padding: 0 1rem 2rem; }
-    .center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; gap: 1rem; }
-    .spinner { width: 34px; height: 34px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.65s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .empty-icon { font-size: 2.5rem; }
-    .empty-txt  { color: var(--muted); font-size: 0.83rem; }
-    .footer-bar { padding: 0.65rem 1rem; color: var(--muted); font-size: 0.67rem; font-family: 'DM Mono', monospace; border-top: 1px solid var(--border); flex-shrink: 0; }
+    .footer-bar { padding: 0.65rem 1rem; color: var(--muted); font-size: 0.67rem; font-family: 'DM Mono', monospace; border-top: 1px solid var(--border); }
   `;
 
-  // ── Componente tarjeta móvil ─────────────────────────────────────────────
   function MobileCard({ row }) {
     const id = row._id;
     const isExp = expandedRow === id;
     const eHoy = isToday(row._entrada);
     const sHoy = isToday(row._salida);
-    const dIn  = daysDiff(row._entrada);
-    const dOut = daysDiff(row._salida);
     const isCalled = called[id];
-    const phone = phones[id] || '';
-    const sheetPhone = safeGet(row, keys.telefono) !== '—' ? safeGet(row, keys.telefono) : '';
-    const displayPhone = phone || sheetPhone;
-    let nights = '—';
-    if (row._entrada && row._salida)
-      nights = Math.round((row._salida - row._entrada) / 86400000);
-
+    const displayPhone = phones[id] || (safeGet(row, keys.telefono) !== '—' ? safeGet(row, keys.telefono) : '');
+    
     return (
-      <div
-        className={`res-card ${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`}
-        onClick={() => setExpandedRow(isExp ? null : id)}
-      >
-        {/* Top: nombre alojamiento + badge */}
+      <div className={`res-card ${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`} onClick={() => setExpandedRow(isExp ? null : id)}>
         <div className="card-top">
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div>
             <div className="card-aloj">{safeGet(row, keys.alojamiento)}</div>
-            {safeGet(row, keys.nombre) !== '—' && (
-              <div className="card-nombre">{safeGet(row, keys.nombre)}</div>
-            )}
+            <div style={{fontSize:'0.7rem', color:'var(--muted)'}}>{safeGet(row, keys.nombre)}</div>
           </div>
           <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
             {row._origen.includes('booking') ? '✈' : '🏠'} {safeGet(row, keys.origen)}
           </span>
         </div>
-
-        {/* Fechas */}
         <div className="card-dates">
-          <div className="card-date-block">
-            <span className="card-date-lbl">Entrada</span>
-            <span className="card-date-val">
-              {formatDate(row._entrada)}
-              {eHoy && <span className="tag tag-in">HOY</span>}
-              {!eHoy && dIn !== null && dIn > 0 && dIn <= 30 && <span className="days-lbl">+{dIn}d</span>}
-            </span>
-          </div>
-          <span className="card-arrow">→</span>
-          <div className="card-date-block">
-            <span className="card-date-lbl">Salida</span>
-            <span className="card-date-val">
-              {formatDate(row._salida)}
-              {sHoy && <span className="tag tag-out">HOY</span>}
-              {!sHoy && dOut !== null && dOut > 0 && dOut <= 30 && <span className="days-lbl">+{dOut}d</span>}
-            </span>
-          </div>
-          {nights !== '—' && <span className="card-nights">{nights}n</span>}
+          <span className="card-date-val">{formatDate(row._entrada)} {eHoy && <span className="tag tag-in">HOY</span>}</span>
+          <span style={{color:'var(--muted)'}}>→</span>
+          <span className="card-date-val">{formatDate(row._salida)} {sHoy && <span className="tag tag-out">HOY</span>}</span>
+        </div>
+        
+        {/* Nueva sección de Observaciones */}
+        <div className="card-obs-box">
+          {safeGet(row, keys.obsEntrada) !== '—' && (
+            <div className="card-obs-item" style={{borderLeft:'2px solid var(--green)', color:'var(--green)'}}>
+              <b>📥 ENTRADA:</b> {safeGet(row, keys.obsEntrada)}
+            </div>
+          )}
+          {safeGet(row, keys.obsSalida) !== '—' && (
+            <div className="card-obs-item" style={{borderLeft:'2px solid var(--yellow)', color:'var(--yellow)'}}>
+              <b>📤 SALIDA:</b> {safeGet(row, keys.obsSalida)}
+            </div>
+          )}
         </div>
 
-        {/* Teléfono + llamar */}
-        <div className="card-actions" onClick={e => e.stopPropagation()}>
-          <div className="card-phone">
-            {editingPhone === id ? (
-              <>
-                <input
-                  className="phone-input" value={phoneInput}
-                  placeholder="+34 600 000 000"
-                  onChange={e => setPhoneInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') savePhone(id); if (e.key === 'Escape') setEditingPhone(null); }}
-                  autoFocus
-                />
-                <button className="btn btn-accent btn-xs" onClick={() => savePhone(id)}>✓</button>
-                <button className="btn btn-ghost btn-xs" onClick={() => setEditingPhone(null)}>✕</button>
-              </>
-            ) : (
-              <>
-                {displayPhone
-                  ? <span className={phone ? 'phone-val' : 'phone-sheet'}>{displayPhone}</span>
-                  : <span className="phone-empty">Sin teléfono</span>
-                }
-                <button className="btn btn-ghost btn-xs"
-                  onClick={() => { setEditingPhone(id); setPhoneInput(phone || sheetPhone); }}>✏️</button>
-              </>
-            )}
-          </div>
-          <button
-            className={`btn ${isCalled ? 'btn-called' : 'btn-call'}`}
-            onClick={() => setCalled(p => ({ ...p, [id]: !p[id] }))}
-          >
-            {isCalled ? '✅ Llamado' : '📞 Llamar'}
+        <div style={{marginTop:'0.8rem', display:'flex', gap:'0.5rem'}} onClick={e => e.stopPropagation()}>
+          <span style={{fontFamily:'DM Mono', fontSize:'0.8rem', flex:1}}>{displayPhone || 'Sin tel.'}</span>
+          <button className={`btn ${isCalled ? 'btn-called' : 'btn-call'}`} onClick={() => setCalled(p => ({ ...p, [id]: !p[id] }))}>
+            {isCalled ? '✅' : '📞 Llamar'}
           </button>
         </div>
-
-        {/* Observaciones */}
-        {safeGet(row, keys.observaciones) !== '—' && (
-          <div className="card-obs">💬 {safeGet(row, keys.observaciones)}</div>
-        )}
-        {safeGet(row, keys.datosKiko) !== '—' && (
-          <div className="card-kiko">📋 {safeGet(row, keys.datosKiko)}</div>
-        )}
-
-        {/* Expansión */}
-        {isExp && (
-          <div className="card-expanded" onClick={e => e.stopPropagation()}>
-            <div className="exp-grid">
-              {Object.entries(row)
-                .filter(([k]) => !k.startsWith('_'))
-                .filter(([, v]) => v)
-                .map(([k, v]) => (
-                  <div className="exp-item" key={k}>
-                    <label>{k}</label>
-                    <span>{String(v)}</span>
-                  </div>
-                ))}
-              {phones[id] && (
-                <div className="exp-item">
-                  <label>Teléfono (manual)</label>
-                  <span>{phones[id]}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -629,356 +340,102 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Dashboard Reservas · Booking & Airbnb</title>
+        <title>Dashboard Reservas</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono&display=swap" rel="stylesheet" />
         <style>{CSS}</style>
       </Head>
 
-      {/* Header */}
       <header className="header" ref={headerRef}>
-        <div className="logo">
-          <div className="logo-dot" />
-          Reservas
-        </div>
+        <div className="logo"><div className="logo-dot" /> Reservas</div>
         <div className="hdr-r">
-          {lastUpdate && <span className="last-upd mono">↻ {lastUpdate.toLocaleTimeString('es-ES')}</span>}
-          <div className="tog-wrap">
-            <span className="tog-lbl"><span className="tog-lbl-text">🔔 Alarmas</span><span style={{display:'none'}} className="tog-lbl-icon">🔔</span></span>
-            <label className="tog">
-              <input type="checkbox" checked={alarmsEnabled} onChange={e => setAlarmsEnabled(e.target.checked)} />
-              <span className="tog-sl" />
-            </label>
-          </div>
-          {hasToday && <button className="btn btn-red btn-xs" onClick={triggerAlarm}>🔔</button>}
-          <button className="btn btn-ghost btn-xs" onClick={() => { setLoading(true); fetchData(); }}>↻</button>
+          {lastUpdate && <span className="last-upd">↻ {lastUpdate.toLocaleTimeString()}</span>}
+          <button className="btn btn-call" style={{padding:'0.2rem 0.5rem'}} onClick={() => fetchData()}>↻</button>
         </div>
       </header>
 
-      {/* Alarm banner */}
       {hasToday && alarmsEnabled && (
         <div className="alarm-banner" ref={bannerRef}>
           <span className="bell">🔔</span>
-          <div style={{ flex: 1 }}>
-            <div className="alarm-title">
-              {todayIn.length > 0 && `✈ ${todayIn.length} ENTRADA${todayIn.length > 1 ? 'S' : ''} HOY`}
-              {todayIn.length > 0 && todayOut.length > 0 && <span style={{ color: 'var(--muted)', margin: '0 0.4rem' }}>·</span>}
-              {todayOut.length > 0 && `🚪 ${todayOut.length} SALIDA${todayOut.length > 1 ? 'S' : ''} HOY`}
-            </div>
-            <div className="alarm-detail">
-              {todayIn.length > 0 && <span style={{ color: 'var(--green)' }}>✈ {todayIn.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}</span>}
-              {todayIn.length > 0 && todayOut.length > 0 && <span style={{ margin: '0 0.4rem', color: 'var(--muted)' }}>·</span>}
-              {todayOut.length > 0 && <span style={{ color: 'var(--yellow)' }}>🚪 {todayOut.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}</span>}
-            </div>
-          </div>
+          <div className="alarm-title">Hay movimientos hoy ({todayIn.length} Ent. / {todayOut.length} Sal.)</div>
         </div>
       )}
 
-      {/* Tabs */}
       <div className="tabs" ref={tabsRef}>
-        {[['reservas', '📅 Reservas'], ['financiero', '💶 Financiero']].map(([k, l]) => (
-          <button key={k} className={`tab-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
-        ))}
+        <button className={`tab-btn ${tab === 'reservas' ? 'active' : ''}`} onClick={() => setTab('reservas')}>📅 Reservas</button>
+        <button className={`tab-btn ${tab === 'financiero' ? 'active' : ''}`} onClick={() => setTab('financiero')}>💶 Financiero</button>
       </div>
 
-      {/* Stats */}
-      <div className="stats">
-        <div className="stat">
-          <div className="stat-label">Total</div>
-          <div className="stat-val" style={{ color: 'var(--accent)' }}>{data.length}</div>
-          <div className="stat-sub">Bk + Ab</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">Entran hoy</div>
-          <div className="stat-val" style={{ color: 'var(--green)' }}>{todayIn.length}</div>
-          <div className="stat-sub">{todayIn.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">Salen hoy</div>
-          <div className="stat-val" style={{ color: 'var(--yellow)' }}>{todayOut.length}</div>
-          <div className="stat-sub">{todayOut.map(r => safeGet(r, keys.alojamiento)).filter(v => v !== '—').join(', ') || '—'}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">Booking</div>
-          <div className="stat-val" style={{ color: '#93c5fd' }}>{data.filter(r => r._origen.includes('booking')).length}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">Airbnb</div>
-          <div className="stat-val" style={{ color: '#fca5a5' }}>{data.filter(r => r._origen.includes('airbnb')).length}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-label">Llamados</div>
-          <div className="stat-val" style={{ color: 'var(--green)' }}>{Object.values(called).filter(Boolean).length}</div>
-          <div className="stat-sub">de {data.length}</div>
-        </div>
-      </div>
-
-      {/* Controls */}
       <div className="controls">
         <input className="search" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
-        {[
-          { key: 'all',       label: 'Todas',     cls: 'def' },
-          { key: 'today_in',  label: '📥 Entran', cls: 'gr'  },
-          { key: 'today_out', label: '📤 Salen',  cls: 'yl'  },
-          { key: 'proximas',  label: '📆 7 días', cls: 'pu'  },
-          { key: 'booking',   label: '✈ Bk',      cls: 'bk'  },
-          { key: 'airbnb',    label: '🏠 Ab',      cls: 'ab'  },
-        ].map(f => (
-          <button key={f.key} className={`fbtn ${filter === f.key ? `on ${f.cls}` : ''}`} onClick={() => setFilter(f.key)}>{f.label}</button>
-        ))}
-        <div className="sep ml-auto" />
-        {[['entrada', '↑ Ent'], ['salida', '↑ Sal']].map(([k, l]) => (
-          <button key={k} className={`fbtn ${sort === k ? 'on def' : ''}`} onClick={() => setSort(k)}>{l}</button>
-        ))}
+        <button className={`fbtn ${filter === 'all' ? 'on def' : ''}`} onClick={() => setFilter('all')}>Todas</button>
+        <button className={`fbtn ${filter === 'today_in' ? 'on gr' : ''}`} onClick={() => setFilter('today_in')}>📥</button>
+        <button className={`fbtn ${filter === 'today_out' ? 'on yl' : ''}`} onClick={() => setFilter('today_out')}>📤</button>
       </div>
 
-      {/* Debug bar */}
-      {detectedCols.length > 0 && (
-        <div className="debug-bar">
-          <button onClick={() => setShowDebug(v => !v)} style={{
-            background: 'none', border: '1px solid var(--border)', borderRadius: 5,
-            padding: '0.12rem 0.45rem', color: 'var(--muted)', fontSize: '0.58rem',
-            cursor: 'pointer', fontFamily: 'DM Mono, monospace'
-          }}>
-            {showDebug ? '▲' : '▼'} cols ({detectedCols.length})
-          </button>
-          {showDebug && detectedCols.map(c => (
-            <span key={c} style={{
-              fontSize: '0.57rem', fontFamily: 'DM Mono, monospace',
-              padding: '0.08rem 0.3rem', borderRadius: 4,
-              background: 'var(--s2)', border: '1px solid var(--border)',
-              color: ['NOMBRE', 'TELEFONO', 'TELÉFONO'].includes(c.toUpperCase().trim())
-                ? 'var(--green)' : 'var(--muted)'
-            }}>{c}</span>
-          ))}
-        </div>
-      )}
-
-      {/* Área de contenido */}
       <div className="tbl-area">
         {loading ? (
-          <div className="center"><div className="spinner" /><span className="empty-txt">Cargando…</span></div>
-        ) : error ? (
-          <div className="center">
-            <div className="empty-icon">⚠️</div>
-            <div className="empty-txt">Error: {error}</div>
-            <button className="btn btn-accent" onClick={fetchData}>Reintentar</button>
-          </div>
+          <div style={{padding:'2rem', textAlign:'center'}}>Cargando...</div>
         ) : tab === 'reservas' ? (
           <>
-            {displayed.length === 0 ? (
-              <div className="center"><div className="empty-icon">🏖️</div><div className="empty-txt">Sin reservas con ese filtro.</div></div>
-            ) : (
-              <>
-                {/* ── DESKTOP: tabla clásica ── */}
-                <div className="desktop-table">
-                  <div className="tbl-padding">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Alojamiento</th>
-                          <th>Origen</th>
-                          <th>Entrada</th>
-                          <th>Salida</th>
-                          <th style={{ textAlign: 'center' }}>Noches</th>
-                          <th>Teléfono</th>
-                          <th>Acción</th>
-                          <th>Observaciones</th>
-                          <th>Datos Kiko</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {displayed.flatMap(row => {
-                          const id = row._id;
-                          const isExp = expandedRow === id;
-                          const eHoy = isToday(row._entrada);
-                          const sHoy = isToday(row._salida);
-                          const dIn  = daysDiff(row._entrada);
-                          const dOut = daysDiff(row._salida);
-                          const isCalled = called[id];
-                          const phone = phones[id] || '';
-                          const sheetPhone = safeGet(row, keys.telefono) !== '—' ? safeGet(row, keys.telefono) : '';
-                          const displayPhone = phone || sheetPhone;
-                          let nights = '—';
-                          if (row._entrada && row._salida)
-                            nights = Math.round((row._salida - row._entrada) / 86400000);
-
-                          return [
-                            <tr
-                              key={`r${id}`}
-                              className={`${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`}
-                              onClick={() => setExpandedRow(isExp ? null : id)}
-                            >
-                              <td>
-                                <div className="cell-truncate cell-aloj">{safeGet(row, keys.alojamiento)}</div>
-                                {safeGet(row, keys.nombre) !== '—' && (
-                                  <div className="cell-truncate cell-nombre">{safeGet(row, keys.nombre)}</div>
-                                )}
-                              </td>
-                              <td>
-                                <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
-                                  {row._origen.includes('booking') ? '✈' : '🏠'} {safeGet(row, keys.origen)}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="mono">{formatDate(row._entrada)}</span>
-                                {eHoy && <span className="tag tag-in">HOY ✈</span>}
-                                {!eHoy && dIn !== null && dIn > 0 && dIn <= 30 && <span className="days-lbl">+{dIn}d</span>}
-                              </td>
-                              <td>
-                                <span className="mono">{formatDate(row._salida)}</span>
-                                {sHoy && <span className="tag tag-out">HOY 🚪</span>}
-                                {!sHoy && dOut !== null && dOut > 0 && dOut <= 30 && <span className="days-lbl">+{dOut}d</span>}
-                              </td>
-                              <td className="mono" style={{ textAlign: 'center', color: 'var(--muted)' }}>{nights}</td>
-                              <td className="ac" onClick={e => e.stopPropagation()}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.32rem' }}>
-                                  {editingPhone === id ? (
-                                    <>
-                                      <input
-                                        className="phone-input" value={phoneInput}
-                                        placeholder="+34 600 000 000"
-                                        onChange={e => setPhoneInput(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') savePhone(id); if (e.key === 'Escape') setEditingPhone(null); }}
-                                        autoFocus
-                                      />
-                                      <button className="btn btn-accent btn-xs" onClick={() => savePhone(id)}>✓</button>
-                                      <button className="btn btn-ghost btn-xs" onClick={() => setEditingPhone(null)}>✕</button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {displayPhone
-                                        ? <span className={phone ? 'phone-val' : 'phone-sheet'}>{displayPhone}</span>
-                                        : <span className="phone-empty">Sin tel.</span>
-                                      }
-                                      <button className="btn btn-ghost btn-xs"
-                                        onClick={() => { setEditingPhone(id); setPhoneInput(phone || sheetPhone); }}>✏️</button>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="ac" onClick={e => e.stopPropagation()}>
-                                <button
-                                  className={`btn btn-xs ${isCalled ? 'btn-called' : 'btn-call'}`}
-                                  onClick={() => setCalled(p => ({ ...p, [id]: !p[id] }))}
-                                >
-                                  {isCalled ? '✅ Llamado' : '📞 Llamar'}
-                                </button>
-                              </td>
-                              <td><div className="cell-truncate cell-obs">{safeGet(row, keys.observaciones)}</div></td>
-                              <td><div className="cell-truncate cell-kiko">{safeGet(row, keys.datosKiko)}</div></td>
-                            </tr>,
-                            isExp && (
-                              <tr key={`e${id}`}>
-                                <td colSpan={9} className="exp-td">
-                                  <div className="exp-grid">
-                                    {Object.entries(row)
-                                      .filter(([k]) => !k.startsWith('_'))
-                                      .filter(([, v]) => v)
-                                      .map(([k, v]) => (
-                                        <div className="exp-item" key={k}>
-                                          <label>{k}</label>
-                                          <span>{String(v)}</span>
-                                        </div>
-                                      ))}
-                                    {phones[id] && (
-                                      <div className="exp-item">
-                                        <label>Teléfono (manual)</label>
-                                        <span>{phones[id]}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          ];
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* ── MÓVIL: tarjetas ── */}
-                <div className="mobile-cards">
-                  {displayed.map(row => <MobileCard key={row._id} row={row} />)}
-                </div>
-              </>
-            )}
-            <div className="footer-bar">
-              {displayed.length} reservas · {data.length} total · Toca una tarjeta para ver todos los datos
-            </div>
-          </>
-        ) : (
-          /* Pestaña Financiero */
-          <>
-            <div className="tbl-padding">
-              <table className="fin-table">
+            <div className="desktop-table" style={{padding:'0 1rem'}}>
+              <table>
                 <thead>
                   <tr>
                     <th>Alojamiento</th>
                     <th>Origen</th>
                     <th>Entrada</th>
                     <th>Salida</th>
-                    <th>Cobrado A</th>
-                    <th>Cobrado B</th>
-                    <th>Total Cobrado</th>
-                    <th>Ingreso Canal Neto</th>
-                    <th>Fecha Pago</th>
-                    <th>2º Ingreso Neto</th>
-                    <th>Fecha Pago 2</th>
-                    <th>Reportes</th>
+                    <th>Teléfono</th>
+                    <th>Obs. Entrada</th>
+                    <th>Obs. Salida</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayed.map(row => (
-                    <tr key={row._id}>
-                      <td style={{ fontWeight: 600 }}>{safeGet(row, keys.alojamiento)}</td>
-                      <td>
-                        <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
-                          {safeGet(row, keys.origen)}
-                        </span>
-                      </td>
-                      <td className="mono" style={{ fontSize: '0.72rem' }}>{formatDate(row._entrada)}</td>
-                      <td className="mono" style={{ fontSize: '0.72rem' }}>{formatDate(row._salida)}</td>
-                      <td className="money">{formatMoney(row[keys.cobradoA])}</td>
-                      <td className="money">{formatMoney(row[keys.cobradoB])}</td>
-                      <td className="money" style={{ fontWeight: 700 }}>{formatMoney(row[keys.totalCobrado])}</td>
-                      <td className="money">{formatMoney(row[keys.ingresoCanal])}</td>
-                      <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{safeGet(row, keys.fechaPago)}</td>
-                      <td className="money">{formatMoney(row[keys.segundoIngreso])}</td>
-                      <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{safeGet(row, keys.fechaPago2)}</td>
-                      <td style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{safeGet(row, keys.reportes)}</td>
+                    <tr key={row._id} className={`${isToday(row._entrada) ? 'in-today' : isToday(row._salida) ? 'out-today' : ''}`}>
+                      <td className="cell-aloj">{safeGet(row, keys.alojamiento)}</td>
+                      <td><span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>{safeGet(row, keys.origen)}</span></td>
+                      <td className="mono">{formatDate(row._entrada)}</td>
+                      <td className="mono">{formatDate(row._salida)}</td>
+                      <td className="mono">{phones[row._id] || safeGet(row, keys.telefono)}</td>
+                      <td className="cell-obs-in">{safeGet(row, keys.obsEntrada)}</td>
+                      <td className="cell-obs-out">{safeGet(row, keys.obsSalida)}</td>
                     </tr>
                   ))}
-                  <tr className="total-row">
-                    <td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', fontSize: '0.64rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      TOTALES — {displayed.length} reservas
-                    </td>
-                    <td className="money" style={{ color: 'var(--muted)' }}>—</td>
-                    <td className="money" style={{ color: 'var(--muted)' }}>—</td>
-                    <td className="money" style={{ color: 'var(--accent)', fontWeight: 800 }}>
-                      {formatMoney(displayed.reduce((s, r) => {
-                        const v = parseFloat(String(r[keys.totalCobrado] || '').replace(/[€$£\s]/g, '').replace(/\./g, '').replace(',', '.'));
-                        return s + (isNaN(v) ? 0 : v);
-                      }, 0))}
-                    </td>
-                    <td className="money" style={{ color: 'var(--green)', fontWeight: 800 }}>
-                      {formatMoney(displayed.reduce((s, r) => {
-                        const v = parseFloat(String(r[keys.ingresoCanal] || '').replace(/[€$£\s]/g, '').replace(/\./g, '').replace(',', '.'));
-                        return s + (isNaN(v) ? 0 : v);
-                      }, 0))}
-                    </td>
-                    <td colSpan={4} />
-                  </tr>
                 </tbody>
               </table>
             </div>
-            <div className="footer-bar">
-              {displayed.length} reservas · COBRADO A · COBRADO B · TOTAL COBRADO · INGRESO CANAL NETO
+            <div className="mobile-cards">
+              {displayed.map(row => <MobileCard key={row._id} row={row} />)}
             </div>
           </>
+        ) : (
+          <div style={{padding:'1rem', overflowX:'auto'}}>
+            <table style={{minWidth:'1000px'}}>
+              <thead>
+                <tr>
+                  <th>Alojamiento</th>
+                  <th>Total Cobrado</th>
+                  <th>Ingreso Neto</th>
+                  <th>Fecha Pago</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayed.map(row => (
+                  <tr key={row._id}>
+                    <td>{safeGet(row, keys.alojamiento)}</td>
+                    <td className="money">{formatMoney(row[keys.totalCobrado])}</td>
+                    <td className="money" style={{color:'var(--accent2)'}}>{formatMoney(row[keys.ingresoCanal])}</td>
+                    <td className="mono">{safeGet(row, keys.fechaPago)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
+      <footer className="footer-bar">{displayed.length} resultados</footer>
     </>
   );
 }
