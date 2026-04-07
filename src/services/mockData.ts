@@ -14,6 +14,16 @@ export interface Worker {
   cleansCountMonth: number;
   kmsMonth: number;
   accommodations: string[];
+  tipoPago?: 'bizum' | 'tarjeta' | 'efectivo';
+  pagoPorReserva?: number;
+  precioPorKm?: number;
+  // Bizum
+  telefonoBizum?: string;
+  // Transferencia bancaria
+  iban?: string;
+  banco?: string;
+  titularCuenta?: string;
+  photo?: string;
 }
 
 export const MOCK_USERS: (User & { password: string })[] = [
@@ -75,46 +85,54 @@ export const MOCK_WORKERS: Worker[] = [
   {
     id: '1',
     fullName: 'Juan Pérez',
-    telefono: '600 111 222',
+    telefono: '+34 600 111 222',
     email: 'juan.perez@rhpagos.es',
     dni: '12345678A',
     netMoneyMonth: 1250.50,
     cleansCountMonth: 12,
     kmsMonth: 450,
-    accommodations: ['Penthouse Diagonal', 'Casa Marina 3B', 'Ático Sol 7']
+    accommodations: ['Penthouse Diagonal', 'Casa Marina 3B', 'Ático Sol 7'],
+    tipoPago: 'bizum',
+    pagoPorReserva: 20
   },
   {
     id: '2',
     fullName: 'María García',
-    telefono: '600 333 444',
+    telefono: '+34 600 333 444',
     email: 'maria.garcia@rhpagos.es',
     dni: '23456789B',
     netMoneyMonth: 980.20,
     cleansCountMonth: 8,
     kmsMonth: 120,
-    accommodations: ['Apt. Ramblas 12', 'Loft Born 2']
+    accommodations: ['Apt. Ramblas 12', 'Loft Born 2'],
+    tipoPago: 'tarjeta',
+    pagoPorReserva: 25
   },
   {
     id: '3',
     fullName: 'Carlos Rodríguez',
-    telefono: '600 555 666',
+    telefono: '+34 600 555 666',
     email: 'carlos.rodriguez@rhpagos.es',
     dni: '34567890C',
     netMoneyMonth: 1560.00,
     cleansCountMonth: 15,
     kmsMonth: 600,
-    accommodations: ['Estudio Gracia 5', 'Casa Marina 3B', 'Loft Born 2', 'Ático Sol 7']
+    accommodations: ['Estudio Gracia 5', 'Casa Marina 3B', 'Loft Born 2', 'Ático Sol 7'],
+    tipoPago: 'efectivo',
+    pagoPorReserva: 15
   },
   {
     id: '4',
     fullName: 'Ana Martínez',
-    telefono: '600 777 888',
+    telefono: '+34 600 777 888',
     email: 'ana.martinez@rhpagos.es',
     dni: '45678901D',
     netMoneyMonth: 1100.00,
     cleansCountMonth: 10,
     kmsMonth: 300,
-    accommodations: ['Ático Sol 7']
+    accommodations: ['Ático Sol 7'],
+    tipoPago: 'bizum',
+    pagoPorReserva: 20
   }
 ];
 export interface BaseRecord {
@@ -243,25 +261,4 @@ export interface PagoRecord {
   estado: 'pagado' | 'pendiente';
 }
 
-export const MOCK_PAGOS: PagoRecord[] = [
-  // Marzo 2026 — nómina mensual (pendiente)
-  { id: 'p1',  workerId: '1', workerName: 'Juan Pérez',        telefono: '600 111 222', dni: '12345678A', email: 'juan.perez@rhpagos.es',     fecha: '2026-03-31', concepto: 'Nómina marzo 2026',    importe: 1250.50, limpiezas: 12, km: 450, estado: 'pendiente' },
-  { id: 'p2',  workerId: '2', workerName: 'María García',      telefono: '600 333 444', dni: '23456789B', email: 'maria.garcia@rhpagos.es',    fecha: '2026-03-31', concepto: 'Nómina marzo 2026',    importe:  980.20, limpiezas:  8, km: 120, estado: 'pendiente' },
-  { id: 'p3',  workerId: '3', workerName: 'Carlos Rodríguez',  telefono: '600 555 666', dni: '34567890C', email: 'carlos.rodriguez@rhpagos.es', fecha: '2026-03-31', concepto: 'Nómina marzo 2026',    importe: 1560.00, limpiezas: 15, km: 600, estado: 'pendiente' },
-  { id: 'p4',  workerId: '4', workerName: 'Ana Martínez',      telefono: '600 777 888', dni: '45678901D', email: 'ana.martinez@rhpagos.es',     fecha: '2026-03-31', concepto: 'Nómina marzo 2026',    importe: 1100.00, limpiezas: 10, km: 300, estado: 'pendiente' },
-  // Semana actual (última semana de marzo)
-  { id: 'p5',  workerId: '1', workerName: 'Juan Pérez',        telefono: '600 111 222', dni: '12345678A', email: 'juan.perez@rhpagos.es',     fecha: '2026-03-28', concepto: 'Pago semanal 23–28 mar', importe:  312.63, limpiezas:  3, km: 112, estado: 'pagado' },
-  { id: 'p6',  workerId: '2', workerName: 'María García',      telefono: '600 333 444', dni: '23456789B', email: 'maria.garcia@rhpagos.es',    fecha: '2026-03-27', concepto: 'Pago semanal 23–28 mar', importe:  245.05, limpiezas:  2, km:  30, estado: 'pagado' },
-  { id: 'p7',  workerId: '3', workerName: 'Carlos Rodríguez',  telefono: '600 555 666', dni: '34567890C', email: 'carlos.rodriguez@rhpagos.es', fecha: '2026-03-26', concepto: 'Pago semanal 23–28 mar', importe:  390.00, limpiezas:  4, km: 150, estado: 'pagado' },
-  { id: 'p8',  workerId: '4', workerName: 'Ana Martínez',      telefono: '600 777 888', dni: '45678901D', email: 'ana.martinez@rhpagos.es',     fecha: '2026-03-25', concepto: 'Pago semanal 23–28 mar', importe:  275.00, limpiezas:  2, km:  75, estado: 'pagado' },
-  // Febrero 2026
-  { id: 'p9',  workerId: '1', workerName: 'Juan Pérez',        telefono: '600 111 222', dni: '12345678A', email: 'juan.perez@rhpagos.es',     fecha: '2026-02-28', concepto: 'Nómina febrero 2026',   importe: 1180.00, limpiezas: 11, km: 420, estado: 'pagado' },
-  { id: 'p10', workerId: '2', workerName: 'María García',      telefono: '600 333 444', dni: '23456789B', email: 'maria.garcia@rhpagos.es',    fecha: '2026-02-28', concepto: 'Nómina febrero 2026',   importe:  950.00, limpiezas:  8, km: 110, estado: 'pagado' },
-  { id: 'p11', workerId: '3', workerName: 'Carlos Rodríguez',  telefono: '600 555 666', dni: '34567890C', email: 'carlos.rodriguez@rhpagos.es', fecha: '2026-02-28', concepto: 'Nómina febrero 2026',   importe: 1490.00, limpiezas: 14, km: 580, estado: 'pagado' },
-  { id: 'p12', workerId: '4', workerName: 'Ana Martínez',      telefono: '600 777 888', dni: '45678901D', email: 'ana.martinez@rhpagos.es',     fecha: '2026-02-28', concepto: 'Nómina febrero 2026',   importe: 1050.00, limpiezas:  9, km: 280, estado: 'pagado' },
-  // Enero 2026
-  { id: 'p13', workerId: '1', workerName: 'Juan Pérez',        telefono: '600 111 222', dni: '12345678A', email: 'juan.perez@rhpagos.es',     fecha: '2026-01-31', concepto: 'Nómina enero 2026',     importe: 1200.00, limpiezas: 11, km: 400, estado: 'pagado' },
-  { id: 'p14', workerId: '2', workerName: 'María García',      telefono: '600 333 444', dni: '23456789B', email: 'maria.garcia@rhpagos.es',    fecha: '2026-01-31', concepto: 'Nómina enero 2026',     importe:  920.00, limpiezas:  7, km: 100, estado: 'pagado' },
-  { id: 'p15', workerId: '3', workerName: 'Carlos Rodríguez',  telefono: '600 555 666', dni: '34567890C', email: 'carlos.rodriguez@rhpagos.es', fecha: '2026-01-31', concepto: 'Nómina enero 2026',     importe: 1430.00, limpiezas: 13, km: 560, estado: 'pagado' },
-  { id: 'p16', workerId: '4', workerName: 'Ana Martínez',      telefono: '600 777 888', dni: '45678901D', email: 'ana.martinez@rhpagos.es',     fecha: '2026-01-31', concepto: 'Nómina enero 2026',     importe: 1020.00, limpiezas:  9, km: 260, estado: 'pagado' },
-];
+export const MOCK_PAGOS: PagoRecord[] = [];

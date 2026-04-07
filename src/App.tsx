@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
+import { NavigationGuardProvider } from './context/NavigationGuardContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Cleans from './pages/Cleans';
@@ -28,6 +29,7 @@ function App() {
 
   return (
     <ThemeProvider>
+    <NavigationGuardProvider>
     <BrowserRouter>
       <Routes>
         <Route 
@@ -103,6 +105,7 @@ function App() {
         <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
       </Routes>
     </BrowserRouter>
+    </NavigationGuardProvider>
     </ThemeProvider>
   );
 }

@@ -11,8 +11,9 @@ import {
   Sun,
   type LucideProps,
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
+import { useNavigationGuard } from '../../context/NavigationGuardContext';
 import logoFull from '../../assets/logo/LogoEstandar.png';
 
 interface SidebarProps {
@@ -60,7 +61,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   onHoverChange,
 }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { requestNavigate } = useNavigationGuard();
   const [isHovered, setIsHovered] = useState(false);
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -143,7 +146,13 @@ const Sidebar: React.FC<SidebarProps> = ({
                     <li key={path}>
                       <Link
                         to={path}
-                        onClick={() => { if (window.innerWidth < 1024) onClose(); }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          requestNavigate(() => {
+                            navigate(path);
+                            if (window.innerWidth < 1024) onClose();
+                          });
+                        }}
                         title={collapsed ? label : undefined}
                         className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md
                           text-sm tracking-tight transition-all duration-200
