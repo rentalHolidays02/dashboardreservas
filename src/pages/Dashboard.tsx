@@ -34,7 +34,7 @@ const Dashboard: React.FC = () => {
         setLoading(false);
       }
     };
-    fetchAllData();
+    fetchData();
   }, []);
 
   const activeFiltersCount = React.useMemo(() => {

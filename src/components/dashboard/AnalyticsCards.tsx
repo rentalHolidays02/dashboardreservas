@@ -64,10 +64,6 @@ const PulseDot: React.FC<{
   );
 };
 
-    </g>
-  );
-};
-
 type ChartPoint = { label: string; valor: number };
 
 const BASELINE_MONTHLY = 1250;
@@ -134,6 +130,9 @@ const BASE_DATA: Record<Exclude<Period, 'personalizado'>, ChartPoint[]> = {
   trimestral: generateBaseData('trimestral'),
 };
 
+const PERIOD_OPTIONS: { id: Period; label: string }[] = [
+  { id: 'semanal',       label: 'Semanal' },
+  { id: 'mensual',       label: 'Mensual' },
   { id: 'trimestral',    label: 'Trimestral' },
   { id: 'personalizado', label: 'Personalizado' },
 ];
@@ -213,7 +212,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
 
   const periodLabel = period === 'personalizado' && customDesde && customHasta
     ? `${customDesde} — ${customHasta}`
-    : PERIODS.find(p => p.id === period)?.label.toLowerCase() ?? '';
+    : PERIOD_OPTIONS.find(p => p.id === period)?.label.toLowerCase() ?? '';
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[7fr_3fr] gap-6 items-stretch">
@@ -235,10 +234,6 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
               >
                 <span className="font-medium">{selectedWorker.fullName}</span>
                 <X size={12} className="text-orange-400 group-hover:text-orange-600" />
-              </button>
-            )}
-          </div>
-
               </button>
             )}
           </div>
