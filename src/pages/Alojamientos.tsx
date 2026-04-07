@@ -4,10 +4,11 @@ import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationFilterModal, { AccommodationFilters } from '../components/accommodations/AccommodationFilterModal';
 import { appsScriptApi } from '../services/api';
-import { Accommodation } from '../services/mockData';
+import { Accommodation, Worker } from '../services/mockData';
 
 const Alojamientos: React.FC = () => {
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -23,10 +24,14 @@ const Alojamientos: React.FC = () => {
 
   const fetchAccommodations = async () => {
     try {
-      const data = await appsScriptApi.getAccommodations();
-      setAccommodations(data);
+      const [accData, workerData] = await Promise.all([
+        appsScriptApi.getAccommodations(),
+        appsScriptApi.getWorkers()
+      ]);
+      setAccommodations(accData);
+      setWorkers(workerData);
     } catch (error) {
-      console.error('Error fetching accommodations:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -161,18 +166,22 @@ const Alojamientos: React.FC = () => {
       {/* Accommodations grid */}
       {filteredAccommodations.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredAccommodations.map(acc => (
-            <div
-              key={acc.id}
-              onClick={() => handleEditClick(acc)}
-              className="cursor-pointer"
-            >
-              <AccommodationCard
-                accommodation={acc}
-                onEdit={handleEditClick}
-              />
-            </div>
-          ))}
+          {filteredAccommodations.map(acc => {
+            const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
+            return (
+              <div
+                key={acc.id}
+                onClick={() => handleEditClick(acc)}
+                className="cursor-pointer"
+              >
+                <AccommodationCard
+                  accommodation={acc}
+                  assignedWorkersCount={assignedCount}
+                  onEdit={handleEditClick}
+                />
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-2xl p-12 flex flex-col items-center justify-center gap-4">
