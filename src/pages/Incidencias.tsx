@@ -128,9 +128,9 @@ const Incidencias: React.FC = () => {
             <p className="text-sm text-slate-400 dark:text-stone-500">No se encontraron incidencias</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-stone-800">
+          <ul className="divide-y divide-stone-100 dark:divide-stone-800">
             {filteredIncidencias.map((inc) => (
-              <li key={inc.id} className="px-5 py-4 hover:bg-slate-50 dark:hover:bg-stone-800/50 transition-colors">
+              <li key={inc.id} className="px-5 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-slate-400 dark:text-stone-500">{inc.userName}</span>
                   <span className="text-xs text-slate-400 dark:text-stone-500 tabular-nums">{fmtDate(inc.timestamp)}</span>
@@ -156,13 +156,13 @@ const Incidencias: React.FC = () => {
                       {fmtCost(inc.coste)}
                     </span>
                     {inc.pagadoPor === 'limpiador' ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50/50 dark:bg-orange-400/10 border border-orange-100/50 dark:border-orange-900/30 rounded-md px-1.5 py-0.5">
-                        <UserRound size={10} className="text-orange-400" />
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-white bg-orange-500 dark:bg-orange-600 rounded-md px-1.5 py-0.5 border-none">
+                        <UserRound size={10} />
                         Limpiador
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-400/10 border border-amber-100/50 dark:border-amber-900/30 rounded-md px-1.5 py-0.5">
-                        <Building2 size={10} className="text-amber-400" />
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950 border border-orange-100 dark:border-orange-900/50 rounded-md px-1.5 py-0.5">
+                        <Building2 size={10} />
                         Empresa
                       </span>
                     )}

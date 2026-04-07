@@ -13,7 +13,12 @@ interface AnalyticsCardsProps {
   selectedWorker?: Worker | null;
   onWorkerSelect?: (worker: Worker | null) => void;
   workers?: Worker[];
+  period: Period;
+  customDesde: string;
+  customHasta: string;
 }
+
+export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -59,7 +64,9 @@ const PulseDot: React.FC<{
   );
 };
 
-type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
+    </g>
+  );
+};
 
 type ChartPoint = { label: string; valor: number };
 
@@ -127,9 +134,6 @@ const BASE_DATA: Record<Exclude<Period, 'personalizado'>, ChartPoint[]> = {
   trimestral: generateBaseData('trimestral'),
 };
 
-const PERIODS: { id: Period; label: string }[] = [
-  { id: 'semanal',       label: 'Semanal' },
-  { id: 'mensual',       label: 'Mensual' },
   { id: 'trimestral',    label: 'Trimestral' },
   { id: 'personalizado', label: 'Personalizado' },
 ];
@@ -149,15 +153,15 @@ const CustomTooltip: React.FC<{
 };
 
 
-const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker, onWorkerSelect, workers }) => {
+const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ 
+  checkIns, selectedWorker, onWorkerSelect, workers, period, customDesde, customHasta 
+}) => {
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
     workers?.forEach(w => { if (w.photo) map[w.fullName] = w.photo; });
     return map;
   }, [workers]);
-  const [period, setPeriod]         = useState<Period>('semanal');
-  const [customDesde, setCustomDesde] = useState('');
-  const [customHasta, setCustomHasta] = useState('');
+  
   const [chartKey, setChartKey]     = useState(0);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -167,10 +171,12 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
     : { backgroundColor: '#f5f5f4', borderColor: '#fff', borderWidth: 1, borderStyle: 'solid' };
 
   const handlePeriod = (p: Period) => {
-    if (p === period) return;
-    setPeriod(p);
     setChartKey(k => k + 1);
   };
+
+  useEffect(() => {
+    setChartKey(k => k + 1);
+  }, [period, customDesde, customHasta]);
 
   const prevWorkerId = useRef(selectedWorker?.id);
   useEffect(() => {
@@ -233,54 +239,11 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
             )}
           </div>
 
-          <div className="flex items-center bg-white/40 dark:bg-stone-800/60 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
-            {PERIODS.map(p => (
-              <button
-                key={p.id}
-                onClick={() => handlePeriod(p.id)}
-                style={period === p.id ? activeTabStyle : {}}
-                className={`text-xs px-2.5 py-1 rounded-md font-normal transition-all duration-200 ${
-                  period === p.id
-                    ? 'text-orange-600 dark:text-orange-400 soft-shadow'
-                    : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 hover:bg-white/40 dark:hover:bg-stone-700/50'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Selector de fechas personalizadas */}
-        {period === 'personalizado' && (
-          <div className="flex items-center gap-2 mb-3 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-center gap-2 bg-white dark:bg-stone-800 border border-slate-200 dark:border-stone-700 rounded-lg px-3 py-1.5">
-              <CalendarRange size={13} className="text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              <input
-                type="date"
-                value={customDesde}
-                onChange={e => setCustomDesde(e.target.value)}
-                className="text-xs text-slate-700 dark:text-stone-300 focus:outline-none bg-transparent"
-              />
-              <span className="text-slate-300 dark:text-stone-600 text-xs">—</span>
-              <input
-                type="date"
-                value={customHasta}
-                min={customDesde}
-                onChange={e => setCustomHasta(e.target.value)}
-                className="text-xs text-slate-700 dark:text-stone-300 focus:outline-none bg-transparent"
-              />
-            </div>
-            {(customDesde || customHasta) && (
-              <button
-                onClick={() => { setCustomDesde(''); setCustomHasta(''); }}
-                className="text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
-              >
-                <X size={13} />
               </button>
             )}
           </div>
-        )}
+        </div>
+
 
         <div className="flex flex-col flex-1 min-h-0 px-1">
           {period === 'personalizado' && (!customDesde || !customHasta) ? (
