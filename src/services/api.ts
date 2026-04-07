@@ -43,14 +43,14 @@ const saveWorkers = (workers: Worker[]) => {
 // Pagos persistence
 const getStoredPagos = (): PagoRecord[] => {
   try {
-    const stored = localStorage.getItem('rh_pagos');
+    const stored = localStorage.getItem('rh_pagos_v2');
     if (stored) return JSON.parse(stored);
   } catch {}
   return [...MOCK_PAGOS];
 };
 
 const savePagos = (pagos: PagoRecord[]) => {
-  localStorage.setItem('rh_pagos', JSON.stringify(pagos));
+  localStorage.setItem('rh_pagos_v2', JSON.stringify(pagos));
 };
 
 let currentPagos = getStoredPagos();
@@ -212,6 +212,14 @@ export const appsScriptApi = {
   getWorkerPaymentActions: async (workerId: string): Promise<PaymentAction[]> => {
     await delay(100);
     return getUndoStack().filter(a => a.workerId === workerId);
+  },
+
+  createPago: async (pago: Omit<PagoRecord, 'id'>): Promise<PagoRecord> => {
+    await delay(400);
+    const newPago: PagoRecord = { ...pago, id: `p_${Date.now()}` };
+    currentPagos = [newPago, ...currentPagos];
+    savePagos(currentPagos);
+    return newPago;
   },
 
   getWorkerCleans: async (fullName: string): Promise<{

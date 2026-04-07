@@ -363,6 +363,40 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
   const kmCost = (worker.kmsMonth ?? 0) * (worker.precioPorKm ?? 0);
   const cleansCost = (worker.cleansCountMonth ?? 0) * (worker.pagoPorReserva ?? 0);
   const totalDue = kmCost + cleansCost;
+  // paidPagos ya está memoizado; lo usamos directamente
+  const currentCyclePaid = paidPagos.reduce((a, p) => a + p.importe, 0);
+  const remainingDue = Math.max(0, totalDue - currentCyclePaid);
+
+  // Desglose inteligente: prioridad limpiezas → km. Solo muestra km si tiene precio.
+  function computeBreakdown(remaining: number) {
+    if (remaining <= 0) return { limpiezas: 0, km: 0 };
+    const pricePerClean = worker.pagoPorReserva ?? 0;
+    const pricePerKm    = worker.precioPorKm   ?? 0;
+    if (remaining <= cleansCost) {
+      const pendingCleans = pricePerClean > 0 ? Math.ceil(remaining / pricePerClean) : 0;
+      // Solo añade km si tiene precio configurado (contribuye a la deuda)
+      const pendingKm = pricePerKm > 0 ? worker.kmsMonth : 0;
+      return { limpiezas: pendingCleans, km: pendingKm };
+    } else {
+      const remainingKmCost = remaining - cleansCost;
+      const pendingKm = pricePerKm > 0 ? Math.ceil(remainingKmCost / pricePerKm) : 0;
+      return { limpiezas: 0, km: Math.min(pendingKm, worker.kmsMonth) };
+    }
+  }
+  const remainingBreakdown = computeBreakdown(remainingDue);
+
+  // Animated numbers para el stats strip
+  const animRemainingDue       = useAnimatedNumber(remainingDue);
+  const animRemainingLimpiezas = useAnimatedNumber(remainingBreakdown.limpiezas);
+  const animRemainingKm        = useAnimatedNumber(remainingBreakdown.km);
+  const animKmsMonth           = useAnimatedNumber(worker.kmsMonth);
+  const animCleansMonth        = useAnimatedNumber(worker.cleansCountMonth);
+
+  // Pago modal state
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payAsunto, setPayAsunto]       = useState('');
+  const [payAmount, setPayAmount]       = useState('');
+  const [paying2, setPaying2]           = useState(false);
 
   // Auto-select all pending when they load
   useEffect(() => {
@@ -404,6 +438,47 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
       setPayTab('pending');
     } finally {
       setUndoingId(null);
+    }
+  };
+
+  const handleDirectPay = async () => {
+    const amount = parseFloat(payAmount.replace(',', '.'));
+    if (!amount || amount <= 0) return;
+    setPaying2(true);
+    try {
+      // Calcular cuántas limpiezas y km cubre este pago
+      const pricePerClean = worker.pagoPorReserva ?? 0;
+      const pricePerKm    = worker.precioPorKm   ?? 0;
+      let limpiezasPaid: number;
+      let kmPaid: number;
+      if (amount <= cleansCost) {
+        limpiezasPaid = pricePerClean > 0 ? Math.floor(amount / pricePerClean) : 0;
+        kmPaid = 0;
+      } else {
+        limpiezasPaid = worker.cleansCountMonth;
+        const kmAmount = amount - cleansCost;
+        kmPaid = pricePerKm > 0 ? Math.floor(kmAmount / pricePerKm) : 0;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      await appsScriptApi.createPago({
+        workerId:   worker.id,
+        workerName: worker.fullName,
+        telefono:   worker.telefono ?? '',
+        dni:        worker.dni      ?? '',
+        email:      worker.email    ?? '',
+        fecha:      today,
+        concepto:   payAsunto || 'Pago directo',
+        importe:    amount,
+        limpiezas:  limpiezasPaid,
+        km:         kmPaid,
+        estado:     'pagado',
+      });
+      await loadPagos();
+      setShowPayModal(false);
+      setPayAsunto('');
+      setPayAmount('');
+    } finally {
+      setPaying2(false);
     }
   };
 
@@ -628,14 +703,33 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
           {/* Por cobrar */}
           <div className="px-5 py-4">
             <div className="flex items-center gap-1.5 mb-1">
-              <Euro size={12} className={totalDue > 0 ? 'text-amber-500' : 'text-emerald-500'} />
+              <Euro size={12} className={remainingDue > 0 ? 'text-amber-500' : 'text-emerald-500'} />
               <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Por cobrar</span>
             </div>
-            <p className={`text-lg font-medium tabular-nums ${totalDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {fmtCurrency(totalDue)}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={`text-lg font-medium tabular-nums ${remainingDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {fmtCurrency(animRemainingDue)}
+              </p>
+              {remainingDue > 0 && (
+                <button
+                  onClick={() => { setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
+                  className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-orange-500 text-white hover:bg-orange-600 active:scale-95 transition-all flex-shrink-0"
+                >
+                  Pagar
+                </button>
+              )}
+            </div>
             <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
-              {worker.cleansCountMonth} limpiezas · {worker.kmsMonth} km
+              {remainingDue <= 0
+                ? 'Al día'
+                : animRemainingLimpiezas > 0 && animRemainingKm > 0
+                  ? `${animRemainingLimpiezas} limpiezas · ${animRemainingKm} km`
+                  : animRemainingLimpiezas > 0
+                    ? `${animRemainingLimpiezas} limpiezas pendientes`
+                    : animRemainingKm > 0
+                      ? `${animRemainingKm} km pendientes`
+                      : 'Configura tarifas para ver el desglose'
+              }
             </p>
           </div>
 
@@ -645,7 +739,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
               <Car size={12} className="text-slate-400 dark:text-stone-500" />
               <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Km este mes</span>
             </div>
-            <p className="text-lg font-medium tabular-nums text-slate-800 dark:text-stone-100">{worker.kmsMonth} km</p>
+            <p className="text-lg font-medium tabular-nums text-slate-800 dark:text-stone-100">{animKmsMonth} km</p>
             <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
               {worker.precioPorKm ? `${fmtCurrency(kmCost)} · ${worker.precioPorKm}€/km` : 'Precio no configurado'}
             </p>
@@ -657,7 +751,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
               <ClipboardList size={12} className="text-slate-400 dark:text-stone-500" />
               <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Limpiezas</span>
             </div>
-            <p className="text-lg font-medium tabular-nums text-slate-800 dark:text-stone-100">{worker.cleansCountMonth}</p>
+            <p className="text-lg font-medium tabular-nums text-slate-800 dark:text-stone-100">{animCleansMonth}</p>
             <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
               {worker.pagoPorReserva ? `${fmtCurrency(worker.pagoPorReserva)} por reserva` : 'Tarifa no configurada'}
             </p>
@@ -732,6 +826,9 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
             />
             <EditableRow icon={<Euro size={12} />} label="Por reserva" value={draft.pagoPorReserva != null ? String(draft.pagoPorReserva) : null} isEditing={isEditing} onChange={v => setDraftField('pagoPorReserva', v === '' ? undefined : Number(v))} type="number" placeholder="0" />
             <EditableRow icon={<Car size={12} />} label="Por km" value={draft.precioPorKm != null ? String(draft.precioPorKm) : null} isEditing={isEditing} onChange={v => setDraftField('precioPorKm', v === '' ? undefined : Number(v))} type="number" placeholder="0" />
+            <SectionTitle>Actividad del mes</SectionTitle>
+            <EditableRow icon={<ClipboardList size={12} />} label="Limpiezas" value={String(draft.cleansCountMonth ?? 0)} isEditing={isEditing} onChange={v => setDraftField('cleansCountMonth', v === '' ? 0 : Number(v))} type="number" placeholder="0" />
+            <EditableRow icon={<Car size={12} />} label="Km recorridos" value={String(draft.kmsMonth ?? 0)} isEditing={isEditing} onChange={v => setDraftField('kmsMonth', v === '' ? 0 : Number(v))} type="number" placeholder="0" />
           </div>
 
           {/* Columna 3 — Detalle según tipo de pago */}
@@ -769,129 +866,41 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
       {activeTab === 'registros' && (
         <div className="space-y-5 animate-in fade-in duration-300">
 
-          {/* ── Gestión de pagos ── */}
+          {/* ── Historial de pagos ── */}
           <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 overflow-hidden">
             <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h3 className="text-xs font-medium text-slate-500 dark:text-stone-400 uppercase tracking-wider">Gestión de pagos</h3>
-                {pendingPagos.length > 0 && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-800/40">
-                    {pendingPagos.length} pendiente{pendingPagos.length !== 1 ? 's' : ''}
-                  </span>
-                )}
+              <h3 className="text-xs font-medium text-slate-500 dark:text-stone-400 uppercase tracking-wider">Historial de pagos</h3>
+              <span className="text-[11px] text-slate-400 dark:text-stone-500">{paidPagos.length} registro{paidPagos.length !== 1 ? 's' : ''}</span>
+            </div>
+            {paidPagos.length === 0 ? (
+              <div className="px-5 py-10 flex flex-col items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
+                  <Banknote size={18} className="text-orange-400" />
+                </div>
+                <p className="text-xs text-slate-400 dark:text-stone-500">Sin pagos registrados</p>
+                <p className="text-[11px] text-slate-300 dark:text-stone-600">Usa el botón Pagar del resumen superior</p>
               </div>
-              <div className="flex bg-stone-100 dark:bg-stone-800 rounded-lg p-0.5 gap-0.5">
-                {(['pending', 'history'] as PayTab[]).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setPayTab(tab)}
-                    className={`px-3 py-1.5 text-[11px] font-medium rounded-md transition-all ${
-                      payTab === tab
-                        ? 'bg-white dark:bg-stone-700 text-slate-700 dark:text-stone-200 shadow-sm'
-                        : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
-                    }`}
-                  >
-                    {tab === 'pending' ? 'Pendientes' : 'Historial'}
-                  </button>
+            ) : (
+              <div className="divide-y divide-stone-50 dark:divide-stone-800 max-h-80 overflow-y-auto">
+                {paidPagos.map(p => (
+                  <div key={p.id} className="px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0">
+                        <CheckCheck size={13} className="text-orange-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{p.concepto}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-stone-500 mt-0.5">
+                          {fmtDate(p.fecha)}
+                          {p.limpiezas > 0 && ` · ${p.limpiezas} limpiezas`}
+                          {p.km > 0 && ` · ${p.km} km`}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-medium tabular-nums text-slate-800 dark:text-stone-100 flex-shrink-0">{fmtCurrency(p.importe)}</span>
+                  </div>
                 ))}
               </div>
-            </div>
-
-            {/* Pending */}
-            {payTab === 'pending' && (
-              pendingPagos.length === 0 ? (
-                <div className="px-5 py-10 flex flex-col items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
-                    <CheckCheck size={18} className="text-emerald-500" />
-                  </div>
-                  <p className="text-xs text-slate-400 dark:text-stone-500">Sin pagos pendientes</p>
-                </div>
-              ) : (
-                <>
-                  <div className="px-5 py-2.5 border-b border-stone-50 dark:border-stone-800 flex items-center gap-3">
-                    <input type="checkbox" checked={selectedPagoIds.size === pendingPagos.length} onChange={toggleAll} className="w-3.5 h-3.5 accent-orange-500 cursor-pointer" />
-                    <span className="text-[11px] text-slate-400 dark:text-stone-500">Seleccionar todo</span>
-                    <span className="ml-auto text-[11px] text-slate-400 dark:text-stone-500">{selectedPagoIds.size}/{pendingPagos.length} seleccionados</span>
-                  </div>
-                  <div className="divide-y divide-stone-50 dark:divide-stone-800 max-h-56 overflow-y-auto">
-                    {pendingPagos.map(p => (
-                      <label key={p.id} className={`px-5 py-3 flex items-center gap-3 cursor-pointer transition-colors ${selectedPagoIds.has(p.id) ? 'bg-orange-50/50 dark:bg-orange-900/10' : 'hover:bg-stone-50 dark:hover:bg-stone-800/50'}`}>
-                        <input type="checkbox" checked={selectedPagoIds.has(p.id)} onChange={() => togglePago(p.id)} className="w-3.5 h-3.5 accent-orange-500 cursor-pointer flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{p.concepto}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-stone-500 mt-0.5">{fmtDate(p.fecha)} · {p.limpiezas} limpiezas · {p.km} km</p>
-                        </div>
-                        <span className="text-sm font-medium tabular-nums text-slate-800 dark:text-stone-100 flex-shrink-0">{fmtCurrency(p.importe)}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="px-5 py-4 border-t border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/30 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] text-slate-400 dark:text-stone-500">A pagar ahora</p>
-                      <p className={`text-lg font-medium tabular-nums ${selectedPagoIds.size > 0 ? 'text-slate-800 dark:text-stone-100' : 'text-slate-300 dark:text-stone-600'}`}>
-                        {fmtCurrency(selectedAmount)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={handlePay}
-                      disabled={selectedPagoIds.size === 0 || paying}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-xs font-medium rounded-xl hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {paying ? <><Loader2 size={14} className="animate-spin" />Registrando...</> : <><CheckCheck size={14} />Registrar pago</>}
-                    </button>
-                  </div>
-                </>
-              )
-            )}
-
-            {/* History */}
-            {payTab === 'history' && (
-              paidPagos.length === 0 && paymentActions.length === 0 ? (
-                <div className="px-5 py-8 text-center text-xs text-slate-400 dark:text-stone-500">Sin historial de pagos</div>
-              ) : (
-                <>
-                  {paymentActions.length > 0 && (
-                    <div className="px-5 py-3 border-b border-stone-100 dark:border-stone-800">
-                      <p className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider mb-2">Pagos recientes</p>
-                      <div className="space-y-2">
-                        {paymentActions.map(action => (
-                          <div key={action.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{fmtCurrency(action.amount)} pagados</p>
-                                <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70 mt-0.5">{fmtDatetime(action.timestamp)} · {action.pagoIds.length} factura{action.pagoIds.length !== 1 ? 's' : ''}</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleUndo(action.id)}
-                              disabled={undoingId === action.id}
-                              className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 border border-stone-200 dark:border-stone-700 transition-all active:scale-95 disabled:opacity-50 flex-shrink-0"
-                            >
-                              {undoingId === action.id ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
-                              Deshacer
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="divide-y divide-stone-50 dark:divide-stone-800 max-h-64 overflow-y-auto">
-                    {paidPagos.map(p => (
-                      <div key={p.id} className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{p.concepto}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-stone-500 mt-0.5">{fmtDate(p.fecha)} · {p.limpiezas} limpiezas · {p.km} km</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-sm font-medium tabular-nums text-slate-800 dark:text-stone-100">{fmtCurrency(p.importe)}</span>
-                          <CheckCircle2 size={14} className="text-emerald-500" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )
             )}
           </div>
 
@@ -1243,6 +1252,105 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de pago directo ── */}
+      {showPayModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 dark:bg-black/50 backdrop-blur-sm" onClick={() => setShowPayModal(false)} />
+          <div className="relative bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-150">
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-xl bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center">
+                  <Banknote size={15} className="text-orange-500" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-slate-800 dark:text-stone-100">Registrar pago</p>
+                  <p className="text-[11px] text-slate-400 dark:text-stone-500">{worker.fullName}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPayModal(false)} className="text-slate-300 dark:text-stone-600 hover:text-slate-500 dark:hover:text-stone-400 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Resumen pendiente */}
+            <div className="mb-5 px-3 py-2.5 bg-stone-50 dark:bg-stone-800 rounded-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-slate-400 dark:text-stone-500">Total pendiente</span>
+                <span className="text-sm font-medium tabular-nums text-slate-800 dark:text-stone-100">{fmtCurrency(remainingDue)}</span>
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] text-slate-300 dark:text-stone-600">
+                  {remainingBreakdown.limpiezas > 0 && `${remainingBreakdown.limpiezas} limpiezas`}
+                  {remainingBreakdown.limpiezas > 0 && remainingBreakdown.km > 0 && ' · '}
+                  {remainingBreakdown.km > 0 && `${remainingBreakdown.km} km`}
+                </span>
+                {(() => {
+                  const afterPay = Math.max(0, remainingDue - (parseFloat(payAmount.replace(',', '.')) || 0));
+                  const afterBreakdown = computeBreakdown(afterPay);
+                  const payNum = parseFloat(payAmount.replace(',', '.')) || 0;
+                  if (payNum <= 0) return null;
+                  return (
+                    <span className="text-[10px] text-orange-500 dark:text-orange-400 font-medium">
+                      {afterPay <= 0
+                        ? '✓ Al día'
+                        : `Queda: ${afterBreakdown.limpiezas > 0 ? `${afterBreakdown.limpiezas} limp` : ''}${afterBreakdown.limpiezas > 0 && afterBreakdown.km > 0 ? ' · ' : ''}${afterBreakdown.km > 0 ? `${afterBreakdown.km} km` : ''}`
+                      }
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Campos */}
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-[11px] text-slate-400 dark:text-stone-500 font-medium uppercase tracking-wide block mb-1.5">Asunto</label>
+                <input
+                  type="text"
+                  value={payAsunto}
+                  onChange={e => setPayAsunto(e.target.value)}
+                  placeholder="Ej. Nómina abril 2026"
+                  className="w-full px-3 py-2.5 text-xs bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-slate-700 dark:text-stone-300 placeholder:text-stone-300 dark:placeholder:text-stone-600 focus:outline-none focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-900/50 transition-all"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 dark:text-stone-500 font-medium uppercase tracking-wide block mb-1.5">Cantidad</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-stone-500">€</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    max={remainingDue}
+                    value={payAmount}
+                    onChange={e => setPayAmount(e.target.value)}
+                    className="w-full pl-7 pr-3 py-2.5 text-xs bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-slate-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-900/50 transition-all tabular-nums"
+                  />
+                </div>
+                <button
+                  onClick={() => setPayAmount(remainingDue.toFixed(2))}
+                  className="text-[10px] text-orange-500 hover:text-orange-600 transition-colors mt-1"
+                >
+                  Pagar todo ({fmtCurrency(remainingDue)})
+                </button>
+              </div>
+            </div>
+
+            {/* Acción */}
+            <button
+              onClick={handleDirectPay}
+              disabled={paying2 || !payAmount || parseFloat(payAmount.replace(',', '.')) <= 0}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {paying2 ? <Loader2 size={14} className="animate-spin" /> : <CheckCheck size={14} />}
+              Realizar pago
+            </button>
           </div>
         </div>
       )}
