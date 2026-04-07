@@ -1,0 +1,68 @@
+{
+  "project": "BaseDatosPagosRH",
+  "theme": "Bleached Glass Premium",
+  "tokens": {
+    "colors": {
+      "accent": {
+        "hex": "#ea621c",
+        "tailwind": "orange-600",
+        "hover": "orange-700",
+        "focus_ring": {
+          "light": "orange-300",
+          "dark": "orange-800"
+        }
+      },
+      "text": {
+        "title": {
+          "light": "slate-800",
+          "dark": "stone-100"
+        },
+        "subtitle": {
+          "light": "slate-500",
+          "dark": "stone-400"
+        },
+        "muted": {
+          "light": "slate-400",
+          "dark": "stone-500"
+        },
+        "accent": "orange-500"
+      },
+      "surfaces": {
+        "glass": {
+          "bg_light": "white/80",
+          "bg_dark": "stone-900",
+          "blur": "backdrop-blur-md"
+        },
+        "background": {
+          "light": "#F5F4F2",
+          "dark": "#1c1a18"
+        },
+        "border": {
+          "light": "white/60",
+          "dark": "stone-700/50"
+        },
+        "item_hover": {
+          "light": "stone-100/50",
+          "dark": "stone-700/30"
+        }
+      }
+    },
+    "effects": {
+      "shadows": {
+        "soft": "0 2px 6px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.01)"
+      },
+      "animations": {
+        "page_transition": "animate-in fade-in slide-in-from-bottom-2 duration-700"
+      }
+    },
+    "typography": {
+      "font_family": {
+        "main": "Inter, sans-serif",
+        "display": "font-display"
+      },
+      "letter_spacing": {
+        "tight": "tracking-tight"
+      }
+    }
+  }
+}

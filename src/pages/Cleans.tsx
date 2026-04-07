@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ClipboardList,
   Sparkles,
@@ -10,7 +10,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
-import { NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
+import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker } from '../services/mockData';
 
 type TabType = 'normal' | 'initial' | 'handyman';
 
@@ -20,8 +20,16 @@ const Cleans: React.FC = () => {
   const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
   const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+
+  const photoMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    workers.forEach(w => { if (w.photo) map[w.fullName] = w.photo; });
+    return map;
+  }, [workers]);
 
   useEffect(() => {
+    appsScriptApi.getWorkers().then(setWorkers);
     const fetchAllData = async () => {
       setLoading(true);
       try {
@@ -104,9 +112,9 @@ const Cleans: React.FC = () => {
       {/* Content Area */}
       <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          {activeTab === 'normal' && <TableNormalCleans data={normalCleans} />}
-          {activeTab === 'initial' && <TableInitialCleans data={initialCleans} />}
-          {activeTab === 'handyman' && <TableHandyman data={handymanRecords} />}
+          {activeTab === 'normal' && <TableNormalCleans data={normalCleans} photoMap={photoMap} />}
+          {activeTab === 'initial' && <TableInitialCleans data={initialCleans} photoMap={photoMap} />}
+          {activeTab === 'handyman' && <TableHandyman data={handymanRecords} photoMap={photoMap} />}
         </div>
       </div>
     </div>
@@ -134,7 +142,7 @@ const thClass = "px-6 py-5 sm:px-8 sm:py-6 text-xs font-normal text-slate-400 da
 const tdClass = "px-6 py-5 sm:px-8 sm:py-7";
 
 // Sub-components: Tables
-const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) => (
+const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<string, string> }> = ({ data, photoMap }) => (
   <table className="w-full text-left border-collapse text-xs sm:text-sm">
     <thead>
       <tr className="border-b border-stone-100 dark:border-stone-800">
@@ -152,8 +160,14 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) =>
         <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
           <td className={tdClass}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
-                {r.nombre.charAt(0)}
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
+                {photoMap[`${r.nombre} ${r.apellidos}`] ? (
+                  <img src={photoMap[`${r.nombre} ${r.apellidos}`]} alt={r.nombre} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="w-full h-full flex items-center justify-center text-[10px] font-normal text-slate-500 dark:text-stone-400">
+                    {r.nombre.charAt(0)}
+                  </span>
+                )}
               </div>
               <div>
                 <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
@@ -191,7 +205,7 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[] }> = ({ data }) =>
   </table>
 );
 
-const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) => (
+const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Record<string, string> }> = ({ data, photoMap }) => (
   <table className="w-full text-left border-collapse text-xs sm:text-sm">
     <thead>
       <tr className="border-b border-stone-100 dark:border-stone-800">
@@ -209,8 +223,14 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) 
         <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
           <td className={tdClass}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
-                {r.nombre.charAt(0)}
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
+                {photoMap[`${r.nombre} ${r.apellidos}`] ? (
+                  <img src={photoMap[`${r.nombre} ${r.apellidos}`]} alt={r.nombre} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="w-full h-full flex items-center justify-center text-[10px] font-normal text-slate-500 dark:text-stone-400">
+                    {r.nombre.charAt(0)}
+                  </span>
+                )}
               </div>
               <div>
                 <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
@@ -248,7 +268,7 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[] }> = ({ data }) 
   </table>
 );
 
-const TableHandyman: React.FC<{ data: HandymanRecord[] }> = ({ data }) => (
+const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string, string> }> = ({ data, photoMap }) => (
   <table className="w-full text-left border-collapse text-xs sm:text-sm">
     <thead>
       <tr className="border-b border-stone-100 dark:border-stone-800">
@@ -266,8 +286,14 @@ const TableHandyman: React.FC<{ data: HandymanRecord[] }> = ({ data }) => (
         <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
           <td className={tdClass}>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 flex items-center justify-center text-[10px] font-normal flex-shrink-0 soft-shadow">
-                {r.nombre.charAt(0)}
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
+                {photoMap[`${r.nombre} ${r.apellidos}`] ? (
+                  <img src={photoMap[`${r.nombre} ${r.apellidos}`]} alt={r.nombre} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="w-full h-full flex items-center justify-center text-[10px] font-normal text-slate-500 dark:text-stone-400">
+                    {r.nombre.charAt(0)}
+                  </span>
+                )}
               </div>
               <div>
                 <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>

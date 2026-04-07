@@ -163,8 +163,14 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-normal flex-shrink-0 transition-colors soft-shadow bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-none">
-                      {worker.fullName.charAt(0)}
+                    <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden transition-colors soft-shadow bg-white dark:bg-stone-800">
+                      {worker.photo ? (
+                        <img src={worker.photo} alt={worker.fullName} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="w-full h-full flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
+                          {worker.fullName.charAt(0)}
+                        </span>
+                      )}
                     </div>
                     <p className={`text-sm truncate transition-colors ${isSelected ? 'text-orange-500' : 'text-slate-800 dark:text-stone-200'}`}>
                       {worker.fullName}

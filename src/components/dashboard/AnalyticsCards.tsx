@@ -6,11 +6,13 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
 
 interface AnalyticsCardsProps {
   checkIns: CheckInOut[];
   selectedWorker?: Worker | null;
   onWorkerSelect?: (worker: Worker | null) => void;
+  workers?: Worker[];
 }
 
 const fmtTime = (iso: string) =>
@@ -55,32 +57,6 @@ const PulseDot: React.FC<{
       <circle cx={cx} cy={cy} r={4.5} fill="#f97316" stroke="#fff" strokeWidth={2.5} />
     </g>
   );
-};
-
-const useAnimatedNumber = (target: number, duration = 600) => {
-  const [display, setDisplay] = useState(target);
-  const prev = useRef(target);
-  const raf  = useRef<number>(0);
-
-  useEffect(() => {
-    const from  = prev.current;
-    const delta = target - from;
-    if (delta === 0) return;
-
-    const start = performance.now();
-    const tick  = (now: number) => {
-      const t = Math.min((now - start) / duration, 1);
-      const ease = 1 - Math.pow(1 - t, 3);
-      setDisplay(Math.round(from + delta * ease));
-      if (t < 1) raf.current = requestAnimationFrame(tick);
-      else prev.current = target;
-    };
-
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
-  }, [target, duration]);
-
-  return display;
 };
 
 type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
@@ -173,7 +149,12 @@ const CustomTooltip: React.FC<{
 };
 
 
-const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker, onWorkerSelect }) => {
+const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorker, onWorkerSelect, workers }) => {
+  const photoMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    workers?.forEach(w => { if (w.photo) map[w.fullName] = w.photo; });
+    return map;
+  }, [workers]);
   const [period, setPeriod]         = useState<Period>('semanal');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
@@ -368,8 +349,14 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ checkIns, selectedWorke
                 }`}
               >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 flex items-center justify-center text-xs text-slate-500 dark:text-stone-400 font-medium flex-shrink-0 soft-shadow">
-                  {entry.cleanerName.charAt(0)}
+                <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
+                  {photoMap[entry.cleanerName] ? (
+                    <img src={photoMap[entry.cleanerName]} alt={entry.cleanerName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="w-full h-full flex items-center justify-center text-xs text-slate-500 dark:text-stone-400 font-medium">
+                      {entry.cleanerName.charAt(0)}
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{entry.cleanerName}</p>
