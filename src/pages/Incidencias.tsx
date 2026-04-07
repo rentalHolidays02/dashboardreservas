@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Loader2 } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Loader2, Search, Filter } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { Incidencia } from '../services/mockData';
+import IncidentFilterModal, { IncidentFilters } from '../components/incidencias/IncidentFilterModal';
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -13,6 +14,17 @@ const fmtCost = (n: number) =>
 const Incidencias: React.FC = () => {
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter Modal state
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filters, setFilters] = useState<IncidentFilters>({
+    startDate: '',
+    endDate: '',
+    paidBy: 'all',
+    minCost: 0,
+    maxCost: 1000
+  });
 
   useEffect(() => {
     appsScriptApi.getRecentIncidencias(50).then(data => {
@@ -20,6 +32,36 @@ const Incidencias: React.FC = () => {
       setLoading(false);
     });
   }, []);
+
+  const activeFiltersCount = React.useMemo(() => {
+    let count = 0;
+    if (filters.startDate || filters.endDate) count++;
+    if (filters.paidBy !== 'all') count++;
+    if (filters.minCost > 0 || filters.maxCost < 1000) count++;
+    return count;
+  }, [filters]);
+
+  const filteredIncidencias = React.useMemo(() => {
+    return incidencias.filter(inc => {
+      const s = searchTerm.toLowerCase();
+      const matchSearch = 
+        inc.userName.toLowerCase().includes(s) ||
+        inc.accommodationName.toLowerCase().includes(s) ||
+        inc.description.toLowerCase().includes(s);
+
+      if (!matchSearch) return false;
+
+      // Filter matching
+      if (filters.paidBy !== 'all' && inc.pagadoPor !== filters.paidBy) return false;
+      if (inc.coste < filters.minCost || inc.coste > filters.maxCost) return false;
+      
+      const incDate = inc.timestamp.split('T')[0];
+      if (filters.startDate && incDate < filters.startDate) return false;
+      if (filters.endDate && incDate > filters.endDate) return false;
+
+      return true;
+    });
+  }, [incidencias, searchTerm, filters]);
 
   if (loading) {
     return (
@@ -31,28 +73,63 @@ const Incidencias: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="mb-10 pb-6 border-b border-slate-200 dark:border-stone-800">
-        <div className="flex items-center gap-3">
-          <AlertTriangle size={24} className="text-slate-800 dark:text-stone-300" />
-          <h1 className="text-3xl font-medium tracking-tight text-slate-900 dark:text-stone-100 font-display">Incidencias</h1>
-          {incidencias.length > 0 && (
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm bg-red-100 dark:bg-red-900/40 text-red-500 font-medium">
-              {incidencias.length}
-            </span>
-          )}
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
+      
+      {/* Header & Toolbar unificados */}
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-1 mb-2">
+        <h1 className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display shrink-0">
+          Incidencias
+        </h1>
+
+        <div className="flex flex-col md:flex-row gap-3 justify-end items-center flex-1">
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar trabajador o apto..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs font-normal placeholder:text-slate-400 dark:placeholder:text-stone-500 focus:outline-none transition-all hover:bg-white/80 dark:hover:bg-stone-800/60 focus:bg-white dark:focus:bg-stone-900"
+            />
+          </div>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsFilterModalOpen(true)}
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all active:scale-[0.98] relative ${
+                activeFiltersCount > 0 ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
+              }`}
+            >
+              <Filter size={12} className="text-orange-500" />
+              <span>Filtro</span>
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            <IncidentFilterModal 
+              isOpen={isFilterModalOpen}
+              onClose={() => setIsFilterModalOpen(false)}
+              filters={filters}
+              onApply={(newFilters) => {
+                setFilters(newFilters);
+              }}
+            />
+          </div>
         </div>
       </header>
 
       <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden">
-        {incidencias.length === 0 ? (
+        {filteredIncidencias.length === 0 ? (
           <div className="px-5 py-12 flex flex-col items-center justify-center gap-2">
             <AlertTriangle size={32} className="text-slate-300 dark:text-stone-700" />
-            <p className="text-sm text-slate-400 dark:text-stone-500">No hay incidencias registradas</p>
+            <p className="text-sm text-slate-400 dark:text-stone-500">No se encontraron incidencias</p>
           </div>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-stone-800">
-            {incidencias.map((inc) => (
+            {filteredIncidencias.map((inc) => (
               <li key={inc.id} className="px-5 py-4 hover:bg-slate-50 dark:hover:bg-stone-800/50 transition-colors">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-slate-400 dark:text-stone-500">{inc.userName}</span>
@@ -79,13 +156,13 @@ const Incidencias: React.FC = () => {
                       {fmtCost(inc.coste)}
                     </span>
                     {inc.pagadoPor === 'limpiador' ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800/50 rounded-md px-2 py-0.5">
-                        <UserRound size={10} />
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50/50 dark:bg-orange-400/10 border border-orange-100/50 dark:border-orange-900/30 rounded-md px-1.5 py-0.5">
+                        <UserRound size={10} className="text-orange-400" />
                         Limpiador
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800/50 rounded-md px-2 py-0.5">
-                        <Building2 size={10} />
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-400/10 border border-amber-100/50 dark:border-amber-900/30 rounded-md px-1.5 py-0.5">
+                        <Building2 size={10} className="text-amber-400" />
                         Empresa
                       </span>
                     )}
