@@ -10,6 +10,7 @@ import {
   Moon,
   Sun,
   Home,
+  FileText,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -29,7 +30,7 @@ interface SidebarProps {
 
 type IconComponent = React.FC<LucideProps>;
 
-const categories: { label: string; items: { Icon: IconComponent; label: string; path: string }[] }[] = [
+const categories: { label: string; items: { Icon: IconComponent; label: string; path: string; prominent?: boolean }[] }[] = [
   {
     label: 'PRINCIPAL',
     items: [
@@ -50,6 +51,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     items: [
       { Icon: Banknote, label: 'Pagos', path: '/pagos' },
       { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
+      { Icon: FileText, label: 'Generar Informe', path: '/generar-informe', prominent: true },
     ],
   },
 ];
@@ -143,8 +145,23 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               <ul className="space-y-0.5 px-3">
-                {cat.items.map(({ Icon, label, path }) => {
+                {cat.items.map(({ Icon, label, path, prominent }) => {
                   const active = location.pathname === path;
+                  
+                  const linkBase = "flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md text-sm tracking-tight transition-all duration-200";
+                  
+                  const linkClasses = prominent 
+                    ? `${linkBase} mt-1 ${active ? 'bg-orange-600 text-white' : 'bg-orange-500 hover:bg-orange-600 text-white'}`
+                    : `${linkBase} ${active ? 'text-orange-600 dark:text-orange-500' : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 hover:bg-white/25 dark:hover:bg-stone-700/40'}`;
+
+                  const iconClasses = prominent
+                    ? "text-white"
+                    : active ? "text-orange-700" : "";
+
+                  const textClasses = prominent
+                    ? "font-medium text-white"
+                    : active ? "font-normal" : "font-normal text-slate-500";
+
                   return (
                     <li key={path}>
                       <Link
@@ -157,18 +174,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                           });
                         }}
                         title={collapsed ? label : undefined}
-                        className={`flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md
-                          text-sm tracking-tight transition-all duration-200
-                          ${active
-                            ? 'text-orange-600 dark:text-orange-500'
-                            : 'text-slate-500 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-200 hover:bg-white/25 dark:hover:bg-stone-700/40'
-                          }`}
+                        className={linkClasses}
                       >
-                        <span className={`shrink-0 w-8 h-8 flex items-center justify-center ${active ? 'text-orange-700' : ''}`}>
+                        <span className={`shrink-0 w-8 h-8 flex items-center justify-center ${iconClasses}`}>
                           <Icon size={18} />
                         </span>
-                        <span className={`sidebar-fade whitespace-nowrap
-                          ${active ? 'font-normal' : 'font-normal text-slate-500'}`}>
+                        <span className={`sidebar-fade whitespace-nowrap ${textClasses}`}>
                           {label}
                         </span>
                       </Link>

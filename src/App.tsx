@@ -10,6 +10,7 @@ import Incidencias from './pages/Incidencias';
 import Pagos from './pages/Pagos';
 import Alojamientos from './pages/Alojamientos';
 import Analisis from './pages/Analisis';
+import GenerarInforme from './pages/GenerarInforme';
 import MainLayout from './components/layout/MainLayout';
 import { User } from './services/mockData';
 
@@ -123,6 +124,19 @@ function App() {
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
                 <Analisis />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/generar-informe"
+          element={
+            user ? (
+              <MainLayout userRole={user.role} onLogout={handleLogout}>
+                <GenerarInforme />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
