@@ -9,6 +9,7 @@ import Workers from './pages/Workers';
 import Incidencias from './pages/Incidencias';
 import Pagos from './pages/Pagos';
 import Alojamientos from './pages/Alojamientos';
+import Analisis from './pages/Analisis';
 import MainLayout from './components/layout/MainLayout';
 import { User } from './services/mockData';
 
@@ -109,6 +110,19 @@ function App() {
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
                 <Alojamientos />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/analisis"
+          element={
+            user ? (
+              <MainLayout userRole={user.role} onLogout={handleLogout}>
+                <Analisis />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
