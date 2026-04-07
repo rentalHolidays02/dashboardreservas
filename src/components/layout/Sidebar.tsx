@@ -34,6 +34,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     label: 'PRINCIPAL',
     items: [
       { Icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+      { Icon: Banknote, label: 'Análisis', path: '/analisis' },
     ],
   },
   {
