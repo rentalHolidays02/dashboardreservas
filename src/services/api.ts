@@ -14,7 +14,9 @@ import {
   NormalCleanRecord,
   InitialCleanRecord,
   HandymanRecord,
-  PagoRecord
+  PagoRecord,
+  Accommodation,
+  MOCK_ACCOMMODATIONS
 } from './mockData';
 
 // Simulación de persistencia en localStorage para el MVP
@@ -38,6 +40,20 @@ let currentWorkers = getStoredWorkers();
 const saveWorkers = (workers: Worker[]) => {
   currentWorkers = workers;
   localStorage.setItem('rh_workers', JSON.stringify(workers));
+};
+
+// Accommodations persistence
+const getStoredAccommodations = (): Accommodation[] => {
+  const stored = localStorage.getItem('rh_accommodations');
+  if (stored) return JSON.parse(stored);
+  return MOCK_ACCOMMODATIONS;
+};
+
+let currentAccommodations = getStoredAccommodations();
+
+const saveAccommodations = (accommodations: Accommodation[]) => {
+  currentAccommodations = accommodations;
+  localStorage.setItem('rh_accommodations', JSON.stringify(accommodations));
 };
 
 // Pagos persistence
@@ -141,6 +157,37 @@ export const appsScriptApi = {
       totalMoney,
       totalCleans
     };
+  },
+
+  getAccommodations: async (): Promise<Accommodation[]> => {
+    await delay(500);
+    return currentAccommodations;
+  },
+
+  updateAccommodation: async (accommodationData: Accommodation): Promise<Accommodation> => {
+    await delay(1000);
+    const updatedAccommodations = currentAccommodations.map(a => 
+      a.id === accommodationData.id ? { ...accommodationData } : a
+    );
+    saveAccommodations(updatedAccommodations);
+    return accommodationData;
+  },
+
+  addAccommodation: async (accommodationData: Omit<Accommodation, 'id'>): Promise<Accommodation> => {
+    await delay(1000);
+    const lastId = currentAccommodations.length > 0 
+      ? Math.max(...currentAccommodations.map(a => {
+          const numericPart = a.id.startsWith('a') ? a.id.slice(1) : a.id;
+          return parseInt(numericPart) || 0;
+        }))
+      : 0;
+    const newAccommodation: Accommodation = {
+      ...accommodationData,
+      id: `a${lastId + 1}`
+    };
+    const updatedAccommodations = [...currentAccommodations, newAccommodation];
+    saveAccommodations(updatedAccommodations);
+    return newAccommodation;
   },
 
   getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
