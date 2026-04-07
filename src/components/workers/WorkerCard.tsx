@@ -26,7 +26,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
   const initials = getInitials(worker.fullName);
 
   return (
-    <div className="group bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-all duration-300 overflow-hidden">
+    <div className="group bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 hover:scale-[0.98] hover:opacity-80 transition-all duration-300 overflow-hidden">
 
       {/* Header */}
       <div className="p-5 flex items-start justify-between">
@@ -47,7 +47,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-stone-100 leading-tight group-hover:text-orange-500 transition-colors">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-stone-100 leading-tight transition-colors">
               {worker.fullName}
             </h3>
             <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500 mt-0.5">

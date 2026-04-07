@@ -26,6 +26,17 @@ export interface Worker {
   photo?: string;
 }
 
+export interface Accommodation {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  zipCode: string;
+  notes?: string;
+  active: boolean;
+  image?: string;
+}
+
 export const MOCK_USERS: (User & { password: string })[] = [
   {
     email: 'admin@rh.local',
@@ -133,6 +144,60 @@ export const MOCK_WORKERS: Worker[] = [
     accommodations: ['Ático Sol 7'],
     tipoPago: 'bizum',
     pagoPorReserva: 20
+  }
+];
+
+export const MOCK_ACCOMMODATIONS: Accommodation[] = [
+  {
+    id: 'a1',
+    name: 'Apt. Ramblas 12',
+    address: 'Las Ramblas, 12, 2º 1ª',
+    city: 'Barcelona',
+    zipCode: '08002',
+    active: true,
+    notes: 'Código portal: 1234. Llave en cajetín.'
+  },
+  {
+    id: 'a2',
+    name: 'Casa Marina 3B',
+    address: 'Paseo Marítimo, 45',
+    city: 'Barcelona',
+    zipCode: '08003',
+    active: true,
+    notes: 'Portero físico de 9 a 20h.'
+  },
+  {
+    id: 'a3',
+    name: 'Ático Sol 7',
+    address: 'Calle del Sol, 7',
+    city: 'Madrid',
+    zipCode: '28013',
+    active: true
+  },
+  {
+    id: 'a4',
+    name: 'Estudio Gracia 5',
+    address: 'Carrer de Gràcia, 5',
+    city: 'Barcelona',
+    zipCode: '08012',
+    active: true
+  },
+  {
+    id: 'a5',
+    name: 'Loft Born 2',
+    address: 'Carrer del Born, 2',
+    city: 'Barcelona',
+    zipCode: '08003',
+    active: false,
+    notes: 'En reformas hasta mayo.'
+  },
+  {
+    id: 'a6',
+    name: 'Penthouse Diagonal',
+    address: 'Avenida Diagonal, 450',
+    city: 'Barcelona',
+    zipCode: '08036',
+    active: true
   }
 ];
 export interface BaseRecord {

@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Moon,
   Sun,
+  Home,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -40,6 +41,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     items: [
       { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
       { Icon: Users, label: 'Trabajadores', path: '/workers' },
+      { Icon: Home, label: 'Alojamientos', path: '/alojamientos' },
     ],
   },
   {
