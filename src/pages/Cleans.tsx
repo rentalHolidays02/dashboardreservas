@@ -8,9 +8,11 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Filter,
 } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker } from '../services/mockData';
+import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilterModal';
 
 type TabType = 'normal' | 'initial' | 'handyman';
 
@@ -21,6 +23,16 @@ const Cleans: React.FC = () => {
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
   const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter Modal state
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filters, setFilters] = useState<CleanFilters>({
+    startDate: '',
+    endDate: '',
+    apartment: '',
+    status: 'all'
+  });
 
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -50,6 +62,55 @@ const Cleans: React.FC = () => {
     fetchAllData();
   }, []);
 
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.startDate || filters.endDate) count++;
+    if (filters.apartment) count++;
+    if (filters.status !== 'all') count++;
+    return count;
+  }, [filters]);
+
+  const applyFilters = (record: NormalCleanRecord | InitialCleanRecord | HandymanRecord) => {
+    const s = searchTerm.toLowerCase();
+    
+    // Search matching
+    let fullName = '';
+    let telefono = '';
+    let apt = '';
+    let fecha = '';
+    let checked = false;
+
+    if ('nombre' in record) {
+      fullName = `${record.nombre} ${record.apellidos}`.toLowerCase();
+      telefono = record.telefono.toLowerCase();
+      apt = ('apartamento' in record ? record.apartamento : record.alojamiento).toLowerCase();
+      fecha = 'checkinFecha' in record ? record.checkinFecha : record.fechaLlegada;
+      checked = 'checked' in record ? record.checked : record.estadoCompletado === 'Completado';
+    }
+
+    const matchSearch = 
+      fullName.includes(s) || 
+      telefono.includes(s) || 
+      apt.includes(s);
+
+    if (!matchSearch) return false;
+
+    // Filter matching
+    if (filters.apartment && !apt.includes(filters.apartment.toLowerCase())) return false;
+    
+    if (filters.status === 'verified' && !checked) return false;
+    if (filters.status === 'unverified' && checked) return false;
+
+    if (filters.startDate && fecha < filters.startDate) return false;
+    if (filters.endDate && fecha > filters.endDate) return false;
+
+    return true;
+  };
+
+  const filteredNormal = useMemo(() => normalCleans.filter(applyFilters), [normalCleans, searchTerm, filters]);
+  const filteredInitial = useMemo(() => initialCleans.filter(applyFilters), [initialCleans, searchTerm, filters]);
+  const filteredHandyman = useMemo(() => handymanRecords.filter(applyFilters), [handymanRecords, searchTerm, filters]);
+
   const tabs = [
     { id: 'normal', label: 'Limpieza Normal', icon: <ClipboardList size={18} /> },
     { id: 'initial', label: 'Limpieza Inicial', icon: <Sparkles size={18} /> },
@@ -67,19 +128,49 @@ const Cleans: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-normal tracking-tight text-slate-600 dark:text-stone-400 font-display">Registros</h1>
-          <p className="text-slate-500 dark:text-stone-500 mt-1 text-sm font-light">Gestión de check-ins y check-outs de trabajadores.</p>
-        </div>
+      {/* Header & Toolbar unificados */}
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-1 mb-2">
+        <h1 className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display shrink-0">
+          Registros de Limpieza
+        </h1>
 
-        <div className="relative group">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 group-focus-within:text-orange-500 transition-colors" size={16} />
-          <input
-            type="text"
-            placeholder="Buscar por apto o nombre..."
-            className="pl-10 pr-4 py-2 bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-stone-100/60 dark:border-stone-700/60 rounded-xl focus:outline-none focus:bg-white dark:focus:bg-stone-900 focus:border-orange-200 dark:focus:border-orange-700 w-full md:w-64 transition-all soft-shadow placeholder:text-stone-400 dark:placeholder:text-stone-400 text-sm text-slate-700 dark:text-stone-300"
-          />
+        <div className="flex flex-col md:flex-row gap-3 justify-end items-center flex-1">
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar trabajador o apto..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs font-normal placeholder:text-slate-400 dark:placeholder:text-stone-500 focus:outline-none transition-all hover:bg-white/80 dark:hover:bg-stone-800/60 focus:bg-white dark:focus:bg-stone-900"
+            />
+          </div>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsFilterModalOpen(true)}
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all active:scale-[0.98] relative ${
+                activeFiltersCount > 0 ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
+              }`}
+            >
+              <Filter size={12} className="text-orange-500" />
+              <span>Filtro</span>
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            <CleanFilterModal 
+              isOpen={isFilterModalOpen}
+              onClose={() => setIsFilterModalOpen(false)}
+              filters={filters}
+              onApply={(newFilters) => {
+                setFilters(newFilters);
+              }}
+            />
+          </div>
         </div>
       </header>
 
@@ -112,9 +203,9 @@ const Cleans: React.FC = () => {
       {/* Content Area */}
       <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
-          {activeTab === 'normal' && <TableNormalCleans data={normalCleans} photoMap={photoMap} />}
-          {activeTab === 'initial' && <TableInitialCleans data={initialCleans} photoMap={photoMap} />}
-          {activeTab === 'handyman' && <TableHandyman data={handymanRecords} photoMap={photoMap} />}
+          {activeTab === 'normal' && <TableNormalCleans data={filteredNormal} photoMap={photoMap} />}
+          {activeTab === 'initial' && <TableInitialCleans data={filteredInitial} photoMap={photoMap} />}
+          {activeTab === 'handyman' && <TableHandyman data={filteredHandyman} photoMap={photoMap} />}
         </div>
       </div>
     </div>
