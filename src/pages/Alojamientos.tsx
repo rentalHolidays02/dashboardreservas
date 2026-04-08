@@ -55,11 +55,16 @@ const Alojamientos: React.FC = () => {
   const handleSaveAccommodation = async (accommodationData: any) => {
     try {
       if (accommodationData.id) {
-        await appsScriptApi.updateAccommodation(accommodationData as Accommodation);
+        // Edición: actualizamos el estado local directamente con los nuevos datos
+        const updated = await appsScriptApi.updateAccommodation(accommodationData as Accommodation);
+        setAccommodations(prev =>
+          prev.map(a => a.id === updated.id ? updated : a)
+        );
       } else {
-        await appsScriptApi.addAccommodation(accommodationData);
+        // Creación: añadimos el nuevo alojamiento al estado local
+        const created = await appsScriptApi.addAccommodation(accommodationData);
+        setAccommodations(prev => [created, ...prev]);
       }
-      await fetchAccommodations();
     } catch (error) {
       console.error('Error saving accommodation:', error);
       throw error;

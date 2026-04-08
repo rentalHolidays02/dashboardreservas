@@ -33,10 +33,17 @@ const AccommodationCard: React.FC<AccommodationCardProps> = ({ accommodation, as
             <h3 className="text-sm font-normal text-slate-900 dark:text-stone-100 leading-tight transition-colors">
               {toTitleCase(accommodation.name)}
             </h3>
-            <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500 mt-2">
-              <MapPin size={10} className="flex-shrink-0 text-orange-500" />
-              {toTitleCase(accommodation.city)}
-            </span>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500">
+                <MapPin size={10} className="flex-shrink-0 text-orange-500" />
+                {toTitleCase(accommodation.city)}
+              </span>
+              {accommodation.ref && (
+                <span className="text-[10px] font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-500 dark:text-orange-400 px-1.5 py-0.5 rounded-md">
+                  Ref: {accommodation.ref}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <button

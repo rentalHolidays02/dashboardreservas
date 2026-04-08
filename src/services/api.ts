@@ -23,7 +23,7 @@ import {
 const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
 const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4';
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqHkZ8yB1eope2_IESClN0PKWeadZ93fyRx8_50araLaWN_jaayd_90nIYdN3M-nab/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqePxhuFfKsWekF_yC6Pex_5IdQhWhLXY08MIZIxqAsQLkw2BoFEoXB6rSdXG2KjT_/exec';
 
 // Simulación de persistencia en localStorage para el MVP
 const getStoredWorkers = (): Worker[] => {
@@ -198,8 +198,9 @@ export const appsScriptApi = {
           };
 
           return {
-            id: `real_${index + 1}`,
+            id: `real_${index + 2}`,
             name: String(getVal('PROPIEDAD') || 'Sin nombre'),
+            ref: String(getVal('REF') || getVal('Ref') || getVal('ref') || ''),
             address: String(getVal('DIRECCIÓN') || getVal('Dirección') || ''),
             city: String(getVal('POBLACIÓN') || ''),
             zipCode: String(getVal('CP') || ''),
@@ -220,21 +221,48 @@ export const appsScriptApi = {
   },
 
   updateAccommodation: async (accommodationData: Accommodation): Promise<Accommodation> => {
-    await delay(1000);
-    const updatedAccommodations = currentAccommodations.map(a => 
-      a.id === accommodationData.id ? { ...accommodationData } : a
-    );
-    saveAccommodations(updatedAccommodations);
-    return accommodationData;
+    try {
+      const payload = {
+        ...accommodationData,
+        action: 'update'
+      };
+      console.log('Enviando ACTUALIZACIÓN a Google:', payload);
+      
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      // Actualizamos localmente
+      const updatedAccommodations = currentAccommodations.map(a => 
+        a.id === accommodationData.id ? { ...accommodationData } : a
+      );
+      saveAccommodations(updatedAccommodations);
+      
+      return accommodationData;
+    } catch (error) {
+      console.error('Error updating accommodation in Sheets:', error);
+      // Fallback
+      const updatedAccommodations = currentAccommodations.map(a => 
+        a.id === accommodationData.id ? { ...accommodationData } : a
+      );
+      saveAccommodations(updatedAccommodations);
+      return accommodationData;
+    }
   },
 
   addAccommodation: async (accommodationData: Omit<Accommodation, 'id'>): Promise<Accommodation> => {
     try {
-      const response = await fetch(APPS_SCRIPT_URL, {
+      console.log('Enviando NUEVO ALOJAMIENTO a Google:', accommodationData);
+      fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors', // Apps Script requiere no-cors o redirección compleja
+        mode: 'no-cors',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
         },
         body: JSON.stringify(accommodationData),
       });

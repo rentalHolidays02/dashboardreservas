@@ -29,6 +29,7 @@ export interface Worker {
 export interface Accommodation {
   id: string;
   name: string;
+  ref?: string;
   address: string;
   city: string;
   zipCode: string;

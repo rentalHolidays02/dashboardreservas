@@ -22,6 +22,7 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
 
   const initialData: Omit<Accommodation, 'id'> = {
     name: '',
+    ref: '',
     address: '',
     city: '',
     zipCode: '',
@@ -120,9 +121,15 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
           {/* ── Datos generales ── */}
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest">Información general</p>
 
-          <div>
-            <label className={labelClass}><Home size={12} className="text-orange-500" />Nombre del alojamiento</label>
-            <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Ej. Apt. Ramblas 12" required autoFocus={!isEditMode} className={inputClass} />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}><Home size={12} className="text-orange-500" />Nombre del alojamiento</label>
+              <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Ej. Apt. Ramblas 12" required autoFocus={!isEditMode} className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}><Hash size={12} className="text-orange-500" />Referencia (REF)</label>
+              <input type="text" name="ref" value={formData.ref ?? ''} onChange={handleChange} placeholder="Ej. 069" className={inputClass} />
+            </div>
           </div>
 
           <div>
