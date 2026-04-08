@@ -7,6 +7,7 @@ import DashboardFilterModal, { Period } from '../components/dashboard/DashboardF
 import StatsGrid from '../components/analytics/StatsGrid';
 import PerformanceChart from '../components/analytics/PerformanceChart';
 import RankingsGrid from '../components/analytics/RankingsGrid';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const Analisis: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -133,12 +134,7 @@ const Analisis: React.FC = () => {
   }, [workers, checkIns, accommodations]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="animate-spin text-orange-600" size={32} />
-        <p className="text-slate-500 font-medium">Generando analíticas detalladas...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Generando analíticas detalladas..." />;
   }
 
   return (

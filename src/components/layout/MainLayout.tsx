@@ -17,7 +17,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
   const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
   return (
-    <div className="min-h-screen bg-transparent flex flex-col lg:flex-row">
+    <div className="h-screen bg-transparent flex flex-col lg:flex-row overflow-hidden">
       {/* Mobile Header */}
       <div className="lg:hidden bg-transparent p-4 flex items-center justify-between sticky top-0 z-40">
         <span className="font-semibold text-slate-900 dark:text-stone-100 tracking-tight">RH Pagos</span>
@@ -42,10 +42,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
 
       {/* Main Content */}
       <main
-        className="flex-1 p-4 md:p-8 sidebar-main-content"
+        className="flex-1 flex flex-col p-4 md:p-8 sidebar-main-content overflow-hidden"
         style={{ marginLeft: isEffectivelyCollapsed ? '73px' : '240px' }}
       >
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
           {children}
         </div>
       </main>
