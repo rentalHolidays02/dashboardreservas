@@ -17,9 +17,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
   const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
   return (
-    <div className="h-screen bg-transparent flex flex-col lg:flex-row overflow-hidden">
+    <div className="h-screen bg-transparent flex flex-col xl:flex-row overflow-hidden">
       {/* Mobile Header */}
-      <div className="lg:hidden bg-transparent p-4 flex items-center justify-between sticky top-0 z-40">
+      <div className="xl:hidden bg-transparent p-4 flex items-center justify-between sticky top-0 z-40">
         <span className="font-semibold text-slate-900 dark:text-stone-100 tracking-tight">RH Pagos</span>
         <button
           onClick={() => setIsSidebarOpen(true)}

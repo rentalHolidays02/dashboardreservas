@@ -92,15 +92,15 @@ const Sidebar: React.FC<SidebarProps> = ({
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm z-40 xl:hidden"
           onClick={onClose}
         />
       )}
 
       <div
         data-collapsed={collapsed ? 'true' : 'false'}
-        className={`sidebar-panel fixed left-0 top-0 h-full bg-transparent border-r border-slate-200/20 dark:border-stone-700/20 z-50 flex flex-col overflow-hidden
-          ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        className={`sidebar-panel fixed left-0 top-0 h-full bg-slate-50 dark:bg-stone-900 xl:bg-transparent dark:xl:bg-transparent border-r border-slate-200/20 dark:border-stone-700/20 z-50 flex flex-col overflow-hidden
+          ${isOpen ? 'translate-x-0' : '-translate-x-full xl:translate-x-0'}
         `}
         style={{ width: isOpen ? '240px' : collapsed ? '73px' : '240px' }}
         onMouseEnter={handleMouseEnter}
@@ -117,7 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex-1" />
           <button
             onClick={() => { onCollapse(!isCollapsed); setIsHovered(false); onHoverChange(false); }}
-            className={`hidden lg:flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0 sidebar-fade
+            className={`hidden xl:flex items-center justify-center w-7 h-7 rounded-md transition-colors shrink-0 sidebar-fade
               ${isHoverExpanded
                 ? 'text-orange-700 hover:bg-white/50'
                 : 'text-slate-400 hover:bg-white/50'
@@ -127,7 +127,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
           <button
             onClick={onClose}
-            className="lg:hidden flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100"
+            className="xl:hidden flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100"
           >
             <PanelLeft size={18} />
           </button>
@@ -170,7 +170,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           e.preventDefault();
                           requestNavigate(() => {
                             navigate(path);
-                            if (window.innerWidth < 1024) onClose();
+                            if (window.innerWidth < 1280) onClose();
                           });
                         }}
                         title={collapsed ? label : undefined}
