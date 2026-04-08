@@ -12,6 +12,7 @@ import Alojamientos from './pages/Alojamientos';
 import Analisis from './pages/Analisis';
 import GenerarInforme from './pages/GenerarInforme';
 import MainLayout from './components/layout/MainLayout';
+import ChatBot from './components/chatbot/ChatBot';
 import { User } from './services/mockData';
 
 function App() {
@@ -34,6 +35,7 @@ function App() {
     <ThemeProvider>
     <NavigationGuardProvider>
     <BrowserRouter>
+      {user && <ChatBot />}
       <Routes>
         <Route 
           path="/login" 
