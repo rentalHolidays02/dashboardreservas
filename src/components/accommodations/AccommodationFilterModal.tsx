@@ -2,7 +2,7 @@ import React from 'react';
 import { X, CheckCircle2, MapPin, Activity, RotateCcw } from 'lucide-react';
 
 export interface AccommodationFilters {
-  city: 'all' | 'Barcelona' | 'Madrid';
+  city: string; // 'all' o el nombre de la ciudad
   status: 'all' | 'active' | 'inactive';
 }
 
@@ -11,9 +11,16 @@ interface AccommodationFilterModalProps {
   onClose: () => void;
   filters: AccommodationFilters;
   onApply: (filters: AccommodationFilters) => void;
+  availableCities: string[];
 }
 
-const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({ isOpen, onClose, filters, onApply }) => {
+const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  filters, 
+  onApply,
+  availableCities
+}) => {
   const updateFilters = (updates: Partial<AccommodationFilters>) => {
     onApply({ ...filters, ...updates });
   };
@@ -58,21 +65,23 @@ const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({ isO
           {/* Section 1: Ciudad */}
           <div className="space-y-3">
             <p className="text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest text-left">Ciudad</p>
-            <div className="flex flex-col gap-2">
-              {(['all', 'Barcelona', 'Madrid'] as const).map(city => {
+            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+              {['all', ...availableCities].map(city => {
                 const isActive = filters.city === city;
                 return (
                   <button
                     key={city}
                     onClick={() => updateFilters({ city })}
-                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center gap-2 active:scale-[0.98] border ${
+                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center gap-2 active:scale-[0.98] border text-left ${
                       isActive
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
                     {city === 'all' ? <CheckCircle2 size={12} /> : <MapPin size={12} />}
-                    <span className="capitalize">{city === 'all' ? 'Todas las ciudades' : city}</span>
+                    <span className="capitalize whitespace-nowrap overflow-hidden text-ellipsis">
+                      {city === 'all' ? 'Todas las ciudades' : city}
+                    </span>
                   </button>
                 );
               })}
