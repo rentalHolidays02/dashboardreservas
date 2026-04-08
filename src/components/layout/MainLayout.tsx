@@ -42,7 +42,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
 
       {/* Main Content */}
       <main
-        className="flex-1 flex flex-col p-4 md:p-8 sidebar-main-content overflow-hidden"
+        className="flex-1 flex flex-col p-4 md:p-8 sidebar-main-content overflow-y-auto"
         style={{ marginLeft: isEffectivelyCollapsed ? '73px' : '240px' }}
       >
         <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
