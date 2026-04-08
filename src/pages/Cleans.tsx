@@ -13,6 +13,7 @@ import {
 import { appsScriptApi } from '../services/api';
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker } from '../services/mockData';
 import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilterModal';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 type TabType = 'normal' | 'initial' | 'handyman';
 
@@ -118,12 +119,7 @@ const Cleans: React.FC = () => {
   ] as const;
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="animate-spin text-orange-600" size={32} />
-        <p className="text-slate-500 dark:text-stone-400 font-medium">Cargando registros...</p>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (

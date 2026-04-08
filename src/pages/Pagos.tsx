@@ -4,6 +4,7 @@ import { appsScriptApi } from '../services/api';
 import { PagoRecord, Worker } from '../services/mockData';
 import FilterModal, { PagosFilters } from '../components/pagos/FilterModal';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const fmtCurrency = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
@@ -186,10 +187,7 @@ const Pagos: React.FC = () => {
       {/* Contenido Principal / Tabla */}
       <div className="px-1">
         {loading ? (
-          <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 bg-white/40 dark:bg-stone-900/40 rounded-3xl border border-dashed border-stone-200 dark:border-stone-800">
-            <Loader2 className="animate-spin text-orange-500" size={32} />
-            <p className="text-slate-400 dark:text-stone-500 text-xs font-medium">Buscando registros financieros...</p>
-          </div>
+          <LoadingSpinner />
         ) : filteredPagos.length === 0 ? (
           <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-dashed border-stone-200 dark:border-stone-700/50 rounded-3xl p-20 flex flex-col items-center gap-4 text-center soft-shadow">
             <div className="w-16 h-16 bg-stone-50 dark:bg-stone-800 rounded-2xl flex items-center justify-center text-slate-300 dark:text-stone-600">

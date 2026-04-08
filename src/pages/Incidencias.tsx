@@ -4,6 +4,7 @@ import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Load
 import { appsScriptApi } from '../services/api';
 import { Incidencia } from '../services/mockData';
 import IncidentFilterModal, { IncidentFilters } from '../components/incidencias/IncidentFilterModal';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -64,12 +65,7 @@ const Incidencias: React.FC = () => {
   }, [incidencias, searchTerm, filters]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="animate-spin text-blue-600" size={40} />
-        <p className="text-slate-500 dark:text-stone-400 font-medium">Cargando incidencias...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Cargando incidencias..." />;
   }
 
   return (

@@ -5,6 +5,7 @@ import AccommodationModal from '../components/accommodations/AccommodationModal'
 import AccommodationFilterModal, { AccommodationFilters } from '../components/accommodations/AccommodationFilterModal';
 import { appsScriptApi } from '../services/api';
 import { Accommodation, Worker } from '../services/mockData';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const Alojamientos: React.FC = () => {
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
@@ -87,12 +88,7 @@ const Alojamientos: React.FC = () => {
   });
 
   if (loading && accommodations.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 animate-in fade-in duration-700">
-        <Loader2 className="animate-spin text-orange-500" size={32} />
-        <p className="text-slate-400 dark:text-stone-500 text-xs font-normal">Sincronizando base de alojamientos...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Sincronizando base de alojamientos..." />;
   }
 
   return (

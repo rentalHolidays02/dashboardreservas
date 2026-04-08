@@ -5,6 +5,7 @@ import { appsScriptApi } from '../services/api';
 import { Worker, CheckInOut } from '../services/mockData';
 import { Loader2, Search, Filter } from 'lucide-react';
 import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const Dashboard: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -52,12 +53,7 @@ const Dashboard: React.FC = () => {
   }, [workers, searchTerm]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
-        <Loader2 className="animate-spin text-orange-600" size={32} />
-        <p className="text-slate-500 font-medium">Cargando datos del dashboard...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Cargando datos del dashboard..." />;
   }
 
   return (

@@ -6,6 +6,7 @@ import WorkerProfile from '../components/workers/WorkerProfile';
 import WorkerFilterModal, { WorkerFilters } from '../components/workers/WorkerFilterModal';
 import { appsScriptApi } from '../services/api';
 import { Worker } from '../services/mockData';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const Workers: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -95,12 +96,7 @@ const Workers: React.FC = () => {
   });
 
   if (loading && workers.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 animate-in fade-in duration-700">
-        <Loader2 className="animate-spin text-orange-500" size={32} />
-        <p className="text-slate-400 dark:text-stone-500 text-xs font-normal">Sincronizando base de trabajadores...</p>
-      </div>
-    );
+    return <LoadingSpinner message="Sincronizando base de trabajadores..." />;
   }
 
   // Worker profile view
