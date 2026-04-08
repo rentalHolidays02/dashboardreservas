@@ -185,26 +185,29 @@ export const appsScriptApi = {
         return currentAccommodations;
       }
 
-      const headers = data.values[0];
-      const rows = data.values.slice(1);
+      const allValues = data.values as any[][];
+      const headers = allValues[0] as string[];
+      const rows = allValues.slice(1);
 
-      // Mapeo dinámico de columnas
-      const accommodations: Accommodation[] = rows.map((row: any[], index: number) => {
-        const getVal = (headerName: string) => {
-          const idx = headers.findIndex((h: string) => h.trim() === headerName.trim());
-          return idx !== -1 ? row[idx] : undefined;
-        };
+      // Mapeo dinámico de columnas con tipado fuerte
+      const accommodations: Accommodation[] = rows
+        .map((row: any[], index: number): Accommodation => {
+          const getVal = (headerName: string) => {
+            const idx = headers.findIndex((h: string) => h && h.trim() === headerName.trim());
+            return idx !== -1 ? row[idx] : undefined;
+          };
 
-        return {
-          id: `real_${index + 1}`,
-          name: getVal('PROPIEDAD') || 'Sin nombre',
-          address: getVal('DIRECCIÓN') || getVal('Dirección') || '',
-          city: getVal('POBLACIÓN') || '',
-          zipCode: (getVal('CP') || '').toString(),
-          notes: getVal('OBSERVACIONES') || '',
-          active: true
-        };
-      });
+          return {
+            id: `real_${index + 1}`,
+            name: String(getVal('PROPIEDAD') || 'Sin nombre'),
+            address: String(getVal('DIRECCIÓN') || getVal('Dirección') || ''),
+            city: String(getVal('POBLACIÓN') || ''),
+            zipCode: String(getVal('CP') || ''),
+            notes: String(getVal('OBSERVACIONES') || ''),
+            active: true
+          };
+        })
+        .filter((acc: Accommodation) => acc.name && acc.name.trim() !== '' && acc.name !== 'Sin nombre');
 
       // Actualizamos la caché local con la realidad del Excel
       saveAccommodations(accommodations);
