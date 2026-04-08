@@ -29,22 +29,22 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqHkZ8yB1eope2
 const getStoredWorkers = (): Worker[] => {
   try {
     const stored = localStorage.getItem('rh_workers');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        return parsed.map(w => ({
-          netMoneyMonth: 0,
-          cleansCountMonth: 0,
-          kmsMonth: 0,
-          accommodations: [],
-          ...w,
-        }));
-      }
-    }
+    if (!stored) return MOCK_WORKERS;
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return MOCK_WORKERS;
+
+    return parsed.map((w) => ({
+      ...w,
+      netMoneyMonth: w.netMoneyMonth ?? 0,
+      cleansCountMonth: w.cleansCountMonth ?? 0,
+      kmsMonth: w.kmsMonth ?? 0,
+      accommodations: w.accommodations ?? [],
+    }));
   } catch (error) {
-    console.error("Error loading workers from localStorage:", error);
+    console.error('Error loading workers from localStorage:', error);
+    return MOCK_WORKERS;
   }
-  return MOCK_WORKERS;
 };
 
 let currentWorkers = getStoredWorkers();
