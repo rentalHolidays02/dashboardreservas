@@ -25,11 +25,11 @@ const getStoredWorkers = (): Worker[] => {
   if (stored) {
     const parsed: Worker[] = JSON.parse(stored);
     return parsed.map(w => ({
-      netMoneyMonth: 0,
-      cleansCountMonth: 0,
-      kmsMonth: 0,
-      accommodations: [],
       ...w,
+      netMoneyMonth: w.netMoneyMonth ?? 0,
+      cleansCountMonth: w.cleansCountMonth ?? 0,
+      kmsMonth: w.kmsMonth ?? 0,
+      accommodations: w.accommodations ?? [],
     }));
   }
   return MOCK_WORKERS;

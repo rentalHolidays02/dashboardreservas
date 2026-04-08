@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   ClipboardList,
@@ -9,6 +10,7 @@ import {
   XCircle,
   Clock,
   Filter,
+  Info,
 } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker } from '../services/mockData';
@@ -197,7 +199,7 @@ const Cleans: React.FC = () => {
       </div>
 
       {/* Content Area */}
-      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
+      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl">
         <div className="overflow-x-auto">
           {activeTab === 'normal' && <TableNormalCleans data={filteredNormal} photoMap={photoMap} />}
           {activeTab === 'initial' && <TableInitialCleans data={filteredInitial} photoMap={photoMap} />}
@@ -208,214 +210,229 @@ const Cleans: React.FC = () => {
   );
 };
 
-// Shared cell for Ubicación column
-const UbicacionCell: React.FC<{ verified: boolean }> = ({ verified }) => (
-  <div className="flex items-center gap-2">
-    {verified
-      ? <CheckCircle2 size={15} className="text-slate-400 dark:text-stone-500 flex-shrink-0" />
-      : <XCircle size={15} className="text-slate-400 dark:text-stone-500 flex-shrink-0" />
-    }
-    <button
-      type="button"
-      onClick={() => {}}
-      className="text-xs text-slate-400 dark:text-stone-500 underline"
-    >
-      Mapa
-    </button>
-  </div>
+
+// Verification cell component with green/red buttons
+const VerificationCell: React.FC<{ verified: boolean; onClick: (verified: boolean) => void }> = ({ verified, onClick }) => (
+  <button
+    type="button"
+    onClick={() => onClick(!verified)}
+    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium transition ${verified
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-900'
+      : 'bg-red-100 text-red-700 dark:bg-red-900/70 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900'}`}
+  >
+    {verified ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+    <span>{verified ? 'Verificado' : 'No Verificado'}</span>
+  </button>
 );
+
+// Location verification modal component
+const LocationVerificationModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 z-[105] transition-opacity duration-300 ${
+          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={onClose}
+      />
+
+      {/* Popover Content - Small 1x1 modal */}
+      <div className={`absolute z-[110] bg-white/90 dark:bg-stone-900/95 backdrop-blur-xl w-32 h-32 rounded-2xl overflow-hidden border border-white/60 dark:border-stone-800/50 soft-shadow transition-all duration-300 ease-out origin-top-left ${
+        isOpen
+          ? 'opacity-100 scale-100 pointer-events-auto'
+          : 'opacity-0 scale-95 pointer-events-none'
+      }`}>
+
+        {/* Empty content for now */}
+        <div className="p-4 flex items-center justify-center h-full">
+          <div className="text-xs text-slate-400 dark:text-stone-500 text-center">
+            Modal vacío
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
 
 const thClass = "px-6 py-5 sm:px-8 sm:py-6 text-xs font-normal text-slate-400 dark:text-stone-500 capitalize whitespace-nowrap";
 const tdClass = "px-6 py-5 sm:px-8 sm:py-7";
 
+// Observation button component
+const ObservationButton: React.FC<{ text?: string }> = ({ text }) => {
+  const baseButton = (
+    <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-stone-950">
+      <Info size={20} className="text-orange-500" />
+    </div>
+  );
+
+  if (!text || text.trim() === '') {
+    return (
+      <div className="inline-flex items-center justify-center w-10 h-10 rounded-full opacity-50 bg-white dark:bg-stone-950">
+        <Info size={20} className="text-orange-300" />
+      </div>
+    );
+  }
+
+  return baseButton;
+};
+
 // Sub-components: Tables
-const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<string, string> }> = ({ data, photoMap }) => (
-  <table className="w-full text-left border-collapse text-xs sm:text-sm">
-    <thead>
-      <tr className="border-b border-stone-100 dark:border-stone-800">
-        <th className={thClass}>Trabajador</th>
-        <th className={thClass}>Apartamento</th>
-        <th className={thClass}>Check-in</th>
-        <th className={thClass}>Check-out</th>
-        <th className={thClass}>Horas (E/S)</th>
-        <th className={thClass}>Duración</th>
-        <th className={thClass}>Ubicación</th>
-      </tr>
-    </thead>
-    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-      {data.map((r) => (
-        <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
-          <td className={tdClass}>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
-                {photoMap[`${r.nombre} ${r.apellidos}`] ? (
-                  <img src={photoMap[`${r.nombre} ${r.apellidos}`]} alt={r.nombre} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="w-full h-full flex items-center justify-center text-[10px] font-normal text-slate-500 dark:text-stone-400">
-                    {r.nombre.charAt(0)}
-                  </span>
-                )}
-              </div>
-              <div>
-                <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
-                <div className="text-[11px] text-slate-400 dark:text-stone-500 italic font-light mt-0.5">{r.telefono}</div>
-              </div>
-            </div>
-          </td>
-          <td className={tdClass}>
-            <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-              {r.apartamento}
-            </span>
-          </td>
-          <td className={tdClass}>
-            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              {r.checkinFecha}
-            </div>
-          </td>
-          <td className={tdClass}>
-            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              {r.checkoutFecha}
-            </div>
-          </td>
-          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums whitespace-nowrap`}>
-            {r.horaEntrada} — {r.horaSalida}
-          </td>
-          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
-          <td className={tdClass}>
-            <UbicacionCell verified={r.checked} />
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-);
+// Sub-components: Tables
+const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
 
-const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Record<string, string> }> = ({ data, photoMap }) => (
-  <table className="w-full text-left border-collapse text-xs sm:text-sm">
-    <thead>
-      <tr className="border-b border-stone-100 dark:border-stone-800">
-        <th className={thClass}>Trabajador</th>
-        <th className={thClass}>Apartamento</th>
-        <th className={thClass}>Check-in</th>
-        <th className={thClass}>Check-out</th>
-        <th className={thClass}>Horas (E/S)</th>
-        <th className={thClass}>Duración</th>
-        <th className={thClass}>Ubicación</th>
-      </tr>
-    </thead>
-    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-      {data.map((r) => (
-        <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
-          <td className={tdClass}>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
-                {photoMap[`${r.nombre} ${r.apellidos}`] ? (
-                  <img src={photoMap[`${r.nombre} ${r.apellidos}`]} alt={r.nombre} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="w-full h-full flex items-center justify-center text-[10px] font-normal text-slate-500 dark:text-stone-400">
-                    {r.nombre.charAt(0)}
-                  </span>
-                )}
-              </div>
-              <div>
-                <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
-                <div className="text-[11px] text-slate-400 dark:text-stone-500 italic font-light mt-0.5">{r.telefono}</div>
-              </div>
-            </div>
-          </td>
-          <td className={tdClass}>
-            <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-              {r.apartamento}
-            </span>
-          </td>
-          <td className={tdClass}>
-            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              {r.checkinFecha}
-            </div>
-          </td>
-          <td className={tdClass}>
-            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              {r.checkoutFecha}
-            </div>
-          </td>
-          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums whitespace-nowrap`}>
-            {r.horaEntrada} — {r.horaSalida}
-          </td>
-          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
-          <td className={tdClass}>
-            <UbicacionCell verified={r.checked} />
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-);
+  return (
+    <>
+      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+        <thead>
+          <tr className="border-b border-stone-100 dark:border-stone-800">
+            <th className={thClass}>Nombres y Apellidos</th>
+            <th className={thClass}>Verificar Fecha</th>
+            <th className={thClass}>Verificar Ubicación</th>
+            <th className={thClass}>Apartamento</th>
+            <th className={thClass}>Horario</th>
+            <th className={thClass}>Km</th>
+            <th className={thClass}>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+          {data.map((r) => (
+            <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
+              <td className={tdClass}>
+                <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+              </td>
+              <td className={tdClass}>
+                <VerificationCell verified={r.checked} onClick={() => {}} />
+              </td>
+              <td className={tdClass}>
+                <div className="relative">
+                  <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} />
+                  <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
+                </div>
+              </td>
+              <td className={tdClass}>
+                <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+                  {r.apartamento}
+                </span>
+              </td>
+              <td className={`${tdClass} text-slate-600 dark:text-stone-400 text-sm`}>
+                {r.horaEntrada} - {r.horaSalida}
+              </td>
+              <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
+              <td className={`${tdClass} text-center`}>
+                <ObservationButton text={r.observaciones} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+};
 
-const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string, string> }> = ({ data, photoMap }) => (
-  <table className="w-full text-left border-collapse text-xs sm:text-sm">
-    <thead>
-      <tr className="border-b border-stone-100 dark:border-stone-800">
-        <th className={thClass}>Trabajador</th>
-        <th className={thClass}>Apartamento</th>
-        <th className={thClass}>Check-in</th>
-        <th className={thClass}>Check-out</th>
-        <th className={thClass}>Horas (E/S)</th>
-        <th className={thClass}>Duración</th>
-        <th className={thClass}>Ubicación</th>
-      </tr>
-    </thead>
-    <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
-      {data.map((r) => (
-        <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
-          <td className={tdClass}>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
-                {photoMap[`${r.nombre} ${r.apellidos}`] ? (
-                  <img src={photoMap[`${r.nombre} ${r.apellidos}`]} alt={r.nombre} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="w-full h-full flex items-center justify-center text-[10px] font-normal text-slate-500 dark:text-stone-400">
-                    {r.nombre.charAt(0)}
-                  </span>
-                )}
-              </div>
-              <div>
-                <div className="font-normal text-slate-800 dark:text-stone-200 leading-tight">{r.nombre} {r.apellidos}</div>
-                <div className="text-[11px] text-slate-400 dark:text-stone-500 italic font-light mt-0.5">{r.telefono}</div>
-              </div>
-            </div>
-          </td>
-          <td className={tdClass}>
-            <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-              {r.alojamiento}
-            </span>
-          </td>
-          <td className={tdClass}>
-            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              {r.fechaLlegada}
-            </div>
-          </td>
-          <td className={tdClass}>
-            <div className="flex items-center text-slate-600 dark:text-stone-400 whitespace-nowrap">
-              <Clock size={12} className="mr-1 text-slate-400 dark:text-stone-500 flex-shrink-0" />
-              {r.fechaFin}
-            </div>
-          </td>
-          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums whitespace-nowrap`}>
-            {r.horaInicioTarea} — {r.horaFinTarea}
-          </td>
-          <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} min</td>
-          <td className={tdClass}>
-            <UbicacionCell verified={r.estadoCompletado === 'Completado'} />
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-);
+const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+
+  return (
+    <>
+      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+        <thead>
+          <tr className="border-b border-stone-100 dark:border-stone-800">
+            <th className={thClass}>Nombres y Apellidos</th>
+            <th className={thClass}>Verificar Fecha</th>
+            <th className={thClass}>Verificar Ubicación</th>
+            <th className={thClass}>Apartamento</th>
+            <th className={thClass}>Horario</th>
+            <th className={thClass}>Km</th>
+            <th className={thClass}>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+          {data.map((r) => (
+            <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
+              <td className={tdClass}>
+                <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+              </td>
+              <td className={tdClass}>
+                <VerificationCell verified={r.checked} onClick={() => {}} />
+              </td>
+              <td className={tdClass}>
+                <div className="relative">
+                  <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} />
+                  <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
+                </div>
+              </td>
+              <td className={tdClass}>
+                <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+                  {r.apartamento}
+                </span>
+              </td>
+              <td className={`${tdClass} text-slate-600 dark:text-stone-400 text-sm`}>
+                {r.horaEntrada} - {r.horaSalida}
+              </td>
+              <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
+              <td className={`${tdClass} text-center`}>
+                <ObservationButton text={r.observaciones} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+};
+
+const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+
+  return (
+    <>
+      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+        <thead>
+          <tr className="border-b border-stone-100 dark:border-stone-800">
+            <th className={thClass}>Nombres y Apellidos</th>
+            <th className={thClass}>Verificar Fecha</th>
+            <th className={thClass}>Verificar Ubicación</th>
+            <th className={thClass}>Alojamiento</th>
+            <th className={thClass}>Horario</th>
+            <th className={thClass}>Km</th>
+            <th className={thClass}>Detalles del Trabajo</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+          {data.map((r) => (
+            <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
+              <td className={tdClass}>
+                <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+              </td>
+              <td className={tdClass}>
+                <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => {}} />
+              </td>
+              <td className={tdClass}>
+                <div className="relative">
+                  <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => setLocationModalOpen(true)} />
+                  <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
+                </div>
+              </td>
+              <td className={tdClass}>
+                <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+                  {r.alojamiento}
+                </span>
+              </td>
+              <td className={`${tdClass} text-slate-600 dark:text-stone-400 text-sm`}>
+                {r.horaInicioTarea} - {r.horaFinTarea}
+              </td>
+              <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} km</td>
+              <td className={`${tdClass} text-center`}>
+                <ObservationButton text={r.observacionesTarea} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+};
 
 export default Cleans;
