@@ -66,6 +66,13 @@ const Alojamientos: React.FC = () => {
     }
   };
 
+  const availableCities = React.useMemo(() => {
+    const cities = accommodations
+      .map(acc => acc.city.trim())
+      .filter(city => city !== '');
+    return Array.from(new Set(cities)).sort();
+  }, [accommodations]);
+
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
     if (filters.city !== 'all') count++;
@@ -80,7 +87,8 @@ const Alojamientos: React.FC = () => {
       acc.address.toLowerCase().includes(s) ||
       acc.city.toLowerCase().includes(s);
     
-    const matchCity = filters.city === 'all' || acc.city === filters.city;
+    const matchCity = filters.city === 'all' || 
+      acc.city.trim().toLowerCase() === filters.city.trim().toLowerCase();
     const matchStatus = filters.status === 'all' || 
       (filters.status === 'active' ? acc.active : !acc.active);
     
@@ -133,6 +141,7 @@ const Alojamientos: React.FC = () => {
                 isOpen={isFilterModalOpen}
                 onClose={() => setIsFilterModalOpen(false)}
                 filters={filters}
+                availableCities={availableCities}
                 onApply={(newFilters) => {
                   setFilters(newFilters);
                 }}

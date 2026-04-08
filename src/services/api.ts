@@ -19,18 +19,30 @@ import {
   MOCK_ACCOMMODATIONS
 } from './mockData';
 
+// Google Sheets API Configuration
+const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
+const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4';
+const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqHkZ8yB1eope2_IESClN0PKWeadZ93fyRx8_50araLaWN_jaayd_90nIYdN3M-nab/exec';
+
 // Simulación de persistencia en localStorage para el MVP
 const getStoredWorkers = (): Worker[] => {
-  const stored = localStorage.getItem('rh_workers');
-  if (stored) {
-    const parsed: Worker[] = JSON.parse(stored);
-    return parsed.map(w => ({
-      netMoneyMonth: 0,
-      cleansCountMonth: 0,
-      kmsMonth: 0,
-      accommodations: [],
-      ...w,
-    }));
+  try {
+    const stored = localStorage.getItem('rh_workers');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed.map(w => ({
+          netMoneyMonth: 0,
+          cleansCountMonth: 0,
+          kmsMonth: 0,
+          accommodations: [],
+          ...w,
+        }));
+      }
+    }
+  } catch (error) {
+    console.error("Error loading workers from localStorage:", error);
   }
   return MOCK_WORKERS;
 };
@@ -160,8 +172,48 @@ export const appsScriptApi = {
   },
 
   getAccommodations: async (): Promise<Accommodation[]> => {
-    await delay(500);
-    return currentAccommodations;
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Error en la API de Google Sheets: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.values || data.values.length === 0) {
+        return currentAccommodations;
+      }
+
+      const headers = data.values[0];
+      const rows = data.values.slice(1);
+
+      // Mapeo dinámico de columnas
+      const accommodations: Accommodation[] = rows.map((row: any[], index: number) => {
+        const getVal = (headerName: string) => {
+          const idx = headers.findIndex((h: string) => h.trim() === headerName.trim());
+          return idx !== -1 ? row[idx] : undefined;
+        };
+
+        return {
+          id: `real_${index + 1}`,
+          name: getVal('PROPIEDAD') || 'Sin nombre',
+          address: getVal('DIRECCIÓN') || getVal('Dirección') || '',
+          city: getVal('POBLACIÓN') || '',
+          zipCode: (getVal('CP') || '').toString(),
+          notes: getVal('OBSERVACIONES') || '',
+          active: true
+        };
+      });
+
+      // Actualizamos la caché local con la realidad del Excel
+      saveAccommodations(accommodations);
+      return accommodations;
+    } catch (error) {
+      console.error('Error fetching accommodations from Sheets:', error);
+      // fallback a mock data si falla la red
+      return currentAccommodations;
+    }
   },
 
   updateAccommodation: async (accommodationData: Accommodation): Promise<Accommodation> => {
@@ -174,20 +226,46 @@ export const appsScriptApi = {
   },
 
   addAccommodation: async (accommodationData: Omit<Accommodation, 'id'>): Promise<Accommodation> => {
-    await delay(1000);
-    const lastId = currentAccommodations.length > 0 
-      ? Math.max(...currentAccommodations.map(a => {
-          const numericPart = a.id.startsWith('a') ? a.id.slice(1) : a.id;
-          return parseInt(numericPart) || 0;
-        }))
-      : 0;
-    const newAccommodation: Accommodation = {
-      ...accommodationData,
-      id: `a${lastId + 1}`
-    };
-    const updatedAccommodations = [...currentAccommodations, newAccommodation];
-    saveAccommodations(updatedAccommodations);
-    return newAccommodation;
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors', // Apps Script requiere no-cors o redirección compleja
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(accommodationData),
+      });
+
+      // Nota: Con 'no-cors' no podemos leer la respuesta, pero el envío se realiza.
+      // Generamos un ID temporal para la UI
+      const newAccommodation: Accommodation = {
+        ...accommodationData,
+        id: `real_new_${Date.now()}`
+      };
+      
+      // Actualizamos caché local
+      currentAccommodations = [newAccommodation, ...currentAccommodations];
+      saveAccommodations(currentAccommodations);
+      
+      return newAccommodation;
+    } catch (error) {
+      console.error('Error adding accommodation to Sheets:', error);
+      // Fallback a localStorage si falla la red
+      await delay(1000);
+      const lastId = currentAccommodations.length > 0 
+        ? Math.max(...currentAccommodations.map(a => {
+            const numericPart = a.id.startsWith('a') ? a.id.slice(1) : a.id;
+            return parseInt(numericPart) || 0;
+          }))
+        : 0;
+      const newAccommodation: Accommodation = {
+        ...accommodationData,
+        id: `a${lastId + 1}`
+      };
+      currentAccommodations = [...currentAccommodations, newAccommodation];
+      saveAccommodations(currentAccommodations);
+      return newAccommodation;
+    }
   },
 
   getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
