@@ -105,11 +105,11 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({ data }) => {
               type="monotone"
               dataKey={metric}
               stroke={active.color}
-              strokeWidth={3}
+              strokeWidth={2}
               fillOpacity={1}
               fill={`url(#gradient-${metric})`}
               animationDuration={1500}
-              activeDot={{ r: 6, stroke: '#fff', strokeWidth: 3, fill: active.color }}
+              activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2.5, fill: active.color }}
             />
           </AreaChart>
         </ResponsiveContainer>

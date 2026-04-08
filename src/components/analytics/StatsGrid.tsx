@@ -24,7 +24,7 @@ const StatsGrid: React.FC<StatsGridProps> = ({ totalRevenue, totalCleans, totalK
             <stat.icon size={20} />
           </div>
           <div>
-            <p className="text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest mb-0.5">{stat.label}</p>
+            <p className="text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-wide mb-0.5">{stat.label}</p>
             <p className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
               {stat.value.toLocaleString('es-ES', { maximumFractionDigits: 1 })}{stat.suffix}
             </p>
