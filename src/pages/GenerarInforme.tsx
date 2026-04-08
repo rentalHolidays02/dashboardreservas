@@ -69,6 +69,7 @@ const GenerarInforme: React.FC = () => {
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
   const ZOOM_STEP = 0.15;
+  const WHEEL_ZOOM_STEP = 0.05;
 
   const handleZoomChange = useCallback((delta: number) => {
     setZoom(z => {
@@ -380,6 +381,7 @@ const GenerarInforme: React.FC = () => {
               onMouseUp={stopDrag}
               onMouseLeave={stopDrag}
               onDoubleClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              onWheel={(e) => { e.preventDefault(); handleZoomChange(e.deltaY > 0 ? -WHEEL_ZOOM_STEP : WHEEL_ZOOM_STEP); }}
             >
               {/* Capa de transformación — translate + scale sin afectar layout externo */}
               <div
