@@ -226,8 +226,6 @@ export const appsScriptApi = {
         ...accommodationData,
         action: 'update'
       };
-      console.log('Enviando ACTUALIZACIÓN a Google:', payload);
-      
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -257,7 +255,6 @@ export const appsScriptApi = {
 
   addAccommodation: async (accommodationData: Omit<Accommodation, 'id'>): Promise<Accommodation> => {
     try {
-      console.log('Enviando NUEVO ALOJAMIENTO a Google:', accommodationData);
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
