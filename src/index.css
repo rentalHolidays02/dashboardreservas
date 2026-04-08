@@ -133,7 +133,7 @@
   transition: margin-left 360ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1279px) {
   .sidebar-main-content {
     margin-left: 0 !important;
     transition: none;
