@@ -62,6 +62,20 @@ const Incidencias: React.FC = () => {
     }
   };
 
+  const handleDeleteIncident = async (id: string) => {
+    // Actualización optimista
+    setIncidencias(prev => prev.filter(inc => inc.id !== id));
+    
+    try {
+      await appsScriptApi.deleteIncidencia(id);
+      fetchIncidencias(false); // Confirmación silenciosa
+    } catch (error) {
+      console.error('Error al borrar:', error);
+      alert('Error al borrar en el Excel.');
+      fetchIncidencias(false);
+    }
+  };
+
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
     if (filters.startDate || filters.endDate) count++;
@@ -231,6 +245,7 @@ const Incidencias: React.FC = () => {
         onClose={() => setIsEditModalOpen(false)}
         incident={selectedIncident}
         onSave={handleSaveIncident}
+        onDelete={handleDeleteIncident}
       />
     </div>
   );

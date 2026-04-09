@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, AlertTriangle, CheckCircle2, Info, Loader2, MapPin } from 'lucide-react';
+import { X, Save, AlertTriangle, CheckCircle2, Info, Loader2, MapPin, Trash2 } from 'lucide-react';
 import { Incidencia } from '../../services/mockData';
 
 interface IncidentEditModalProps {
@@ -7,17 +7,21 @@ interface IncidentEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (incidentData: Incidencia) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }
 
-const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen, onClose, onSave }) => {
+const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen, onClose, onSave, onDelete }) => {
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState<Partial<Incidencia>>({});
 
   React.useEffect(() => {
     if (incident) {
       setFormData(incident);
+      setShowDeleteConfirm(false);
     }
-  }, [incident]);
+  }, [incident, isOpen]);
 
   if (!isOpen || !incident) return null;
 
@@ -31,6 +35,19 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
       console.error('Error saving incident:', error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!incident) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(incident.id);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting incident:', error);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -56,9 +73,39 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors text-slate-400">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1">
+            {!showDeleteConfirm ? (
+              <button 
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors text-red-400 hover:text-red-600"
+                title="Eliminar incidencia"
+              >
+                <Trash2 size={18} />
+              </button>
+            ) : (
+              <div className="flex items-center animate-in slide-in-from-right-2 duration-200">
+                <button 
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="px-3 py-1.5 bg-red-600 text-white text-[10px] font-bold rounded-lg hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isDeleting ? 'Borrando...' : 'Confirmar Borrar'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 text-[10px]"
+                >
+                  Cerrar
+                </button>
+              </div>
+            )}
+            <button onClick={onClose} className="p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors text-slate-400">
+              <X size={20} />
+            </button>
+          </div>
         </header>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">

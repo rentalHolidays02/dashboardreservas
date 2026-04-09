@@ -29,7 +29,7 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbV
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
 const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
-const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzCG3ACe12pP9GmGjNpWCK9iMrBTSXMTJmYT6BjcFj5e-BsP2PL3Sf4isXObYHppLk1YA/exec';
+const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxX8IQ6wsfmnJt77UWCpR3Zt0ND0RDFXafIEgrzZtBC5QzMSeLLYipcYx3l6qRWvPA9LA/exec';
 
 // Utilidad para limpiar números formateados (ej: "10,00 €" -> 10.0)
 const parseExcelNumber = (val: any): number => {
@@ -377,6 +377,24 @@ export const appsScriptApi = {
       return true;
     } catch (error) {
       console.error('Error updating incidencia:', error);
+      throw error;
+    }
+  },
+
+  deleteIncidencia: async (id: string): Promise<boolean> => {
+    try {
+      await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({ id, action: 'delete' })
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error deleting incidencia:', error);
       throw error;
     }
   },
