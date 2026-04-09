@@ -13,9 +13,14 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import {
   MessageCircle, X, Send, Sparkles, Loader2, Check, Pencil,
-  FileText, UserCog, AlertTriangle, CreditCard, User, ChevronRight,
+  FileText, UserCog, AlertTriangle, CreditCard, User, ChevronRight, Mic,
 } from 'lucide-react';
-import { MOCK_WORKERS, MOCK_ACCOMMODATIONS, MOCK_INCIDENCIAS, Worker } from '../../services/mockData';
+import { Worker, Accommodation, Incidencia, PagoRecord } from '../../services/mockData';
+import { appsScriptApi } from '../../services/api';
+import { generatePDF } from '../../services/pdfExport';
+import logoSrc from '../../assets/logo/LogoEstandar.png';
+
+// Tipos auxiliares para el estado de datos externos del bot
 
 // ─── 1. CONSTANTES ────────────────────────────────────────────────────────────
 
@@ -91,20 +96,31 @@ type ChatMessage = TextMessage | EditWorkerMessage | WizardMessage;
 // Es una función (no una constante) porque recibe el estado actual de `workers`,
 // así la IA siempre trabaja con los datos más recientes aunque se hayan editado.
 
-const buildSystemPrompt = (workers: Worker[]) => `
+const buildSystemPrompt = (workers: Worker[], accommodations: Accommodation[], incidencias: Incidencia[]) => `
 Eres Cristóbal, el asistente de un sistema de gestión de RH y Pagos para una empresa de limpieza de alojamientos turísticos. Eres amable, conciso y profesional. Responde siempre en español.
 
 TRABAJADORES (${workers.length}):
 ${workers.map(w => `- [id:${w.id}] ${w.fullName}: ${w.cleansCountMonth} limpiezas, ${w.kmsMonth} km, ${w.netMoneyMonth}€ neto, pago por ${w.tipoPago ?? 'sin definir'}`).join('\n')}
 
-ALOJAMIENTOS (${MOCK_ACCOMMODATIONS.filter(a => a.active).length} activos de ${MOCK_ACCOMMODATIONS.length}):
-${MOCK_ACCOMMODATIONS.map(a => `- ${a.name} (${a.city}) — ${a.active ? 'activo' : 'inactivo'}`).join('\n')}
+ALOJAMIENTOS (${accommodations.filter((a: Accommodation) => a.active).length} activos de ${accommodations.length}):
+${accommodations.map((a: Accommodation) => `- ${a.name} (${a.city}) — ${a.active ? 'activo' : 'inactivo'}`).join('\n')}
 
 INCIDENCIAS RECIENTES:
-${MOCK_INCIDENCIAS.map(i => `- ${i.userName} en ${i.accommodationName}: "${i.description}" — ${i.coste}€`).join('\n')}
+${incidencias.map((i: Incidencia) => `- ${i.userName} en ${i.accommodationName}: "${i.description}" — ${i.coste}€`).join('\n')}
 
 Responde de forma directa y breve.
+Cuando menciones datos relevantes como cantidades de dinero, números, nombres de trabajadores, fechas o palabras clave importantes, márcalos con **texto** (doble asterisco). Ejemplo: "Se le deben **450€** a **Juan García** por **12 limpiezas**."
 `.trim();
+
+// Convierte **texto** en spans naranjas para destacar datos clave en las respuestas
+const renderHighlighted = (text: string) => {
+  const parts = text.split(/\*\*(.+?)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1
+      ? <span key={i} className="text-orange-500 font-medium">{part}</span>
+      : <span key={i}>{part}</span>
+  );
+};
 
 // ─── 4. COMPONENTES VISUALES COMPARTIDOS ─────────────────────────────────────
 //
@@ -423,24 +439,49 @@ const EditWorkerWizard = ({ workers, onComplete, onCancel }: EditWorkerWizardPro
 
 // ─── 7. WIZARD: PAGOS PENDIENTES ──────────────────────────────────────────────
 //
-// Muestra todos los trabajadores con sus importes mensuales.
-// El usuario puede marcar/desmarcar con checkboxes quién cobrar.
-// Al confirmar, se muestra el total seleccionado.
+// Carga los PagoRecords pendientes reales, los agrupa por trabajador,
+// y al confirmar llama a appsScriptApi.markPagosAsPaid con los IDs reales.
 
-const PagosPendientesWizard = ({ workers, onComplete, onCancel }: {
-  workers: Worker[];
+const PagosPendientesWizard = ({ onComplete, onCancel }: {
   onComplete: (r: { count: number; total: number }) => void;
   onCancel: () => void;
 }) => {
-  // Por defecto todos los trabajadores están seleccionados (todos cobran)
-  const [selected, setSelected] = useState<string[]>(workers.map(w => w.id));
+  const [pagos,    setPagos]    = useState<PagoRecord[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);  // IDs de trabajadores seleccionados
+  const [loading,  setLoading]  = useState(true);
 
-  // Alterna la selección de un trabajador: si está lo quita, si no está lo añade
+  // Agrupamos pagos pendientes por nombre de trabajador para mostrar resumen
+  const byWorker: Record<string, { nombre: string; ids: string[]; total: number }> = {};
+  pagos.filter(p => p.estado === 'pendiente').forEach(p => {
+    if (!byWorker[p.workerId]) byWorker[p.workerId] = { nombre: p.workerName, ids: [], total: 0 };
+    byWorker[p.workerId].ids.push(p.id);
+    byWorker[p.workerId].total += p.importe;
+  });
+  const workerEntries = Object.entries(byWorker);
+
+  useEffect(() => {
+    appsScriptApi.getAllPagos().then(all => {
+      setPagos(all);
+      // Seleccionamos por defecto todos los trabajadores con pagos pendientes
+      const pendienteIds = [...new Set(all.filter(p => p.estado === 'pendiente').map(p => p.workerId))];
+      setSelected(pendienteIds);
+    }).finally(() => setLoading(false));
+  }, []);
+
   const toggle = (id: string) =>
     setSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
 
-  // Calculamos el total sumando los netMoneyMonth de los trabajadores seleccionados
-  const total = workers.filter(w => selected.includes(w.id)).reduce((s, w) => s + w.netMoneyMonth, 0);
+  const total = workerEntries
+    .filter(([id]) => selected.includes(id))
+    .reduce((s, [, v]) => s + v.total, 0);
+
+  const confirm = async () => {
+    const ids = workerEntries
+      .filter(([id]) => selected.includes(id))
+      .flatMap(([, v]) => v.ids);
+    if (ids.length > 0) await appsScriptApi.markPagosAsPaid(ids);
+    onComplete({ count: selected.length, total });
+  };
 
   return (
     <WizardCard>
@@ -451,39 +492,45 @@ const PagosPendientesWizard = ({ workers, onComplete, onCancel }: {
         </div>
       </div>
       <div className="px-3.5 py-3 space-y-1.5">
-        <WizardLabel>Selecciona a quién marcar como pagado</WizardLabel>
-        {workers.map(w => (
-          // Cada fila es un botón completo: al pulsarla se alterna el checkbox
-          <button key={w.id} onClick={() => toggle(w.id)}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border transition-all active:scale-[0.98] ${
-              selected.includes(w.id)
-                ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/40'
-                : 'bg-stone-50/60 dark:bg-stone-800/30 border-stone-200/50 dark:border-stone-700/30 hover:border-stone-300'
-            }`}>
-            <div className="flex items-center gap-2">
-              {/* Checkbox visual: cuadrado que se rellena de naranja cuando está seleccionado */}
-              <div className={`w-4 h-4 rounded-md border-2 flex items-center justify-center transition-all ${selected.includes(w.id) ? 'bg-orange-500 border-orange-500' : 'border-stone-300 dark:border-stone-600'}`}>
-                {selected.includes(w.id) && <Check size={9} className="text-white" />}
-              </div>
-              <p className="text-[12px] text-slate-700 dark:text-stone-200">{w.fullName}</p>
-            </div>
-            {/* El importe se resalta en naranja si el trabajador está seleccionado */}
-            <p className={`text-[12px] font-medium ${selected.includes(w.id) ? 'text-orange-500' : 'text-slate-500 dark:text-stone-400'}`}>
-              {w.netMoneyMonth.toFixed(2)}€
-            </p>
-          </button>
-        ))}
-        {/* Resumen de selección — solo aparece si hay al menos uno seleccionado */}
-        {selected.length > 0 && (
-          <div className="flex justify-between items-center pt-1.5 px-1">
-            <p className="text-[10px] text-slate-400 dark:text-stone-500">{selected.length} seleccionado{selected.length !== 1 ? 's' : ''}</p>
-            <p className="text-[12px] font-medium text-orange-500">{total.toFixed(2)}€ total</p>
+        {loading ? (
+          <div className="flex justify-center py-4">
+            <Loader2 size={16} className="text-orange-400 animate-spin" />
           </div>
+        ) : workerEntries.length === 0 ? (
+          <p className="text-[12px] text-slate-400 dark:text-stone-500 text-center py-3">No hay pagos pendientes</p>
+        ) : (
+          <>
+            <WizardLabel>Selecciona a quién marcar como pagado</WizardLabel>
+            {workerEntries.map(([id, { nombre, total: t }]) => (
+              <button key={id} onClick={() => toggle(id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border transition-all active:scale-[0.98] ${
+                  selected.includes(id)
+                    ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/40'
+                    : 'bg-stone-50/60 dark:bg-stone-800/30 border-stone-200/50 dark:border-stone-700/30 hover:border-stone-300'
+                }`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-md border-2 flex items-center justify-center transition-all ${selected.includes(id) ? 'bg-orange-500 border-orange-500' : 'border-stone-300 dark:border-stone-600'}`}>
+                    {selected.includes(id) && <Check size={9} className="text-white" />}
+                  </div>
+                  <p className="text-[12px] text-slate-700 dark:text-stone-200">{nombre}</p>
+                </div>
+                <p className={`text-[12px] font-medium ${selected.includes(id) ? 'text-orange-500' : 'text-slate-500 dark:text-stone-400'}`}>
+                  {t.toFixed(2)}€
+                </p>
+              </button>
+            ))}
+            {selected.length > 0 && (
+              <div className="flex justify-between items-center pt-1.5 px-1">
+                <p className="text-[10px] text-slate-400 dark:text-stone-500">{selected.length} seleccionado{selected.length !== 1 ? 's' : ''}</p>
+                <p className="text-[12px] font-medium text-orange-500">{total.toFixed(2)}€ total</p>
+              </div>
+            )}
+          </>
         )}
       </div>
       <div className="flex gap-2 px-3.5 pb-3">
         <button onClick={onCancel} className="flex-1 py-1.5 rounded-lg text-[11px] text-slate-500 dark:text-stone-400 bg-stone-100/80 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-700/30 transition-all active:scale-[0.98]">Cancelar</button>
-        <button onClick={() => onComplete({ count: selected.length, total })} disabled={!selected.length}
+        <button onClick={confirm} disabled={!selected.length || loading}
           className="flex-1 py-1.5 rounded-lg text-[11px] text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 border border-orange-500 transition-all active:scale-[0.98] flex items-center justify-center gap-1">
           <Check size={11} /> Confirmar
         </button>
@@ -498,18 +545,17 @@ const PagosPendientesWizard = ({ workers, onComplete, onCancel }: {
 // No tiene pasos ni estado local, simplemente lee MOCK_INCIDENCIAS.
 // El botón "Cerrar" llama a onClose, que en el padre marca el wizard como cancelado.
 
-const VerIncidenciasCard = ({ onClose }: { onClose: () => void }) => (
+const VerIncidenciasCard = ({ onClose, incidencias }: { onClose: () => void; incidencias: Incidencia[] }) => (
   <WizardCard>
     <div className="flex items-center justify-between px-3.5 pt-3 pb-2.5 border-b border-stone-100 dark:border-stone-800/60">
       <div className="flex items-center gap-2">
         <AlertTriangle size={11} className="text-orange-500" />
         <p className="text-[12px] font-medium text-slate-700 dark:text-stone-200">Incidencias recientes</p>
       </div>
-      {/* Badge con el número total de incidencias */}
-      <span className="text-[10px] text-slate-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800/80 px-2 py-0.5 rounded-full">{MOCK_INCIDENCIAS.length}</span>
+      <span className="text-[10px] text-slate-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800/80 px-2 py-0.5 rounded-full">{incidencias.length}</span>
     </div>
     <div className="px-3.5 py-3 space-y-2">
-      {MOCK_INCIDENCIAS.map(inc => (
+      {incidencias.map(inc => (
         <div key={inc.id} className="flex items-start gap-2.5 px-2.5 py-2 rounded-xl bg-stone-50/60 dark:bg-stone-800/30 border border-stone-100/80 dark:border-stone-700/30">
           <div className="w-4 h-4 rounded-md bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30 flex items-center justify-center shrink-0 mt-0.5">
             <AlertTriangle size={9} className="text-orange-400" />
@@ -545,6 +591,8 @@ interface GenerarInformeResult {
   tipo: string;
   periodo: string;
   trabajadores: string;
+  downloadUrl: string;
+  fileName: string;
 }
 
 const GenerarInformeWizard = ({ workers, onComplete, onCancel }: {
@@ -682,7 +730,49 @@ const GenerarInformeWizard = ({ workers, onComplete, onCancel }: {
       <div className="flex gap-2 px-3.5 pb-3">
         <button onClick={() => setStep(1)} className="px-3 py-1.5 rounded-lg text-[11px] text-slate-500 dark:text-stone-400 bg-stone-100/80 dark:bg-stone-800/60 border border-stone-200/60 dark:border-stone-700/30 transition-all active:scale-[0.98]">← Volver</button>
         <button
-          onClick={() => onComplete({ tipo, periodo: periodoLabel, trabajadores: trabajadoresLabel })}
+          onClick={async () => {
+            const selectedWorkerNames = new Set(workers.filter(w => selected.includes(w.id)).map(w => w.fullName));
+            const workerName = selected.length === 1
+              ? workers.find(w => w.id === selected[0])?.fullName ?? null
+              : null;
+
+            // Cargamos todos los datos igual que la página de generar informe
+            const [allPagos, allIncid, allCleans, allHandyman] = await Promise.all([
+              appsScriptApi.getAllPagos(),
+              appsScriptApi.getRecentIncidencias(200),
+              appsScriptApi.getNormalCleans(),
+              appsScriptApi.getHandymanRecords(),
+            ]);
+
+            const fPagos  = allPagos.filter(p => selectedWorkerNames.has(p.workerName));
+            const fIncid  = allIncid.filter(i => selectedWorkerNames.has(i.userName));
+            const fCleans = allCleans.filter(c => selectedWorkerNames.has(`${c.nombre} ${c.apellidos}`));
+            const fHandy  = allHandyman.filter(h => selectedWorkerNames.has(`${h.nombre} ${h.apellidos}`));
+
+            const options = {
+              pagos:       tipo === 'Pagos'       || tipo === 'Completo',
+              limpiezas:   tipo === 'Limpiezas'   || tipo === 'Completo',
+              incidencias: tipo === 'Incidencias' || tipo === 'Completo',
+              handyman:    tipo === 'Completo',
+            };
+
+            // Mapeamos el periodo del wizard al formato que espera generatePDF
+            const periodoKey = periodo === 'Este mes' ? 'este-mes'
+              : periodo === 'Último trimestre'        ? 'trimestre'
+              : periodo === 'Este año'                ? 'trimestre'
+              : 'personalizado';
+
+            const result = await generatePDF(
+              { pagos: fPagos, incidencias: fIncid, cleans: fCleans, handyman: fHandy },
+              options,
+              { periodo: periodoKey, workerName, accName: null },
+              logoSrc,
+              true,
+            );
+
+            const downloadUrl = URL.createObjectURL(result.blob);
+            onComplete({ tipo, periodo: periodoLabel, trabajadores: trabajadoresLabel, downloadUrl, fileName: result.fileName });
+          }}
           disabled={!selected.length}
           className="flex-1 py-1.5 rounded-lg text-[11px] text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 border border-orange-500 transition-all active:scale-[0.98] flex items-center justify-center gap-1">
           <FileText size={11} /> Generar informe
@@ -706,20 +796,26 @@ const GenerarInformeWizard = ({ workers, onComplete, onCancel }: {
 interface WizardWidgetProps {
   msg: WizardMessage;
   workers: Worker[];
+  incidencias: Incidencia[];
   onComplete: (msgId: number, result: Record<string, unknown>, updates?: Partial<Worker>, workerId?: string) => void;
   onCancel:   (msgId: number) => void;
 }
 
-const WizardWidget = ({ msg, workers, onComplete, onCancel }: WizardWidgetProps) => {
-  // Estado final: completado → resumen gris discreto (mismo estilo que cancelado)
+const WizardWidget = ({ msg, workers, incidencias, onComplete, onCancel }: WizardWidgetProps) => {
+  // Estado final: completado → resumen con botón de descarga si es un informe
   if (msg.resolution === 'completed') {
     const d = msg.resolvedData ?? {};
     return (
-      <div className="w-full bg-stone-50/60 dark:bg-stone-800/20 border border-stone-200/40 dark:border-stone-700/20 rounded-xl px-3.5 py-2.5">
-        {/* summary y detail vienen del objeto resolvedData que construyó el padre */}
-        <p className="text-[11px] text-slate-500 dark:text-stone-400 mb-0.5">{d.summary as string ?? 'Completado'}</p>
-        {/* !! convierte unknown a boolean para que React lo acepte como condición */}
+      <div className="w-full bg-stone-50/60 dark:bg-stone-800/20 border border-stone-200/40 dark:border-stone-700/20 rounded-xl px-3.5 py-2.5 space-y-2">
+        <p className="text-[11px] text-slate-500 dark:text-stone-400">{d.summary as string ?? 'Completado'}</p>
         {!!d.detail && <p className="text-[11px] text-slate-400 dark:text-stone-500">{String(d.detail)}</p>}
+        {/* Botón de descarga — solo aparece si el informe generó un archivo */}
+        {!!d.downloadUrl && (
+          <a href={d.downloadUrl as string} download={d.fileName as string}
+            className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg text-[11px] text-white bg-orange-500 hover:bg-orange-600 transition-all active:scale-[0.98]">
+            <FileText size={11} /> Descargar informe
+          </a>
+        )}
       </div>
     );
   }
@@ -748,7 +844,6 @@ const WizardWidget = ({ msg, workers, onComplete, onCancel }: WizardWidgetProps)
 
   if (msg.action === 'pagos_pendientes') return (
     <PagosPendientesWizard
-      workers={workers}
       onComplete={r => onComplete(msg.id, {
         summary: `${r.count} trabajador${r.count !== 1 ? 'es' : ''} marcado${r.count !== 1 ? 's' : ''} como pagado${r.count !== 1 ? 's' : ''}`,
         detail: `Total: ${r.total.toFixed(2)}€`,
@@ -758,8 +853,7 @@ const WizardWidget = ({ msg, workers, onComplete, onCancel }: WizardWidgetProps)
   );
 
   if (msg.action === 'ver_incidencias') return (
-    // Para "cerrar" usamos onCancel: no es realmente cancelar sino simplemente cerrar
-    <VerIncidenciasCard onClose={() => onCancel(msg.id)} />
+    <VerIncidenciasCard onClose={() => onCancel(msg.id)} incidencias={incidencias} />
   );
 
   if (msg.action === 'generar_informe') return (
@@ -768,6 +862,8 @@ const WizardWidget = ({ msg, workers, onComplete, onCancel }: WizardWidgetProps)
       onComplete={(r: GenerarInformeResult) => onComplete(msg.id, {
         summary: `Informe generado · ${r.tipo}`,
         detail: `${r.periodo} · ${r.trabajadores}`,
+        downloadUrl: r.downloadUrl,
+        fileName: r.fileName,
       })}
       onCancel={() => onCancel(msg.id)}
     />
@@ -786,23 +882,101 @@ const WizardWidget = ({ msg, workers, onComplete, onCancel }: WizardWidgetProps)
 //   - Handlers que conectan los wizards con el estado
 
 const ChatBot = () => {
-  const [isOpen,    setIsOpen]    = useState(false);   // controla si el popup está abierto
-  const [workers,   setWorkers]   = useState<Worker[]>(MOCK_WORKERS); // copia local de trabajadores
+  const [isOpen,         setIsOpen]         = useState(false);
+  const [workers,        setWorkers]        = useState<Worker[]>([]);
+  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [incidencias,    setIncidencias]    = useState<Incidencia[]>([]);
   const [messages,  setMessages]  = useState<ChatMessage[]>([
-    // Mensaje inicial de bienvenida
     { id: 0, role: 'assistant', kind: 'text', content: 'Hola, soy Cristóbal, tu asistente de Rental Holidays. ¿En qué puedo ayudarte?' }
   ]);
-  const [input,     setInput]     = useState('');      // valor actual del campo de texto
-  const [isLoading, setIsLoading] = useState(false);   // true mientras esperamos respuesta de la IA
+  const [input,     setInput]     = useState('');
+  const [isLoading,   setIsLoading]   = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [interim,     setInterim]     = useState(''); // texto que se está dictando ahora mismo
 
-  // Referencia al div invisible al final del chat para hacer scroll automático
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef  = useRef<HTMLDivElement>(null);
+  const idRef           = useRef(1);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef  = useRef<any>(null);
+  const confirmedRef    = useRef(''); // texto final acumulado durante la sesión de dictado
 
-  // Contador autoincremental para asignar IDs únicos a cada mensaje nuevo
-  // Usamos useRef (no useState) porque cambiar el contador no debe re-renderizar el componente
-  const idRef = useRef(1);
+  const toggleListening = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
+    if (!SR) return;
 
-  // Cada vez que llega un mensaje nuevo o empieza a cargar, hacemos scroll al final
+    if (isListening) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      // Al parar: consolida el interim que quedara pendiente y limpia
+      setInput(prev => {
+        const full = (prev + ' ' + interim).trim();
+        return full;
+      });
+      setInterim('');
+      confirmedRef.current = '';
+      setIsListening(false);
+      return;
+    }
+
+    // Guardamos el texto actual del input como base para el dictado
+    confirmedRef.current = '';
+
+    const rec = new SR();
+    rec.lang = 'es-ES';
+    rec.interimResults = true;  // recibir palabras mientras se habla
+    rec.continuous = true;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      let finalChunk = '';
+      let interimChunk = '';
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalChunk += t + ' ';
+        else interimChunk += t;
+      }
+
+      if (finalChunk) {
+        confirmedRef.current = (confirmedRef.current + ' ' + finalChunk).trim();
+        setInput(prev => {
+          // base del input antes de que empezara el dictado + todo lo confirmado
+          const base = prev.replace(/ ?…$/, '').trimEnd();
+          return base ? base + ' ' + confirmedRef.current : confirmedRef.current;
+        });
+        setInterim('');
+      } else {
+        setInterim(interimChunk);
+      }
+    };
+
+    rec.onerror = () => { recognitionRef.current = null; setIsListening(false); setInterim(''); };
+    rec.onend = () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch { /* ya iniciado */ }
+      }
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
+    setIsListening(true);
+  };
+
+  // Carga datos reales del Excel al abrir el chat por primera vez
+  useEffect(() => {
+    if (!isOpen || workers.length > 0) return;
+    Promise.all([
+      appsScriptApi.getWorkers(),
+      appsScriptApi.getAccommodations(),
+      appsScriptApi.getRecentIncidencias(10),
+    ]).then(([w, a, i]) => {
+      setWorkers(w);
+      setAccommodations(a);
+      setIncidencias(i);
+    }).catch(() => { /* fallo silencioso: el bot funciona aunque no carguen los datos */ });
+  }, [isOpen]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
@@ -817,7 +991,7 @@ const ChatBot = () => {
       headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile', // modelo de Groq (LLaMA 3.3 de Meta, 70B parámetros)
-        messages: [{ role: 'system', content: buildSystemPrompt(workers) }, ...msgs],
+        messages: [{ role: 'system', content: buildSystemPrompt(workers, accommodations, incidencias) }, ...msgs],
         max_tokens: 400,   // máximo de tokens en la respuesta (aprox. 300 palabras)
         temperature: 0.5,  // 0 = determinista, 1 = creativo — 0.5 es equilibrado
       }),
@@ -884,10 +1058,17 @@ const ChatBot = () => {
   };
 
   // handleWizardComplete: se llama cuando el usuario pulsa "Confirmar" en un wizard.
-  //   1. Si hay cambios de trabajador, actualiza el estado local de workers
+  //   1. Si hay cambios de trabajador, actualiza el estado local y persiste en el Excel
   //   2. Marca el WizardMessage con resolution='completed' y los datos del resumen
   const handleWizardComplete = (msgId: number, result: Record<string, unknown>, updates?: Partial<Worker>, workerId?: string) => {
-    if (workerId && updates) setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, ...updates } : w));
+    if (workerId && updates) {
+      setWorkers(prev => {
+        const updated = prev.map(w => w.id === workerId ? { ...w, ...updates } : w);
+        const worker = updated.find(w => w.id === workerId);
+        if (worker) appsScriptApi.updateWorker(worker);
+        return updated;
+      });
+    }
     setMessages(prev => prev.map(m => m.id === msgId ? { ...m, resolution: 'completed' as const, resolvedData: result } as ChatMessage : m));
   };
 
@@ -900,8 +1081,12 @@ const ChatBot = () => {
   // handleEditWorkerSave: equivalente a handleWizardComplete pero para el widget
   // activado por IA (EditWorkerWidget), que tiene su propia lógica de savedValues
   const handleEditWorkerSave = (workerId: string, updates: Partial<Worker>, msgId: number, labels: Record<string, string>) => {
-    setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, ...updates } : w));
-    // Construimos savedValues con etiquetas legibles: { 'Teléfono': '+34 600...' }
+    setWorkers(prev => {
+      const updated = prev.map(w => w.id === workerId ? { ...w, ...updates } : w);
+      const worker = updated.find(w => w.id === workerId);
+      if (worker) appsScriptApi.updateWorker(worker);
+      return updated;
+    });
     const savedValues: Record<string, string> = {};
     Object.entries(updates).forEach(([k, v]) => { savedValues[labels[k] ?? k] = String(v); });
     setMessages(prev => prev.map(m => m.id === msgId && m.kind === 'edit_worker' ? { ...m, resolution: 'saved' as const, savedValues } as ChatMessage : m));
@@ -971,7 +1156,7 @@ const ChatBot = () => {
             // Esto es lo que da el "estilismo distinto" respecto a los mensajes de texto
             if (msg.kind === 'wizard') return (
               <div key={msg.id} className="w-full">
-                <WizardWidget msg={msg} workers={workers} onComplete={handleWizardComplete} onCancel={handleWizardCancel} />
+                <WizardWidget msg={msg} workers={workers} incidencias={incidencias} onComplete={handleWizardComplete} onCancel={handleWizardCancel} />
               </div>
             );
 
@@ -984,7 +1169,7 @@ const ChatBot = () => {
                 {msg.kind === 'text' ? (
                   // Burbuja de texto normal
                   <div className="bg-stone-50/80 dark:bg-stone-800/40 border border-stone-100/80 dark:border-stone-700/30 rounded-xl rounded-tl-sm px-3.5 py-2.5 max-w-[300px]">
-                    <p className="text-[12px] text-slate-600 dark:text-stone-300 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                    <p className="text-[12px] text-slate-600 dark:text-stone-300 leading-relaxed whitespace-pre-wrap">{renderHighlighted(msg.content)}</p>
                   </div>
                 ) : msg.kind === 'edit_worker' ? (
                   // Widget de edición activado por la IA (cuando el usuario lo pide por texto)
@@ -1025,10 +1210,24 @@ const ChatBot = () => {
 
           {/* Campo de texto libre para conversar con la IA */}
           <div className="flex items-center gap-2 bg-stone-50/80 dark:bg-stone-800/40 border border-stone-200/60 dark:border-stone-700/30 rounded-xl px-3.5 py-2.5">
-            <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder="Escribe tu pregunta..." disabled={isLoading}
-              className="flex-1 bg-transparent text-[12px] text-slate-700 dark:text-stone-300 placeholder:text-slate-400 dark:placeholder:text-stone-500 outline-none" />
-            {/* Botón de envío — deshabilitado si el input está vacío o hay una petición en curso */}
+            {/* Mientras se dicta mostramos un div con el texto confirmado + interim en gris */}
+            {isListening ? (
+              <div className="flex-1 text-[12px] leading-relaxed min-h-[18px]">
+                <span className="text-slate-700 dark:text-stone-300">{input}</span>
+                {interim && <span className="text-slate-400 dark:text-stone-500"> {interim}</span>}
+                {!input && !interim && <span className="text-slate-400 dark:text-stone-500">Escuchando...</span>}
+              </div>
+            ) : (
+              <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                placeholder="Escribe tu pregunta..." disabled={isLoading}
+                className="flex-1 bg-transparent text-[12px] text-slate-700 dark:text-stone-300 placeholder:text-slate-400 dark:placeholder:text-stone-500 outline-none" />
+            )}
+            {/* Botón de micrófono: icono naranja cuando activo, gris cuando inactivo */}
+            <button onClick={toggleListening} disabled={isLoading} title={isListening ? 'Detener dictado' : 'Dictar mensaje'}
+              className="flex items-center justify-center transition-all active:scale-95 shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Mic size={13} className={isListening ? 'text-orange-500' : 'text-slate-400 dark:text-stone-500 hover:text-orange-400'} />
+            </button>
+            {/* Botón de envío */}
             <button onClick={sendMessage} disabled={!input.trim() || isLoading}
               className="w-6 h-6 flex items-center justify-center rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 shrink-0">
               <Send size={11} className="text-white" />
