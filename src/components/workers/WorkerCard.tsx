@@ -22,6 +22,10 @@ function getInitials(fullName: string): string {
     .toUpperCase();
 }
 
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
   const initials = getInitials(worker.fullName);
 
@@ -47,11 +51,11 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-stone-100 leading-tight transition-colors">
-              {worker.fullName}
+            <h3 className="text-sm font-normal text-slate-800 dark:text-stone-100 leading-tight transition-colors">
+              {toTitleCase(worker.fullName)}
             </h3>
             <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500 mt-0.5">
-              <Phone size={10} className="flex-shrink-0" />
+              <Phone size={10} className="flex-shrink-0 text-orange-500" />
               {worker.telefono || '—'}
             </span>
           </div>

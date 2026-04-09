@@ -186,6 +186,10 @@ function getInitials(name: string) {
   return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
 }
 
+function toTitleCase(str: string): string {
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 const fmtCurrency = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
@@ -608,7 +612,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
           <ArrowLeft size={14} /><span>Trabajadores</span>
         </button>
         <ChevronRight size={13} className="text-slate-300 dark:text-stone-600" />
-        <span className="text-slate-700 dark:text-stone-300 font-medium truncate">{worker.fullName}</span>
+        <span className="text-slate-700 dark:text-stone-300 font-medium truncate">{toTitleCase(worker.fullName)}</span>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════
@@ -631,7 +635,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
 
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-medium text-slate-800 dark:text-stone-100 leading-tight truncate">
-              {worker.fullName}
+              {toTitleCase(worker.fullName)}
             </h2>
             <div className="flex flex-wrap items-center gap-3 mt-1">
               {worker.telefono && (
@@ -1295,7 +1299,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                 </span>
                 <div>
                   <p className="text-sm font-medium text-slate-800 dark:text-stone-100">Registrar pago</p>
-                  <p className="text-[11px] text-slate-400 dark:text-stone-500">{worker.fullName}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-stone-500">{toTitleCase(worker.fullName)}</p>
                 </div>
               </div>
               <button onClick={() => setShowPayModal(false)} className="text-slate-300 dark:text-stone-600 hover:text-slate-500 dark:hover:text-stone-400 transition-colors">
