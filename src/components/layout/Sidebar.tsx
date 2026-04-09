@@ -11,6 +11,7 @@ import {
   Sun,
   Home,
   FileText,
+  User,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -209,8 +210,21 @@ const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </button>
 
-          {/* User card — same pl-2 offset, icon never moves */}
-          <div className={`flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 rounded-xl transition-all ${collapsed ? '' : 'bg-white/20 dark:bg-stone-800/40 border border-white/40 dark:border-stone-700/40'}`}>
+          {/* Profile link */}
+          <Link
+            to="/perfil"
+            onClick={(e) => {
+              e.preventDefault();
+              requestNavigate(() => {
+                navigate('/perfil');
+                if (window.innerWidth < 1280) onClose();
+              });
+            }}
+            title={collapsed ? 'Mi perfil' : undefined}
+            className={`flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 rounded-xl transition-all cursor-pointer
+              ${collapsed ? '' : 'bg-white/20 dark:bg-stone-800/40 border border-white/40 dark:border-stone-700/40'}
+              hover:bg-black/5 dark:hover:bg-black/20`}
+          >
             <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
               {userRole === 'admin' ? 'A' : 'V'}
             </div>
@@ -218,9 +232,9 @@ const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight">
                 {userRole === 'admin' ? 'Administrador' : 'Visualizador'}
               </p>
-              <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">{userRole}</p>
+              <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">Ver perfil</p>
             </div>
-          </div>
+          </Link>
 
           {/* Logout — same layout, icon span gets bg in mini */}
           <button
