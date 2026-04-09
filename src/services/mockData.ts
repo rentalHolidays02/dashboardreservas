@@ -24,6 +24,7 @@ export interface Worker {
   banco?: string;
   titularCuenta?: string;
   photo?: string;
+  notes?: string;
 }
 
 export interface Accommodation {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X, Save, User as UserIcon, Phone, CreditCard, Home,
-  Loader2, UserPlus, Camera, Mail, Hash, Car, Building2, Landmark,
+  Loader2, UserPlus, Camera, Mail, Hash, Car, Building2, Landmark, Trash2
 } from 'lucide-react';
 import { Worker } from '../../services/mockData';
 
@@ -10,6 +10,7 @@ interface WorkerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (workerData: any) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
 }
 
 const inputClass =
@@ -18,7 +19,7 @@ const inputClass =
 const labelClass =
   'block text-[10px] font-light text-slate-400 dark:text-stone-500 mb-2 flex items-center gap-1.5';
 
-const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSave }) => {
+const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSave, onDelete }) => {
   const isEditMode = !!worker;
 
   const initialData = {
@@ -40,6 +41,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
   };
 
   const [formData, setFormData] = useState<any>(initialData);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [accInput, setAccInput] = useState('');
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -53,11 +55,43 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
 
   if (!isOpen) return null;
 
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    // Validar Teléfono (mínimo 9 dígitos)
+    const phoneDigits = formData.telefono.replace(/\D/g, '');
+    if (phoneDigits.length < 9) {
+      newErrors.telefono = 'El teléfono debe tener al menos 9 dígitos';
+    }
+
+    // Validar DNI/NIE (Regex estándar español)
+    const dniRegex = /^[0-9]{8}[TRWAGMYFPDXBNJZSQVHLCKE]$/i;
+    const nieRegex = /^[XYZ][0-9]{7}[TRWAGMYFPDXBNJZSQVHLCKE]$/i;
+    const dniClean = formData.dni?.trim().toUpperCase() || '';
+    
+    if (dniClean && !dniRegex.test(dniClean) && !nieRegex.test(dniClean)) {
+      newErrors.dni = 'Formato de DNI (12345678A) o NIE (X1234567L) no válido';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) return;
+
     setIsSaving(true);
     try {
-      await onSave(formData);
+      // Convertir campos numéricos antes de enviar
+      const dataToSave = {
+        ...formData,
+        dni: formData.dni?.trim().toUpperCase(),
+        pagoPorReserva: parseFloat(String(formData.pagoPorReserva).replace(',', '.')) || 0,
+        precioPorKm: parseFloat(String(formData.precioPorKm).replace(',', '.')) || 0,
+      };
+      await onSave(dataToSave);
       onClose();
     } catch (error) {
       console.error('Error saving worker:', error);
@@ -66,13 +100,71 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
     }
   };
 
+  const handleDelete = async () => {
+    if (!worker || !onDelete) return;
+    if (window.confirm(`¿Estás seguro de que deseas eliminar a ${worker.fullName}? Esta acción no se puede deshacer en el Excel.`)) {
+      setIsSaving(true);
+      try {
+        await onDelete(worker.id);
+        onClose();
+      } catch (error) {
+        console.error('Error deleting worker:', error);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    const numericFields = ['pagoPorReserva', 'precioPorKm'];
+    let { name, value } = e.target;
+    
+    // Si es DNI, lo forzamos a mayúsculas y quitamos espacios
+    if (name === 'dni') {
+      value = value.toUpperCase().replace(/\s/g, '');
+    }
+
+    // Si es teléfono, solo permitimos números y autoformateamos con prefijo +34
+    if (name === 'telefono' || name === 'telefonoBizum') {
+      const digits = value.replace(/\D/g, ''); // Solo números
+      let finalValue = '';
+      
+      if (digits.length > 0) {
+        // Siempre empezamos con +34
+        finalValue = '+34 ';
+        
+        // Extraemos los 9 dígitos del móvil (en caso de que hayan pegado un número con prefijo, lo limpiamos)
+        const mobileDigits = digits.startsWith('34') ? digits.substring(2, 11) : digits.substring(0, 9);
+        
+        if (mobileDigits.length > 0) finalValue += mobileDigits.substring(0, 3);
+        if (mobileDigits.length > 3) finalValue += ' ' + mobileDigits.substring(3, 5);
+        if (mobileDigits.length > 5) finalValue += ' ' + mobileDigits.substring(5, 7);
+        if (mobileDigits.length > 7) finalValue += ' ' + mobileDigits.substring(7, 9);
+      }
+      value = finalValue;
+    }
+
+    // Si es un campo numérico y está vacío, permitimos el string vacío para que el usuario pueda borrar
+    if (['pagoPorReserva', 'precioPorKm'].includes(name)) {
+      setFormData((prev: any) => ({
+        ...prev,
+        [name]: value === '' ? '' : value.replace(',', '.')
+      }));
+      return;
+    }
+
     setFormData((prev: any) => ({
       ...prev,
-      [name]: numericFields.includes(name) ? parseFloat(value) || 0 : value,
+      [name]: value,
     }));
+
+    // Limpiar error del campo que se está editando
+    if (errors[name]) {
+      setErrors(prev => {
+        const newErrs = { ...prev };
+        delete newErrs[name];
+        return newErrs;
+      });
+    }
   };
 
   const addAccommodation = () => {
@@ -162,11 +254,31 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelClass}><Phone size={12} />Teléfono</label>
-              <input type="tel" name="telefono" value={formData.telefono ?? ''} onChange={handleChange} placeholder="+34 600 111 222" className={inputClass} />
+              <input 
+                type="tel" 
+                name="telefono" 
+                value={formData.telefono ?? ''} 
+                onChange={handleChange} 
+                placeholder="697 60 97 56" 
+                maxLength={17}
+                required
+                className={`${inputClass} ${errors.telefono ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/10' : ''}`} 
+              />
+              {errors.telefono && <p className="text-[10px] text-red-500 mt-1 ml-1">{errors.telefono}</p>}
             </div>
             <div>
               <label className={labelClass}><Hash size={12} />DNI / NIE</label>
-              <input type="text" name="dni" value={formData.dni ?? ''} onChange={handleChange} placeholder="12345678A" className={inputClass} />
+              <input 
+                type="text" 
+                name="dni" 
+                value={formData.dni ?? ''} 
+                onChange={handleChange} 
+                placeholder="12345678A" 
+                maxLength={9}
+                required
+                className={`${inputClass} ${errors.dni ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/10' : ''} uppercase`} 
+              />
+              {errors.dni && <p className="text-[10px] text-red-500 mt-1 ml-1">{errors.dni}</p>}
             </div>
           </div>
 
@@ -189,20 +301,42 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
             </div>
             <div>
               <label className={labelClass}><span className="text-slate-400">€</span> Pago por reserva</label>
-              <input type="number" step="0.01" name="pagoPorReserva" value={formData.pagoPorReserva} onChange={handleChange} placeholder="20" className={`${inputClass} tabular-nums`} />
+              <input 
+                type="text" 
+                name="pagoPorReserva" 
+                value={formData.pagoPorReserva} 
+                onChange={handleChange} 
+                placeholder="20" 
+                className={`${inputClass} tabular-nums`} 
+              />
             </div>
           </div>
 
           <div>
             <label className={labelClass}><Car size={12} />Precio por km (€/km)</label>
-            <input type="number" step="0.01" name="precioPorKm" value={formData.precioPorKm} onChange={handleChange} placeholder="Ej. 0.19" className={`${inputClass} tabular-nums`} />
+            <input 
+              type="text" 
+              name="precioPorKm" 
+              value={formData.precioPorKm} 
+              onChange={handleChange} 
+              placeholder="Ej. 0.19" 
+              className={`${inputClass} tabular-nums`} 
+            />
           </div>
 
           {/* ── Datos de pago condicionales ── */}
           {formData.tipoPago === 'bizum' && (
             <div>
               <label className={labelClass}><Phone size={12} className="text-green-500" />Teléfono Bizum</label>
-              <input type="tel" name="telefonoBizum" value={formData.telefonoBizum ?? ''} onChange={handleChange} placeholder="+34 600 111 222" className={inputClass} />
+              <input 
+                type="tel" 
+                name="telefonoBizum" 
+                value={formData.telefonoBizum ?? ''} 
+                onChange={handleChange} 
+                placeholder="697 60 97 56" 
+                maxLength={17}
+                className={inputClass} 
+              />
             </div>
           )}
 
@@ -257,6 +391,17 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
 
           {/* Actions */}
           <div className="flex space-x-3 pt-2">
+            {isEditMode && (
+              <button 
+                type="button" 
+                onClick={handleDelete}
+                disabled={isSaving}
+                className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-all active:scale-95 disabled:opacity-50"
+                title="Eliminar trabajador"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
             <button type="button" onClick={onClose} className="flex-1 py-3 px-6 bg-stone-50 dark:bg-stone-800/50 text-slate-500 dark:text-stone-400 font-bold rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-all active:scale-95 text-xs">
               Cancelar
             </button>

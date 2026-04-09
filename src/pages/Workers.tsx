@@ -55,7 +55,7 @@ const Workers: React.FC = () => {
 
   const handleSaveWorker = async (workerData: any) => {
     try {
-      if (workerData.id) {
+      if (workerData.id && !workerData.id.startsWith('temp_')) {
         await appsScriptApi.updateWorker(workerData as Worker);
       } else {
         await appsScriptApi.addWorker(workerData);
@@ -69,6 +69,23 @@ const Workers: React.FC = () => {
       }
     } catch (error) {
       console.error('Error saving worker:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteWorker = async (id: string) => {
+    // Actualización optimista: lo quitamos de la vista ya mismo
+    setWorkers(prev => prev.filter(w => w.id !== id));
+    
+    try {
+      await appsScriptApi.deleteWorker(id);
+      if (profileWorker && profileWorker.id === id) {
+        setProfileWorker(null);
+      }
+    } catch (error) {
+      console.error('Error deleting worker:', error);
+      // Si falla, recargamos para restaurar al trabajador
+      await fetchWorkers();
       throw error;
     }
   };
@@ -110,6 +127,7 @@ const Workers: React.FC = () => {
           await handleSaveWorker(w);
           setProfileWorker(w);
         }}
+        onDelete={handleDeleteWorker}
       />
     );
   }
@@ -222,6 +240,7 @@ const Workers: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveWorker}
+        onDelete={handleDeleteWorker}
       />
     </div>
   );
