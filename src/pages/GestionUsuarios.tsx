@@ -1,0 +1,688 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  Search,
+  Plus,
+  Trash2,
+  Mail,
+  Edit2,
+  KeyRound,
+  UserCheck,
+  UserX,
+  Eye,
+  EyeOff,
+  X,
+  Check,
+  AlertTriangle,
+  Users,
+} from 'lucide-react';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type UserRole = 'admin' | 'editor' | 'viewer';
+type UserStatus = 'active' | 'inactive' | 'pending';
+type OnlineStatus = 'online' | 'working' | 'away' | 'offline';
+
+interface AppUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  lastLogin: string | null;
+  createdAt: string;
+  avatar: string;
+  onlineStatus: OnlineStatus;
+  currentActivity?: string;
+  sessionStart?: string;
+}
+
+// ─── Mock data ────────────────────────────────────────────────────────────────
+
+const MOCK_USERS: AppUser[] = [
+  { id: '1', name: 'Adrián García',  email: 'admin@rh.local',        role: 'admin',  status: 'active',   lastLogin: '2026-04-09T08:30:00', createdAt: '2024-01-15', avatar: 'AG', onlineStatus: 'online',  currentActivity: 'Dashboard',         sessionStart: '2026-04-09T08:30:00' },
+  { id: '2', name: 'María López',    email: 'maria.lopez@rh.local',  role: 'editor', status: 'active',   lastLogin: '2026-04-09T09:05:00', createdAt: '2024-03-02', avatar: 'ML', onlineStatus: 'working', currentActivity: 'Editando pagos',    sessionStart: '2026-04-09T09:05:00' },
+  { id: '3', name: 'Carlos Martínez',email: 'carlos.m@rh.local',     role: 'viewer', status: 'active',   lastLogin: '2026-04-09T07:50:00', createdAt: '2024-05-20', avatar: 'CM', onlineStatus: 'away',    currentActivity: 'Inactivo 12 min',   sessionStart: '2026-04-09T07:50:00' },
+  { id: '4', name: 'Laura Sánchez',  email: 'laura.s@rh.local',      role: 'editor', status: 'inactive', lastLogin: '2025-12-01T14:00:00', createdAt: '2024-06-11', avatar: 'LS', onlineStatus: 'offline' },
+  { id: '5', name: 'Javier Ruiz',    email: 'javier.r@rh.local',     role: 'viewer', status: 'pending',  lastLogin: null,                  createdAt: '2026-04-01', avatar: 'JR', onlineStatus: 'offline' },
+  { id: '6', name: 'Sofía Torres',   email: 'sofia.t@rh.local',      role: 'viewer', status: 'active',   lastLogin: '2026-04-09T08:55:00', createdAt: '2025-01-09', avatar: 'ST', onlineStatus: 'working', currentActivity: 'Revisando informes', sessionStart: '2026-04-09T08:55:00' },
+  { id: '7', name: 'Pablo Navarro',  email: 'pablo.n@rh.local',      role: 'editor', status: 'active',   lastLogin: '2026-04-08T11:30:00', createdAt: '2025-02-14', avatar: 'PN', onlineStatus: 'offline' },
+  { id: '8', name: 'Elena Moreno',   email: 'elena.m@rh.local',      role: 'viewer', status: 'inactive', lastLogin: '2025-11-20T10:00:00', createdAt: '2024-08-22', avatar: 'EM', onlineStatus: 'offline' },
+];
+
+// ─── Online status config ─────────────────────────────────────────────────────
+
+const onlineConfig: Record<OnlineStatus, { label: string; dot: string; text: string }> = {
+  online:  { label: 'En línea',     dot: 'bg-green-500',                        text: 'text-green-600 dark:text-green-400' },
+  working: { label: 'Trabajando',   dot: 'bg-orange-500',                       text: 'text-orange-500 dark:text-orange-400' },
+  away:    { label: 'En línea',     dot: 'bg-green-500',                        text: 'text-green-600 dark:text-green-400' },
+  offline: { label: 'Desconectado', dot: 'bg-slate-300 dark:bg-stone-600',      text: 'text-slate-400' },
+};
+
+// ─── WorkingBadge (igual que en AnalyticsCards) ───────────────────────────────
+
+const WorkingBadge: React.FC = () => {
+  const [step, setStep] = useState(1);
+  useEffect(() => {
+    const id = setInterval(() => setStep(s => (s === 3 ? 1 : s + 1)), 500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="inline-flex items-center text-[11px]">
+      <span className="working-badge font-medium">
+        Trabajando
+        <span style={{ opacity: step >= 1 ? 1 : 0 }}>.</span>
+        <span style={{ opacity: step >= 2 ? 1 : 0 }}>.</span>
+        <span style={{ opacity: step >= 3 ? 1 : 0 }}>.</span>
+      </span>
+    </span>
+  );
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const roleConfig: Record<UserRole, { label: string; color: string }> = {
+  admin:  { label: 'Admin',  color: 'text-orange-600 dark:text-orange-400' },
+  editor: { label: 'Editor', color: 'text-orange-400 dark:text-orange-300' },
+  viewer: { label: 'Visor',  color: 'text-slate-400 dark:text-stone-500'   },
+};
+
+const statusConfig: Record<UserStatus, { label: string; color: string; dot: string }> = {
+  active: { label: 'Activo', color: 'text-green-700 bg-green-50 dark:bg-green-900/20 dark:text-green-400', dot: 'bg-green-500' },
+  inactive: { label: 'Inactivo', color: 'text-slate-500 bg-slate-100 dark:bg-stone-700 dark:text-stone-400', dot: 'bg-slate-400' },
+  pending: { label: 'Pendiente', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400', dot: 'bg-amber-400' },
+};
+
+function formatDate(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatSessionDuration(iso: string) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// ─── UserModal ────────────────────────────────────────────────────────────────
+
+interface UserModalProps {
+  user: AppUser | null;
+  onClose: () => void;
+  onSave: (u: AppUser) => void;
+}
+
+// (kept for reference, not used directly)
+const _EMPTY_USER: Omit<AppUser, 'id' | 'createdAt' | 'lastLogin' | 'avatar'> = {
+  name: '', email: '', role: 'viewer', status: 'active', onlineStatus: 'offline',
+};
+
+const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
+  const isNew = !user;
+  const [form, setForm] = useState({
+    name: user?.name ?? '',
+    email: user?.email ?? '',
+    role: user?.role ?? 'viewer' as UserRole,
+    status: user?.status ?? 'active' as UserStatus,
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = 'El nombre es obligatorio';
+    if (!form.email.trim()) e.email = 'El email es obligatorio';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Email no válido';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = () => {
+    if (!validate()) return;
+    const initials = form.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    onSave({
+      id: user?.id ?? Date.now().toString(),
+      createdAt: user?.createdAt ?? new Date().toISOString().slice(0, 10),
+      lastLogin: user?.lastLogin ?? null,
+      avatar: initials,
+      onlineStatus: user?.onlineStatus ?? 'offline',
+      currentActivity: user?.currentActivity,
+      sessionStart: user?.sessionStart,
+      ...form,
+    });
+    onClose();
+  };
+
+  const inputClass = 'w-full px-3.5 py-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-slate-200 dark:border-stone-700 text-slate-800 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/50 transition';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-stone-100">
+            {isNew ? 'Nuevo usuario' : 'Editar usuario'}
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 transition"><X size={20} /></button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Nombre completo</label>
+            <input className={`${inputClass} ${errors.name ? 'border-red-400' : ''}`} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: María López" />
+            {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Email</label>
+            <input className={`${inputClass} ${errors.email ? 'border-red-400' : ''}`} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="usuario@rh.local" type="email" />
+            {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Rol</label>
+              <select className={inputClass} value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}>
+                <option value="admin">Admin</option>
+                <option value="editor">Editor</option>
+                <option value="viewer">Visor</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Estado</label>
+              <select className={inputClass} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as UserStatus }))}>
+                <option value="active">Activo</option>
+                <option value="inactive">Inactivo</option>
+                <option value="pending">Pendiente</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-stone-700 text-slate-600 dark:text-stone-300 text-sm hover:bg-slate-50 dark:hover:bg-stone-800 transition">Cancelar</button>
+          <button onClick={handleSubmit} className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition">
+            {isNew ? 'Crear usuario' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── PasswordModal ────────────────────────────────────────────────────────────
+
+interface PasswordModalProps {
+  user: AppUser;
+  onClose: () => void;
+}
+
+const PasswordModal: React.FC<PasswordModalProps> = ({ user, onClose }) => {
+  const [sent, setSent] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [newPwd, setNewPwd] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
+
+  const handleSendEmail = () => { setSent(true); };
+
+  const inputClass = 'w-full px-3.5 py-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-slate-200 dark:border-stone-700 text-slate-800 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/50 transition';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-stone-100">Gestionar contraseña</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition"><X size={20} /></button>
+        </div>
+
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-stone-800">
+          <div className="w-9 h-9 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 font-semibold text-sm">{user.avatar}</div>
+          <div>
+            <p className="text-sm font-medium text-slate-800 dark:text-stone-200">{user.name}</p>
+            <p className="text-xs text-slate-400">{user.email}</p>
+          </div>
+        </div>
+
+        {!sent ? (
+          <div className="space-y-3">
+            <button
+              onClick={handleSendEmail}
+              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-stone-700 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/10 transition group"
+            >
+              <Mail size={18} className="text-slate-400 group-hover:text-orange-500 transition" />
+              <div className="text-left">
+                <p className="text-sm font-medium text-slate-700 dark:text-stone-300">Enviar enlace de recuperación</p>
+                <p className="text-xs text-slate-400">Se enviará un email a {user.email}</p>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setShowManual(m => !m)}
+              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-stone-700 hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/10 transition group"
+            >
+              <KeyRound size={18} className="text-slate-400 group-hover:text-blue-500 transition" />
+              <div className="text-left">
+                <p className="text-sm font-medium text-slate-700 dark:text-stone-300">Establecer contraseña manualmente</p>
+                <p className="text-xs text-slate-400">Define una nueva contraseña directamente</p>
+              </div>
+            </button>
+
+            {showManual && (
+              <div className="space-y-2 pt-1">
+                <div className="relative">
+                  <input
+                    type={showPwd ? 'text' : 'password'}
+                    className={inputClass}
+                    placeholder="Nueva contraseña"
+                    value={newPwd}
+                    onChange={e => setNewPwd(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPwd(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setSent(true); }}
+                  disabled={newPwd.length < 4}
+                  className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-sm font-medium transition"
+                >
+                  Guardar contraseña
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <Check size={24} className="text-green-600" />
+            </div>
+            <p className="text-sm text-slate-700 dark:text-stone-300 text-center font-medium">Operación completada</p>
+            <p className="text-xs text-slate-400 text-center">La contraseña ha sido actualizada correctamente.</p>
+            <button onClick={onClose} className="mt-2 px-6 py-2 rounded-xl bg-slate-100 dark:bg-stone-800 text-slate-700 dark:text-stone-200 text-sm hover:bg-slate-200 transition">Cerrar</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── DeleteConfirmModal ───────────────────────────────────────────────────────
+
+interface DeleteConfirmModalProps {
+  user: AppUser;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({ user, onClose, onConfirm }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="relative bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
+          <AlertTriangle size={20} className="text-red-500" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-slate-800 dark:text-stone-100">Eliminar usuario</h2>
+          <p className="text-sm text-slate-500 dark:text-stone-400 mt-1">
+            ¿Estás seguro de que quieres eliminar a <span className="font-medium text-slate-700 dark:text-stone-300">{user.name}</span>? Esta acción no se puede deshacer.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-stone-700 text-slate-600 dark:text-stone-300 text-sm hover:bg-slate-50 dark:hover:bg-stone-800 transition">Cancelar</button>
+        <button onClick={() => { onConfirm(); onClose(); }} className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition">Eliminar</button>
+      </div>
+    </div>
+  </div>
+);
+
+// ─── UserRow ──────────────────────────────────────────────────────────────────
+
+interface UserRowProps {
+  user: AppUser;
+  onEdit: (u: AppUser) => void;
+  onDelete: (u: AppUser) => void;
+  onPassword: (u: AppUser) => void;
+  onToggleStatus: (u: AppUser) => void;
+}
+
+const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, onToggleStatus }) => {
+  const { label: roleLabel, color: roleColor } = roleConfig[user.role];
+  const { dot: onlineDot } = onlineConfig[user.onlineStatus];
+  const isConnected = user.onlineStatus !== 'offline';
+  const isWorking = user.onlineStatus === 'working';
+
+  return (
+    <li className="group grid grid-cols-[2fr_1fr_1fr_120px] gap-4 items-center px-8 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
+
+      {/* Nombre */}
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="relative shrink-0">
+          <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 soft-shadow flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
+            {user.avatar}
+          </div>
+          <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-stone-900 ${onlineDot}`} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm text-slate-800 dark:text-stone-200 truncate">{user.name}</p>
+          <p className="text-xs text-slate-400 dark:text-stone-500 truncate">{user.email}</p>
+          {/* Mobile presence */}
+          <div className="flex items-center gap-1.5 mt-0.5 md:hidden">
+            {isWorking && <WorkingBadge />}
+            {isConnected && !isWorking && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />En línea
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Rol */}
+      <div className="hidden sm:flex">
+        <span className={`text-xs ${roleColor}`}>{roleLabel}</span>
+      </div>
+
+      {/* Actividad */}
+      <div className="hidden md:flex flex-col gap-0.5">
+        {isConnected ? (
+          <>
+            {isWorking ? (
+              <WorkingBadge />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-green-600 dark:text-green-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />En línea
+              </span>
+            )}
+            {user.currentActivity && (
+              <span className="text-xs text-slate-400 dark:text-stone-500">{user.currentActivity}</span>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-slate-400 dark:text-stone-500">—</span>
+        )}
+      </div>
+
+      {/* Acciones */}
+      <div className="flex items-center justify-end gap-1">
+        <button onClick={() => onEdit(user)} title="Editar" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors">
+          <Edit2 size={14} />
+        </button>
+        <button onClick={() => onPassword(user)} title="Contraseña" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-slate-700 dark:hover:text-stone-200 transition-colors">
+          <KeyRound size={14} />
+        </button>
+        <button onClick={() => onDelete(user)} title="Eliminar" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-red-500 transition-colors">
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </li>
+  );
+};
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+const GestionUsuarios: React.FC = () => {
+  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
+  const [search, setSearch] = useState('');
+  const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
+
+  const [modalUser, setModalUser] = useState<AppUser | null | undefined>(undefined); // undefined = closed, null = new
+  const [passwordUser, setPasswordUser] = useState<AppUser | null>(null);
+  const [deleteUser, setDeleteUser] = useState<AppUser | null>(null);
+
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const filtered = useMemo(() => {
+    return users.filter(u => {
+      const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
+      const matchRole = filterRole === 'all' || u.role === filterRole;
+      return matchSearch && matchRole;
+    });
+  }, [users, search, filterRole]);
+
+  const stats = useMemo(() => ({
+    total: users.length,
+    active: users.filter(u => u.status === 'active').length,
+    admins: users.filter(u => u.role === 'admin').length,
+    online: users.filter(u => u.onlineStatus !== 'offline').length,
+  }), [users]);
+
+  const onlineUsers = useMemo(() =>
+    users.filter(u => u.onlineStatus !== 'offline')
+      .sort((a, b) => {
+        const order: OnlineStatus[] = ['working', 'online', 'away'];
+        return order.indexOf(a.onlineStatus) - order.indexOf(b.onlineStatus);
+      }),
+  [users]);
+
+  // Tick every minute to refresh session durations
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleSave = (u: AppUser) => {
+    setUsers(prev => {
+      const exists = prev.find(p => p.id === u.id);
+      if (exists) return prev.map(p => p.id === u.id ? u : p);
+      return [...prev, u];
+    });
+    showToast(u.id ? 'Usuario actualizado correctamente' : 'Usuario creado correctamente');
+  };
+
+  const handleDelete = (u: AppUser) => {
+    setUsers(prev => prev.filter(p => p.id !== u.id));
+    showToast('Usuario eliminado');
+  };
+
+  const handleToggleStatus = (u: AppUser) => {
+    const next: UserStatus = u.status === 'active' ? 'inactive' : 'active';
+    setUsers(prev => prev.map(p => p.id === u.id ? { ...p, status: next } : p));
+    showToast(`Usuario ${next === 'active' ? 'activado' : 'desactivado'}`);
+  };
+
+  const pillClass = (active: boolean) =>
+    `px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${active ? 'bg-orange-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:bg-slate-200 dark:hover:bg-stone-700'}`;
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-stone-900 dark:bg-white text-white dark:text-stone-900 rounded-xl shadow-xl text-sm font-medium">
+          <Check size={16} className="text-green-400 dark:text-green-600" />
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-1">
+        <h1 className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display shrink-0">
+          Gestión de usuarios
+        </h1>
+
+        <div className="flex flex-col md:flex-row gap-3 justify-end items-center flex-1">
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar usuario..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs font-normal placeholder:text-slate-400 dark:placeholder:text-stone-500 focus:outline-none transition-all hover:bg-white/80 dark:hover:bg-stone-800/60 focus:bg-white dark:focus:bg-stone-900"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:flex-none">
+              <select
+                value={filterRole}
+                onChange={e => setFilterRole(e.target.value as UserRole | 'all')}
+                className="w-full appearance-none pl-4 pr-8 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 focus:outline-none transition-all hover:bg-white/80 cursor-pointer"
+              >
+                <option value="all">Todos los roles</option>
+                <option value="admin">Admin</option>
+                <option value="editor">Editor</option>
+                <option value="viewer">Visor</option>
+              </select>
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
+            </div>
+
+            <button
+              onClick={() => setModalUser(null)}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
+            >
+              <Plus size={14} />
+              Nuevo usuario
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {[
+          { label: 'Total usuarios',   value: stats.total,  color: 'text-slate-700 dark:text-stone-200' },
+          { label: 'Activos',          value: stats.active, color: 'text-green-600 dark:text-green-400' },
+          { label: 'Administradores',  value: stats.admins, color: 'text-orange-600 dark:text-orange-400' },
+          { label: 'Conectados ahora', value: stats.online, color: 'text-green-600 dark:text-green-400' },
+        ].map(s => (
+          <div key={s.label} className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl p-4">
+            <p className="text-xs text-slate-400 dark:text-stone-500 mb-1">{s.label}</p>
+            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Online presence panel */}
+      {onlineUsers.length > 0 && (
+        <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl mb-4 overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800">
+            <h3 className="text-base font-normal font-display tracking-tight text-slate-800 dark:text-stone-200">Conectados ahora</h3>
+            <span className="text-xs text-slate-400 dark:text-stone-500">{onlineUsers.length} usuarios</span>
+          </div>
+          <ul className="divide-y divide-stone-100 dark:divide-stone-800">
+            {onlineUsers.map(u => {
+              const { dot } = onlineConfig[u.onlineStatus];
+              const isWorking = u.onlineStatus === 'working';
+              return (
+                <li key={u.id} className="flex items-center gap-3 px-6 py-3">
+                  <div className="relative shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 soft-shadow flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
+                      {u.avatar}
+                    </div>
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-stone-900 ${dot}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-slate-800 dark:text-stone-200">{u.name}</p>
+                    {u.currentActivity && (
+                      <p className="text-xs text-slate-400 dark:text-stone-500 truncate">{u.currentActivity}</p>
+                    )}
+                  </div>
+                  <div className="shrink-0">
+                    {isWorking ? (
+                      <WorkingBadge />
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-600 dark:text-green-400">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        En línea{u.sessionStart ? ` · ${formatSessionDuration(u.sessionStart)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {/* Table card */}
+      <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden mb-4">
+
+        {/* Column headers */}
+        <div className="grid grid-cols-[2fr_1fr_1fr_120px] gap-4 px-8 py-3 border-b border-stone-100 dark:border-stone-800">
+          <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
+          <span className="text-xs text-slate-400 dark:text-stone-500 hidden sm:block">Rol</span>
+          <span className="text-xs text-slate-400 dark:text-stone-500 hidden md:block">Actividad</span>
+          <span />
+        </div>
+
+        {/* Rows */}
+        <ul className="divide-y divide-stone-100 dark:divide-stone-800">
+          {filtered.length === 0 ? (
+            <li className="flex items-center justify-center px-8 py-12">
+              <span className="text-xs text-slate-400 dark:text-stone-500">Sin resultados</span>
+            </li>
+          ) : (
+            filtered.map(u => (
+              <UserRow
+                key={u.id}
+                user={u}
+                onEdit={u => setModalUser(u)}
+                onDelete={u => setDeleteUser(u)}
+                onPassword={u => setPasswordUser(u)}
+                onToggleStatus={handleToggleStatus}
+              />
+            ))
+          )}
+        </ul>
+
+        <div className="px-8 py-3 border-t border-stone-100 dark:border-stone-800">
+          <span className="text-xs text-slate-400 dark:text-stone-500">{filtered.length} de {users.length} usuarios</span>
+        </div>
+      </div>
+
+      {/* Role legend */}
+      <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl p-4">
+        <h3 className="text-xs font-normal text-slate-400 dark:text-stone-500 uppercase tracking-wider mb-3">Descripción de roles</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(Object.entries(roleConfig) as [UserRole, typeof roleConfig[UserRole]][]).map(([key, { label, color }]) => (
+            <div key={key} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-stone-800/50">
+              <span className={`text-xs font-medium shrink-0 ${color}`}>
+                {label}
+              </span>
+              <p className="text-xs text-slate-500 dark:text-stone-400 leading-relaxed">
+                {key === 'admin' && 'Acceso total al sistema. Puede gestionar usuarios, configurar la plataforma y ver todos los datos.'}
+                {key === 'editor' && 'Puede añadir, editar y eliminar registros operativos. No puede gestionar usuarios ni configuración.'}
+                {key === 'viewer' && 'Solo lectura. Puede consultar datos pero no modificar ni exportar información sensible.'}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {modalUser !== undefined && (
+        <UserModal
+          user={modalUser}
+          onClose={() => setModalUser(undefined)}
+          onSave={handleSave}
+        />
+      )}
+      {passwordUser && (
+        <PasswordModal user={passwordUser} onClose={() => setPasswordUser(null)} />
+      )}
+      {deleteUser && (
+        <DeleteConfirmModal
+          user={deleteUser}
+          onClose={() => setDeleteUser(null)}
+          onConfirm={() => handleDelete(deleteUser)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default GestionUsuarios;
