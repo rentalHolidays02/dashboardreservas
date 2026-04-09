@@ -274,6 +274,25 @@ export const MOCK_NORMAL_CLEANS: NormalCleanRecord[] = [
     km: 5,
     observaciones: 'Todo correcto',
     checked: true
+  },
+  {
+    id: 'nc2',
+    telefono: '600000004',
+    nombre: 'Ana',
+    apellidos: 'López',
+    checkinFecha: '2026-04-01 10:00',
+    checkinUbicacion: 'Calle Atocha 15',
+    checkoutFecha: '2026-04-01 12:00',
+    checkoutUbicacion: 'Calle Atocha 15',
+    apartamento: 'Latina 2B',
+    horaEntrada: '10:15',
+    horaSalida: '11:45',
+    sigueHuesped: true,
+    fechaSalidaReserva: '2026-04-05',
+    recogeLlaves: false,
+    km: 3.5,
+    observaciones: 'El huésped solicitó quedarse más tiempo.',
+    checked: false
   }
 ];
 

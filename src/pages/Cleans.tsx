@@ -14,6 +14,9 @@ import {
   Clock,
   Filter,
   Info,
+  Key,
+  User,
+  MessageSquare,
 } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker } from '../services/mockData';
@@ -455,6 +458,7 @@ const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<H
   );
 };
 
+
 // Observation button component
 const ObservationButton: React.FC<{ text?: string }> = ({ text }) => {
   const [open, setOpen] = useState(false);
@@ -490,6 +494,11 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
   const locationBtnRef = useRef<HTMLButtonElement>(null);
   const [dateModal, setDateModal] = useState<{ open: boolean; record: NormalCleanRecord | null }>({ open: false, record: null });
   const dateBtnRef = useRef<HTMLButtonElement>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggleRow = (id: string) => {
+    setExpandedId(prev => prev === id ? null : id);
+  };
 
   return (
     <>
@@ -502,35 +511,103 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
             <th className={thClass}>Apartamento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
-            <th className={thClass}>Observaciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
           {data.map((r) => (
-            <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
-              <td className={tdClass}>
-                <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
-              </td>
-              <td className={tdClass}>
-                <VerificationCell verified={r.checked} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
-              </td>
-              <td className={tdClass}>
-                <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
-              </td>
-              <td className={tdClass}>
-                <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-                  {r.apartamento}
-                </span>
-              </td>
-              <td className={`${tdClass}`}>
-                <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
-                <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaEntrada} - {r.horaSalida}</div>
-              </td>
-              <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
-              <td className={`${tdClass} text-center`}>
-                <ObservationButton text={r.observaciones} />
-              </td>
-            </tr>
+            <React.Fragment key={r.id}>
+              <tr 
+                onClick={() => toggleRow(r.id)}
+                className={`group cursor-pointer transition-colors duration-200 ${
+                  expandedId === r.id 
+                    ? 'bg-orange-50/30 dark:bg-orange-900/10' 
+                    : 'hover:bg-stone-100/50 dark:hover:bg-stone-700/30'
+                }`}
+              >
+                <td className={tdClass}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${expandedId === r.id ? 'bg-orange-500 scale-125' : 'bg-transparent'}`} />
+                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                  </div>
+                </td>
+                <td className={tdClass} onClick={(e) => e.stopPropagation()}>
+                  <VerificationCell verified={r.checked} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
+                </td>
+                <td className={tdClass} onClick={(e) => e.stopPropagation()}>
+                  <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
+                </td>
+                <td className={tdClass}>
+                  <span className="inline-block bg-white dark:bg-stone-800 text-black dark:text-stone-100 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+                    {r.apartamento}
+                  </span>
+                </td>
+                <td className={`${tdClass}`}>
+                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaEntrada} - {r.horaSalida}</div>
+                </td>
+                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
+              </tr>
+              {expandedId === r.id && (
+                <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <td colSpan={6} className="px-8 py-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {/* Observaciones */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <MessageSquare size={12} className="text-orange-500" />
+                          <span>Observaciones</span>
+                        </div>
+                        <div className="bg-white/50 dark:bg-stone-800/50 rounded-xl p-3 border border-stone-100 dark:border-stone-700/50 min-h-[60px]">
+                          <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed italic">
+                            {r.observaciones || 'Sin observaciones adicionales.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Llaves */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <Key size={12} className="text-orange-500" />
+                          <span>Llaves Entregadas</span>
+                        </div>
+                        <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${
+                          r.recogeLlaves 
+                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400' 
+                            : 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900/40 text-red-600 dark:text-red-400'
+                        }`}>
+                          {r.recogeLlaves ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+                          <span>{r.recogeLlaves ? 'ENTREGADAS' : 'PENDIENTES'}</span>
+                        </div>
+                      </div>
+
+                      {/* Huésped */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <User size={12} className="text-orange-500" />
+                          <span>Estado del Huésped</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border self-start ${
+                            r.sigueHuesped 
+                              ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/40 text-amber-700 dark:text-amber-400' 
+                              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/40 text-blue-600 dark:text-blue-400'
+                          }`}>
+                            <div className={`w-1.5 h-1.5 rounded-full ${r.sigueHuesped ? 'bg-amber-500 animate-pulse' : 'bg-blue-500'}`} />
+                            <span>{r.sigueHuesped ? 'Salió tarde' : 'YA SALIÓ'}</span>
+                          </div>
+                          {r.fechaSalidaReserva && (
+                            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-stone-400 bg-white/40 dark:bg-stone-800/40 px-3 py-1.5 rounded-lg border border-stone-100/50 dark:border-stone-700/30 w-fit">
+                              <Clock size={12} className="text-orange-500" />
+                              <span>Hora en la que salió: <span className="font-semibold">{r.fechaSalidaReserva}</span></span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
           ))}
         </tbody>
       </table>
