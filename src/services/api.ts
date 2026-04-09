@@ -25,7 +25,7 @@ const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4'; // Alojam
 const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; // Pagos Generales (Operarios)
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwobBqmty7b3ZH9ryaABvQBuO2NyRXwcZs261raZnDSA9Zn2zaw6aPME4yUXTybWyod/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
 
 // Utilidad para limpiar números formateados (ej: "10,00 €" -> 10.0)
@@ -419,6 +419,26 @@ export const appsScriptApi = {
       currentAccommodations = [...currentAccommodations, newAccommodation];
       saveAccommodations(currentAccommodations);
       return newAccommodation;
+    }
+  },
+
+  deleteAccommodation: async (id: string): Promise<boolean> => {
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({ id, action: 'delete' })
+      });
+
+      const updatedAccommodations = currentAccommodations.filter(a => a.id !== id);
+      saveAccommodations(updatedAccommodations);
+      return true;
+    } catch (error) {
+      console.error('Error deleting accommodation from Sheets:', error);
+      throw error;
     }
   },
 

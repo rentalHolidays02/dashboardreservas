@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X, Save, User as UserIcon, Phone, CreditCard, Home,
-  Loader2, UserPlus, Camera, Mail, Hash, Car, Building2, Landmark, Trash2
+  Loader2, UserPlus, Camera, Mail, Hash, Car, Building2, Landmark, Trash2, Plus, MapPin
 } from 'lucide-react';
 import { Worker } from '../../services/mockData';
 
@@ -11,6 +11,8 @@ interface WorkerModalProps {
   onClose: () => void;
   onSave: (workerData: any) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  existingWorkers: Worker[];
+  allAccommodations: string[];
 }
 
 const inputClass =
@@ -19,7 +21,9 @@ const inputClass =
 const labelClass =
   'block text-[10px] font-light text-slate-400 dark:text-stone-500 mb-2 flex items-center gap-1.5';
 
-const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSave, onDelete }) => {
+const WorkerModal: React.FC<WorkerModalProps> = ({ 
+  worker, isOpen, onClose, onSave, onDelete, existingWorkers = [], allAccommodations = [] 
+}) => {
   const isEditMode = !!worker;
 
   const initialData = {
@@ -43,34 +47,54 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
   const [formData, setFormData] = useState<any>(initialData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
-  const [accInput, setAccInput] = useState('');
+  const [newAccommodation, setNewAccommodation] = useState('');
+  const [showAccSuggestions, setShowAccSuggestions] = useState(false);
+  const suggestionRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setFormData(isEditMode && worker ? { ...worker } : initialData);
-      setAccInput('');
+      setNewAccommodation('');
     }
   }, [isOpen, worker, isEditMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (suggestionRef.current && !suggestionRef.current.contains(event.target as Node)) {
+        setShowAccSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (!isOpen) return null;
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // Validar Teléfono (mínimo 9 dígitos)
     const phoneDigits = formData.telefono.replace(/\D/g, '');
     if (phoneDigits.length < 9) {
       newErrors.telefono = 'El teléfono debe tener al menos 9 dígitos';
     }
 
-    // Validar DNI/NIE (Regex estándar español)
     const dniRegex = /^[0-9]{8}[TRWAGMYFPDXBNJZSQVHLCKE]$/i;
     const nieRegex = /^[XYZ][0-9]{7}[TRWAGMYFPDXBNJZSQVHLCKE]$/i;
     const dniClean = formData.dni?.trim().toUpperCase() || '';
     
     if (dniClean && !dniRegex.test(dniClean) && !nieRegex.test(dniClean)) {
       newErrors.dni = 'Formato de DNI (12345678A) o NIE (X1234567L) no válido';
+    }
+
+    const isDuplicate = (existingWorkers || []).some(w => 
+      w.fullName && formData.fullName &&
+      w.fullName.trim().toLowerCase() === formData.fullName.trim().toLowerCase() && 
+      (!worker || w.id !== worker.id)
+    );
+
+    if (isDuplicate) {
+      newErrors.fullName = 'Ya existe un trabajador registrado con este nombre';
     }
 
     setErrors(newErrors);
@@ -84,7 +108,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
 
     setIsSaving(true);
     try {
-      // Convertir campos numéricos antes de enviar
       const dataToSave = {
         ...formData,
         dni: formData.dni?.trim().toUpperCase(),
@@ -118,21 +141,16 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     let { name, value } = e.target;
     
-    // Si es DNI, lo forzamos a mayúsculas y quitamos espacios
     if (name === 'dni') {
       value = value.toUpperCase().replace(/\s/g, '');
     }
 
-    // Si es teléfono, solo permitimos números y autoformateamos con prefijo +34
     if (name === 'telefono' || name === 'telefonoBizum') {
-      const digits = value.replace(/\D/g, ''); // Solo números
+      const digits = value.replace(/\D/g, '');
       let finalValue = '';
       
       if (digits.length > 0) {
-        // Siempre empezamos con +34
         finalValue = '+34 ';
-        
-        // Extraemos los 9 dígitos del móvil (en caso de que hayan pegado un número con prefijo, lo limpiamos)
         const mobileDigits = digits.startsWith('34') ? digits.substring(2, 11) : digits.substring(0, 9);
         
         if (mobileDigits.length > 0) finalValue += mobileDigits.substring(0, 3);
@@ -143,7 +161,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
       value = finalValue;
     }
 
-    // Si es un campo numérico y está vacío, permitimos el string vacío para que el usuario pueda borrar
     if (['pagoPorReserva', 'precioPorKm'].includes(name)) {
       setFormData((prev: any) => ({
         ...prev,
@@ -157,7 +174,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
       [name]: value,
     }));
 
-    // Limpiar error del campo que se está editando
     if (errors[name]) {
       setErrors(prev => {
         const newErrs = { ...prev };
@@ -167,12 +183,16 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
     }
   };
 
-  const addAccommodation = () => {
-    const trimmed = accInput.trim();
-    if (trimmed && !formData.accommodations.includes(trimmed)) {
-      setFormData((prev: any) => ({ ...prev, accommodations: [...prev.accommodations, trimmed] }));
+  const addAccommodation = (value?: string) => {
+    const accToAdd = (value || newAccommodation).trim();
+    if (accToAdd && !formData.accommodations.includes(accToAdd)) {
+      setFormData((prev: any) => ({
+        ...prev,
+        accommodations: [...prev.accommodations, accToAdd]
+      }));
+      setNewAccommodation('');
+      setShowAccSuggestions(false);
     }
-    setAccInput('');
   };
 
   const removeAccommodation = (acc: string) => {
@@ -199,7 +219,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
       <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-md" onClick={onClose} />
 
       <div className="relative bg-white dark:bg-stone-900 w-full max-w-lg rounded-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-        {/* Header */}
         <div className="px-8 py-6 flex items-center justify-between border-b border-stone-100 dark:border-stone-800">
           <div className="flex items-center space-x-4">
             {isEditMode ? (
@@ -213,7 +232,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
                   {formData.photo ? (
                     <img src={formData.photo} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    worker?.fullName[0].toUpperCase()
+                    (worker?.fullName || '?')[0].toUpperCase()
                   )}
                   <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition-opacity pointer-events-none">
                     <Camera size={12} className="text-white" />
@@ -240,15 +259,22 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-8 space-y-5 max-h-[70vh] overflow-y-auto">
-
-          {/* ── Datos personales ── */}
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest">Datos personales</p>
 
           <div>
             <label className={labelClass}><UserIcon size={12} className="text-orange-500" />Nombre completo</label>
-            <input type="text" name="fullName" value={formData.fullName} onChange={handleChange} placeholder="Ej. Juan Pérez" required autoFocus={!isEditMode} className={inputClass} />
+            <input 
+              type="text" 
+              name="fullName" 
+              value={formData.fullName} 
+              onChange={handleChange} 
+              placeholder="Ej. Juan Pérez" 
+              required 
+              autoFocus={!isEditMode} 
+              className={`${inputClass} ${errors.fullName ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/10' : ''}`} 
+            />
+            {errors.fullName && <p className="text-[10px] text-red-500 mt-1 ml-1">{errors.fullName}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -287,7 +313,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
             <input type="email" name="email" value={formData.email ?? ''} onChange={handleChange} placeholder="trabajador@ejemplo.com" className={inputClass} />
           </div>
 
-          {/* ── Tarifas ── */}
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest pt-1">Tarifas</p>
 
           <div className="grid grid-cols-2 gap-4">
@@ -324,7 +349,6 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
             />
           </div>
 
-          {/* ── Datos de pago condicionales ── */}
           {formData.tipoPago === 'bizum' && (
             <div>
               <label className={labelClass}><Phone size={12} className="text-green-500" />Teléfono Bizum</label>
@@ -359,34 +383,87 @@ const WorkerModal: React.FC<WorkerModalProps> = ({ worker, isOpen, onClose, onSa
             </div>
           )}
 
-          {/* ── Alojamientos ── */}
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest pt-1">Alojamientos</p>
 
           <div>
-            <label className={labelClass}><Home size={12} className="text-orange-500" />Alojamientos asignados</label>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={accInput}
-                onChange={(e) => setAccInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAccommodation(); } }}
-                placeholder="Nombre del alojamiento"
-                className={inputClass}
-              />
-              <button type="button" onClick={addAccommodation} className="px-3 py-2.5 bg-orange-600 text-white rounded-xl text-xs font-bold hover:bg-orange-700 transition-all active:scale-95">
-                Añadir
-              </button>
-            </div>
-            {formData.accommodations?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-xl p-2.5 border border-orange-100 dark:border-orange-800/40">
-                {formData.accommodations.map((acc: string) => (
-                  <span key={acc} className="inline-flex items-center gap-1 text-[10px] font-bold bg-white dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50 rounded-md px-2 py-0.5">
+            <label className={labelClass}><MapPin size={12} />Asignar Alojamientos</label>
+            <div className="relative">
+              <div className="flex gap-2 mb-3">
+                <div className="relative flex-1">
+                  <input 
+                    type="text" 
+                    value={newAccommodation} 
+                    onChange={(e) => {
+                      setNewAccommodation(e.target.value);
+                      setShowAccSuggestions(true);
+                    }}
+                    onFocus={() => setShowAccSuggestions(true)}
+                    placeholder="Busca o escribe un alojamiento..." 
+                    className={inputClass} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addAccommodation();
+                      }
+                    }}
+                  />
+                  {showAccSuggestions && newAccommodation.trim() && (
+                    <div 
+                      ref={suggestionRef}
+                      className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-xl shadow-xl max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
+                    >
+                      {(allAccommodations || [])
+                        .filter(acc => 
+                          acc.toLowerCase().includes(newAccommodation.toLowerCase()) && 
+                          !(formData.accommodations || []).includes(acc)
+                        )
+                        .map((acc, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => addAccommodation(acc)}
+                            className="w-full text-left px-4 py-2.5 text-xs text-slate-700 dark:text-stone-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 border-b border-stone-50 dark:border-stone-800/50 last:border-0 transition-colors"
+                          >
+                            {acc}
+                          </button>
+                        ))
+                      }
+                      <button
+                        type="button"
+                        onClick={() => addAccommodation()}
+                        className="w-full text-left px-4 py-2.5 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50/30 dark:bg-orange-900/10 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors flex items-center gap-2"
+                      >
+                        <Plus size={12} />
+                        Usar "{newAccommodation}" como nuevo
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => addAccommodation()} 
+                  className="px-4 bg-stone-100 dark:bg-stone-800 text-slate-600 dark:text-stone-300 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/30 hover:text-orange-600 dark:hover:text-orange-400 transition-all font-medium text-xs active:scale-95"
+                >
+                  Añadir
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {(formData.accommodations || []).map((acc: string, index: number) => (
+                  <span key={index} className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[10px] font-medium rounded-lg border border-orange-100 dark:border-orange-800/50 animate-in zoom-in duration-300">
+                    <MapPin size={10} />
                     {acc}
-                    <button type="button" onClick={() => removeAccommodation(acc)} className="ml-0.5 hover:text-orange-800 dark:hover:text-orange-300 transition-colors">×</button>
+                    <button 
+                      type="button" 
+                      onClick={() => removeAccommodation(acc)}
+                      className="ml-1 hover:text-red-500 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
                   </span>
                 ))}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Actions */}

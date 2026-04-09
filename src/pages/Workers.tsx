@@ -10,6 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const Workers: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [accommodations, setAccommodations] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +42,10 @@ const Workers: React.FC = () => {
 
   useEffect(() => {
     fetchWorkers();
+    // Cargar nombres de alojamientos para el buscador
+    appsScriptApi.getAccommodations().then(accs => {
+      setAccommodations(accs.map(a => a.name).sort());
+    }).catch(console.error);
   }, []);
 
   const handleEditClick = (worker: Worker) => {
@@ -55,12 +60,38 @@ const Workers: React.FC = () => {
 
   const handleSaveWorker = async (workerData: any) => {
     try {
+      // 1. Detectar y auto-registrar nuevos alojamientos
+      const workerAccs = workerData.accommodations || [];
+      const newAccs = workerAccs.filter((name: string) => !accommodations.includes(name));
+
+      if (newAccs.length > 0) {
+        console.log('Detectados nuevos alojamientos para registrar:', newAccs);
+        // Registramos cada uno en el Excel de Alojamientos
+        await Promise.all(newAccs.map((accName: string) => 
+          appsScriptApi.addAccommodation({
+            name: accName,
+            active: true,
+            address: '',
+            city: '',
+            zipCode: '',
+            notes: 'Registrado automáticamente desde Operarios',
+            ref: ''
+          })
+        ));
+        
+        // Actualizamos la lista local de sugerencias
+        setAccommodations(prev => [...prev, ...newAccs].sort());
+      }
+
+      // 2. Guardar los datos del operario
       if (workerData.id && !workerData.id.startsWith('temp_')) {
         await appsScriptApi.updateWorker(workerData as Worker);
       } else {
         await appsScriptApi.addWorker(workerData);
       }
+      
       await fetchWorkers();
+
       // Refresh profileWorker if it's the one being edited
       if (profileWorker && workerData.id === profileWorker.id) {
         const updated = await appsScriptApi.getWorkers();
@@ -241,6 +272,8 @@ const Workers: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveWorker}
         onDelete={handleDeleteWorker}
+        existingWorkers={workers}
+        allAccommodations={accommodations}
       />
     </div>
   );
