@@ -6,8 +6,10 @@ import AccommodationFilterModal, { AccommodationFilters } from '../components/ac
 import { appsScriptApi } from '../services/api';
 import { Accommodation, Worker } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { useUndoToast } from '../context/UndoToastContext';
 
 const Alojamientos: React.FC = () => {
+  const { showUndoToast } = useUndoToast();
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -218,17 +220,25 @@ const Alojamientos: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveAccommodation}
         onDelete={async (id) => {
-          if (confirm('¿Estás seguro de que quieres eliminar este alojamiento? Esta acción no se puede deshacer.')) {
+          if (confirm('¿Estás seguro de que quieres eliminar este alojamiento?')) {
+            const accToDelete = accommodations.find(a => a.id === id);
+            if (!accToDelete) return;
             try {
-              // Actualización optimista
               setAccommodations(prev => prev.filter(a => a.id !== id));
               await appsScriptApi.deleteAccommodation(id);
               setIsModalOpen(false);
             } catch (error) {
               console.error('Error deleting accommodation:', error);
-              // Si falla, recargamos
               fetchAccommodations();
+              return;
             }
+            showUndoToast(
+              `Alojamiento "${accToDelete.name}" eliminado`,
+              async () => {
+                await appsScriptApi.restoreAccommodation(accToDelete);
+                setAccommodations(prev => [accToDelete, ...prev.filter(a => a.id !== accToDelete.id)]);
+              }
+            );
           }
         }}
       />

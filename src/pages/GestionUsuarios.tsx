@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Users,
 } from 'lucide-react';
+import { useUndoToast } from '../context/UndoToastContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -428,6 +429,7 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const GestionUsuarios: React.FC = () => {
+  const { showUndoToast } = useUndoToast();
   const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
@@ -484,7 +486,12 @@ const GestionUsuarios: React.FC = () => {
 
   const handleDelete = (u: AppUser) => {
     setUsers(prev => prev.filter(p => p.id !== u.id));
-    showToast('Usuario eliminado');
+    showUndoToast(
+      `Usuario "${u.name}" eliminado`,
+      () => {
+        setUsers(prev => [u, ...prev.filter(p => p.id !== u.id)]);
+      }
+    );
   };
 
   const handleToggleStatus = (u: AppUser) => {

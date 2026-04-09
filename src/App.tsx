@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { NavigationGuardProvider } from './context/NavigationGuardContext';
+import { UndoToastProvider } from './context/UndoToastContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Cleans from './pages/Cleans';
@@ -36,6 +37,7 @@ function App() {
 
   return (
     <ThemeProvider>
+    <UndoToastProvider>
     <NavigationGuardProvider>
     <BrowserRouter>
       {user && <ChatBot />}
@@ -192,6 +194,7 @@ function App() {
       </Routes>
     </BrowserRouter>
     </NavigationGuardProvider>
+    </UndoToastProvider>
     </ThemeProvider>
   );
 }

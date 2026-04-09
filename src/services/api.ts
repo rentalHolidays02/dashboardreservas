@@ -286,6 +286,28 @@ export const appsScriptApi = {
     }
   },
 
+  restoreWorker: async (worker: Worker): Promise<void> => {
+    try {
+      const payload = {
+        ...worker,
+        telefono: worker.telefono ? `'${worker.telefono.replace(/^'/, '')}` : '',
+        telefonoBizum: worker.telefonoBizum ? `'${worker.telefonoBizum.replace(/^'/, '')}` : '',
+        action: 'restore',
+      };
+      fetch(WORKERS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+      });
+      const updatedWorkers = [worker, ...currentWorkers.filter(w => w.id !== worker.id)];
+      saveWorkers(updatedWorkers);
+    } catch (error) {
+      console.error('Error restoring worker:', error);
+      throw error;
+    }
+  },
+
   getRecentCheckIns: async (limit = 10): Promise<CheckInOut[]> => {
     await delay(500);
     return [...MOCK_CHECKINS]
@@ -532,6 +554,22 @@ export const appsScriptApi = {
       return true;
     } catch (error) {
       console.error('Error deleting accommodation from Sheets:', error);
+      throw error;
+    }
+  },
+
+  restoreAccommodation: async (accommodation: Accommodation): Promise<void> => {
+    try {
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ ...accommodation, action: 'restore' }),
+      });
+      const updatedAccommodations = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
+      saveAccommodations(updatedAccommodations);
+    } catch (error) {
+      console.error('Error restoring accommodation:', error);
       throw error;
     }
   },
