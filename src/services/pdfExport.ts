@@ -68,7 +68,22 @@ export async function generatePDF(
   options: ReportOptions,
   filters: ReportFilters,
   logoUrl: string,
-): Promise<void> {
+  returnBlob?: false,
+): Promise<void>;
+export async function generatePDF(
+  data: ReportData,
+  options: ReportOptions,
+  filters: ReportFilters,
+  logoUrl: string,
+  returnBlob: true,
+): Promise<{ blob: Blob; fileName: string }>;
+export async function generatePDF(
+  data: ReportData,
+  options: ReportOptions,
+  filters: ReportFilters,
+  logoUrl: string,
+  returnBlob = false,
+): Promise<void | { blob: Blob; fileName: string }> {
   const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW  = doc.internal.pageSize.getWidth();
   const pageH  = doc.internal.pageSize.getHeight();
@@ -256,6 +271,10 @@ export async function generatePDF(
   }
 
   const fileName = `informe_rh_${filters.periodo}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  if (returnBlob) {
+    const blob = doc.output('blob');
+    return { blob, fileName };
+  }
   doc.save(fileName);
 }
 
