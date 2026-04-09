@@ -12,6 +12,7 @@ import Alojamientos from './pages/Alojamientos';
 import Analisis from './pages/Analisis';
 import GenerarInforme from './pages/GenerarInforme';
 import Profile from './pages/Profile';
+import GestionUsuarios from './pages/GestionUsuarios';
 import MainLayout from './components/layout/MainLayout';
 import ChatBot from './components/chatbot/ChatBot';
 import { User } from './services/mockData';
@@ -43,8 +44,21 @@ function App() {
           element={user ? <Navigate to="/dashboard" /> : <Login onLoginSuccess={handleLoginSuccess} />} 
         />
         
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/usuarios"
+          element={
+            user ? (
+              <MainLayout userRole={user.role} onLogout={handleLogout}>
+                <GestionUsuarios />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/dashboard"
           element={
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
