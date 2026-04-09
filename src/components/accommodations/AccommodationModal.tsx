@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  X, Save, MapPin, Building2, Home, Loader2, Camera, Hash, FileText, Info
+  X, Save, MapPin, Building2, Home, Loader2, Camera, Hash, FileText, Info, Trash2
 } from 'lucide-react';
 import { Accommodation } from '../../services/mockData';
 
@@ -9,6 +9,7 @@ interface AccommodationModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (accommodationData: any) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
 }
 
 const inputClass =
@@ -17,7 +18,7 @@ const inputClass =
 const labelClass =
   'block text-[10px] font-light text-slate-400 dark:text-stone-500 mb-2 flex items-center gap-1.5';
 
-const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, isOpen, onClose, onSave }) => {
+const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, isOpen, onClose, onSave, onDelete }) => {
   const isEditMode = !!accommodation;
 
   const initialData: Omit<Accommodation, 'id'> = {
@@ -178,6 +179,17 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
 
           {/* Actions */}
           <div className="flex space-x-3 pt-2">
+            {isEditMode && onDelete && (
+              <button 
+                type="button" 
+                onClick={() => onDelete(accommodation!.id)}
+                disabled={isSaving}
+                className="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-all active:scale-95 disabled:opacity-50 text-xs"
+                title="Eliminar alojamiento"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
             <button type="button" onClick={onClose} className="flex-1 py-3 px-6 bg-stone-50 dark:bg-stone-800/50 text-slate-500 dark:text-stone-400 font-bold rounded-xl hover:bg-stone-100 dark:hover:bg-stone-800 transition-all active:scale-95 text-xs">
               Cancelar
             </button>

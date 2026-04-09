@@ -217,6 +217,20 @@ const Alojamientos: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveAccommodation}
+        onDelete={async (id) => {
+          if (confirm('¿Estás seguro de que quieres eliminar este alojamiento? Esta acción no se puede deshacer.')) {
+            try {
+              // Actualización optimista
+              setAccommodations(prev => prev.filter(a => a.id !== id));
+              await appsScriptApi.deleteAccommodation(id);
+              setIsModalOpen(false);
+            } catch (error) {
+              console.error('Error deleting accommodation:', error);
+              // Si falla, recargamos
+              fetchAccommodations();
+            }
+          }
+        }}
       />
     </div>
   );
