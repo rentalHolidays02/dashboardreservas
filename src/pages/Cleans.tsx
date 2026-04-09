@@ -1,5 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   ClipboardList,
   Sparkles,
@@ -199,12 +202,10 @@ const Cleans: React.FC = () => {
       </div>
 
       {/* Content Area */}
-      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl">
-        <div className="overflow-x-auto">
-          {activeTab === 'normal' && <TableNormalCleans data={filteredNormal} photoMap={photoMap} />}
-          {activeTab === 'initial' && <TableInitialCleans data={filteredInitial} photoMap={photoMap} />}
-          {activeTab === 'handyman' && <TableHandyman data={filteredHandyman} photoMap={photoMap} />}
-        </div>
+      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
+        {activeTab === 'normal' && <TableNormalCleans data={filteredNormal} photoMap={photoMap} />}
+        {activeTab === 'initial' && <TableInitialCleans data={filteredInitial} photoMap={photoMap} />}
+        {activeTab === 'handyman' && <TableHandyman data={filteredHandyman} photoMap={photoMap} />}
       </div>
     </div>
   );
@@ -212,75 +213,283 @@ const Cleans: React.FC = () => {
 
 
 // Verification cell component with green/red buttons
-const VerificationCell: React.FC<{ verified: boolean; onClick: (verified: boolean) => void }> = ({ verified, onClick }) => (
-  <button
-    type="button"
-    onClick={() => onClick(!verified)}
-    className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium transition ${verified
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-900'
-      : 'bg-red-100 text-red-700 dark:bg-red-900/70 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900'}`}
-  >
-    {verified ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
-    <span>{verified ? 'Verificado' : 'No Verificado'}</span>
-  </button>
+const VerificationCell = React.forwardRef<HTMLButtonElement, { verified: boolean; onClick: (verified: boolean) => void }>(
+  ({ verified, onClick }, ref) => (
+    <button
+      ref={ref}
+      type="button"
+      onClick={() => onClick(!verified)}
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium transition ${verified
+        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-900'
+        : 'bg-red-100 text-red-700 dark:bg-red-900/70 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900'}`}
+    >
+      {verified ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+      <span>{verified ? 'Verificado' : 'No Verificado'}</span>
+    </button>
+  )
 );
 
+// Placeholder coords — swap for real data later
+const PLACEHOLDER_ACCOMMODATION: [number, number] = [40.4168, -3.7038];
+const PLACEHOLDER_USER: [number, number] = [40.419, -3.7005];
+const ACCOMMODATION_RADIUS_METERS = 80;
+
+// Mini map using leaflet directly (no react-leaflet)
+const MiniMap: React.FC = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      center: PLACEHOLDER_ACCOMMODATION,
+      zoom: 15,
+      zoomControl: false,
+      attributionControl: false,
+      dragging: false,
+      touchZoom: false,
+      doubleClickZoom: false,
+      scrollWheelZoom: false,
+      boxZoom: false,
+      keyboard: false,
+    });
+    mapRef.current = map;
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+    // Accommodation radius
+    L.circle(PLACEHOLDER_ACCOMMODATION, {
+      radius: ACCOMMODATION_RADIUS_METERS,
+      color: '#f97316',
+      fillColor: '#f97316',
+      fillOpacity: 0.08,
+      opacity: 0.3,
+      weight: 1,
+    }).addTo(map);
+
+    // User marker
+    const userIcon = L.divIcon({
+      className: '',
+      html: `<div style="width:12px;height:12px;border-radius:50%;background:#f97316;border:2px solid white;box-shadow:0 0 0 2px #f97316;"></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    });
+    L.marker(PLACEHOLDER_USER, { icon: userIcon }).addTo(map);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+};
+
 // Location verification modal component
-const LocationVerificationModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
-  return (
+const LocationVerificationModal: React.FC<{ isOpen: boolean; onClose: () => void; anchorRef: React.RefObject<HTMLButtonElement | null> }> = ({ isOpen, onClose, anchorRef }) => {
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      const popupW = 220;
+      const left = Math.min(rect.left, window.innerWidth - popupW - 8);
+      setPos({ top: rect.bottom + 6, left });
+      // Mount map after container is visible in DOM
+      setTimeout(() => setShow(true), 20);
+    } else {
+      setShow(false);
+    }
+  }, [isOpen]);
+
+  return createPortal(
     <>
-      {/* Backdrop */}
       <div
-        className={`fixed inset-0 z-[105] transition-opacity duration-300 ${
+        className={`fixed inset-0 z-[105] transition-opacity duration-200 ${
           isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
       />
+      <div
+        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 ${
+          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        style={{ top: pos.top, left: pos.left, width: 220, height: 200 }}
+      >
+        {show && <MiniMap />}
+      </div>
+    </>,
+    document.body
+  );
+};
 
-      {/* Popover Content - Small 1x1 modal */}
-      <div className={`absolute z-[110] bg-white/90 dark:bg-stone-900/95 backdrop-blur-xl w-32 h-32 rounded-2xl overflow-hidden border border-white/60 dark:border-stone-800/50 soft-shadow transition-all duration-300 ease-out origin-top-left ${
-        isOpen
-          ? 'opacity-100 scale-100 pointer-events-auto'
-          : 'opacity-0 scale-95 pointer-events-none'
-      }`}>
+// Parses "HH:MM" or "YYYY-MM-DD HH:MM" and returns total minutes from midnight
+const toMinutes = (time: string): number => {
+  const part = time.includes(' ') ? time.split(' ')[1] : time;
+  const [h, m] = part.split(':').map(Number);
+  return h * 60 + m;
+};
 
-        {/* Empty content for now */}
-        <div className="p-4 flex items-center justify-center h-full">
-          <div className="text-xs text-slate-400 dark:text-stone-500 text-center">
-            Modal vacío
+const diffMinutes = (a: string, b: string): number =>
+  Math.abs(toMinutes(a) - toMinutes(b));
+
+// Date verification popup
+interface DateVerificationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  appEntry: string;   // from checkinFecha
+  appExit: string;    // from checkoutFecha
+  userEntry: string;  // horaEntrada
+  userExit: string;   // horaSalida
+}
+
+const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
+  isOpen, onClose, anchorRef, appEntry, appExit, userEntry, userExit,
+}) => {
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (isOpen && anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      const popupW = 240;
+      const left = Math.min(rect.left, window.innerWidth - popupW - 8);
+      setPos({ top: rect.bottom + 6, left });
+    }
+  }, [isOpen]);
+
+  const entryDiff = diffMinutes(appEntry, userEntry);
+  const exitDiff = diffMinutes(appExit, userExit);
+  const entryOk = entryDiff <= 30;
+  const exitOk = exitDiff <= 30;
+  const allOk = entryOk && exitOk;
+
+  const Row: React.FC<{ label: string; app: string; user: string; ok: boolean; diff: number }> = ({ label, app, user, ok, diff }) => {
+    const appTime = app.includes(' ') ? app.split(' ')[1] : app;
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-medium">{label}</p>
+        <div className="flex items-center gap-2">
+          {/* App value */}
+          <div className="flex-1 bg-slate-50 dark:bg-stone-800 rounded-lg px-2.5 py-1.5">
+            <p className="text-[9px] text-slate-400 dark:text-stone-500 mb-0.5">App</p>
+            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{appTime}</p>
+          </div>
+          {/* Diff badge */}
+          <div className={`flex flex-col items-center px-1.5 py-1 rounded-lg text-[9px] font-bold tabular-nums ${ok ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400'}`}>
+            <span>{ok ? '✓' : '✗'}</span>
+            <span>{diff}m</span>
+          </div>
+          {/* User value */}
+          <div className="flex-1 bg-slate-50 dark:bg-stone-800 rounded-lg px-2.5 py-1.5">
+            <p className="text-[9px] text-slate-400 dark:text-stone-500 mb-0.5">Usuario</p>
+            <p className={`text-xs font-semibold tabular-nums ${ok ? 'text-slate-700 dark:text-stone-200' : 'text-red-500 dark:text-red-400'}`}>{user}</p>
           </div>
         </div>
       </div>
-    </>
+    );
+  };
+
+  return createPortal(
+    <>
+      <div
+        className={`fixed inset-0 z-[105] transition-opacity duration-200 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      <div
+        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        style={{ top: pos.top, left: pos.left, width: 240 }}
+      >
+        {/* Header */}
+        <div className={`px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 ${allOk ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${allOk ? 'bg-emerald-500' : 'bg-red-500'}`} />
+          <span className={`text-[11px] font-semibold ${allOk ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+            {allOk ? 'Horario verificado' : 'Horario no verificado'}
+          </span>
+        </div>
+        {/* Rows */}
+        <div className="p-3 space-y-3">
+          <Row label="Entrada" app={appEntry} user={userEntry} ok={entryOk} diff={entryDiff} />
+          <Row label="Salida" app={appExit} user={userExit} ok={exitOk} diff={exitDiff} />
+        </div>
+      </div>
+    </>,
+    document.body
   );
 };
 
 const thClass = "px-6 py-5 sm:px-8 sm:py-6 text-xs font-normal text-slate-400 dark:text-stone-500 capitalize whitespace-nowrap";
 const tdClass = "px-6 py-5 sm:px-8 sm:py-7";
 
+// Observation popup modal
+const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<HTMLElement | null>; text: string }> = ({ isOpen, anchorRef, text }) => {
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (isOpen && anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      const popupW = 240;
+      const left = Math.min(rect.left, window.innerWidth - popupW - 8);
+      setPos({ top: rect.bottom + 6, left });
+    }
+  }, [isOpen]);
+
+  return createPortal(
+    <>
+      <div
+        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 pointer-events-none ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+        style={{ top: pos.top, left: pos.left, width: 240 }}
+      >
+        <div className="px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 bg-orange-50 dark:bg-orange-900/20">
+          <Info size={13} className="text-orange-500" />
+          <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-400">Observaciones</span>
+        </div>
+        <div className="p-3">
+          <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed">{text}</p>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+};
+
 // Observation button component
 const ObservationButton: React.FC<{ text?: string }> = ({ text }) => {
-  const baseButton = (
-    <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-stone-950">
-      <Info size={20} className="text-orange-500" />
-    </div>
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const hasObs = !!text && text.trim() !== '';
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onMouseEnter={() => hasObs && setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+          hasObs
+            ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/60 cursor-default'
+            : 'bg-stone-100 dark:bg-stone-800 text-slate-400 dark:text-stone-600 cursor-default'
+        }`}
+      >
+        {hasObs ? '1' : '0'}
+      </button>
+      {hasObs && (
+        <ObservationModal isOpen={open} anchorRef={btnRef} text={text!} />
+      )}
+    </>
   );
-
-  if (!text || text.trim() === '') {
-    return (
-      <div className="inline-flex items-center justify-center w-10 h-10 rounded-full opacity-50 bg-white dark:bg-stone-950">
-        <Info size={20} className="text-orange-300" />
-      </div>
-    );
-  }
-
-  return baseButton;
 };
 
 // Sub-components: Tables
 // Sub-components: Tables
 const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const locationBtnRef = useRef<HTMLButtonElement>(null);
+  const [dateModal, setDateModal] = useState<{ open: boolean; record: NormalCleanRecord | null }>({ open: false, record: null });
+  const dateBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <>
@@ -288,10 +497,10 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Verificar Fecha</th>
+            <th className={thClass}>Verificar Hora</th>
             <th className={thClass}>Verificar Ubicación</th>
             <th className={thClass}>Apartamento</th>
-            <th className={thClass}>Horario</th>
+            <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
             <th className={thClass}>Observaciones</th>
           </tr>
@@ -303,21 +512,19 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
                 <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
               </td>
               <td className={tdClass}>
-                <VerificationCell verified={r.checked} onClick={() => {}} />
+                <VerificationCell verified={r.checked} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
               </td>
               <td className={tdClass}>
-                <div className="relative">
-                  <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} />
-                  <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
-                </div>
+                <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
               </td>
               <td className={tdClass}>
                 <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
                   {r.apartamento}
                 </span>
               </td>
-              <td className={`${tdClass} text-slate-600 dark:text-stone-400 text-sm`}>
-                {r.horaEntrada} - {r.horaSalida}
+              <td className={`${tdClass}`}>
+                <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
+                <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaEntrada} - {r.horaSalida}</div>
               </td>
               <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
               <td className={`${tdClass} text-center`}>
@@ -327,12 +534,27 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
           ))}
         </tbody>
       </table>
+      <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} anchorRef={locationBtnRef} />
+      {dateModal.record && (
+        <DateVerificationModal
+          isOpen={dateModal.open}
+          onClose={() => setDateModal({ open: false, record: null })}
+          anchorRef={dateBtnRef}
+          appEntry={dateModal.record.checkinFecha}
+          appExit={dateModal.record.checkoutFecha}
+          userEntry={dateModal.record.horaEntrada}
+          userExit={dateModal.record.horaSalida}
+        />
+      )}
     </>
   );
 };
 
 const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const locationBtnRef = useRef<HTMLButtonElement>(null);
+  const [dateModal, setDateModal] = useState<{ open: boolean; record: InitialCleanRecord | null }>({ open: false, record: null });
+  const dateBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <>
@@ -340,10 +562,10 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Recor
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Verificar Fecha</th>
+            <th className={thClass}>Verificar Hora</th>
             <th className={thClass}>Verificar Ubicación</th>
             <th className={thClass}>Apartamento</th>
-            <th className={thClass}>Horario</th>
+            <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
             <th className={thClass}>Observaciones</th>
           </tr>
@@ -355,21 +577,19 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Recor
                 <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
               </td>
               <td className={tdClass}>
-                <VerificationCell verified={r.checked} onClick={() => {}} />
+                <VerificationCell verified={r.checked} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
               </td>
               <td className={tdClass}>
-                <div className="relative">
-                  <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} />
-                  <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
-                </div>
+                <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
               </td>
               <td className={tdClass}>
                 <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
                   {r.apartamento}
                 </span>
               </td>
-              <td className={`${tdClass} text-slate-600 dark:text-stone-400 text-sm`}>
-                {r.horaEntrada} - {r.horaSalida}
+              <td className={`${tdClass}`}>
+                <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
+                <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaEntrada} - {r.horaSalida}</div>
               </td>
               <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
               <td className={`${tdClass} text-center`}>
@@ -379,12 +599,27 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Recor
           ))}
         </tbody>
       </table>
+      <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} anchorRef={locationBtnRef} />
+      {dateModal.record && (
+        <DateVerificationModal
+          isOpen={dateModal.open}
+          onClose={() => setDateModal({ open: false, record: null })}
+          anchorRef={dateBtnRef}
+          appEntry={dateModal.record.checkinFecha}
+          appExit={dateModal.record.checkoutFecha}
+          userEntry={dateModal.record.horaEntrada}
+          userExit={dateModal.record.horaSalida}
+        />
+      )}
     </>
   );
 };
 
 const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const locationBtnRef = useRef<HTMLButtonElement>(null);
+  const [dateModal, setDateModal] = useState<{ open: boolean; record: HandymanRecord | null }>({ open: false, record: null });
+  const dateBtnRef = useRef<HTMLButtonElement>(null);
 
   return (
     <>
@@ -392,10 +627,10 @@ const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string,
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Verificar Fecha</th>
+            <th className={thClass}>Verificar Hora</th>
             <th className={thClass}>Verificar Ubicación</th>
             <th className={thClass}>Alojamiento</th>
-            <th className={thClass}>Horario</th>
+            <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
             <th className={thClass}>Detalles del Trabajo</th>
           </tr>
@@ -407,21 +642,19 @@ const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string,
                 <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
               </td>
               <td className={tdClass}>
-                <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => {}} />
+                <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
               </td>
               <td className={tdClass}>
-                <div className="relative">
-                  <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => setLocationModalOpen(true)} />
-                  <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} />
-                </div>
+                <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
               </td>
               <td className={tdClass}>
                 <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
                   {r.alojamiento}
                 </span>
               </td>
-              <td className={`${tdClass} text-slate-600 dark:text-stone-400 text-sm`}>
-                {r.horaInicioTarea} - {r.horaFinTarea}
+              <td className={`${tdClass}`}>
+                <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.fechaLlegada.split(' ')[0]}</div>
+                <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaInicioTarea} - {r.horaFinTarea}</div>
               </td>
               <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} km</td>
               <td className={`${tdClass} text-center`}>
@@ -431,6 +664,18 @@ const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string,
           ))}
         </tbody>
       </table>
+      <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} anchorRef={locationBtnRef} />
+      {dateModal.record && (
+        <DateVerificationModal
+          isOpen={dateModal.open}
+          onClose={() => setDateModal({ open: false, record: null })}
+          anchorRef={dateBtnRef}
+          appEntry={dateModal.record.fechaLlegada}
+          appExit={dateModal.record.fechaFin}
+          userEntry={dateModal.record.horaInicioTarea}
+          userExit={dateModal.record.horaFinTarea}
+        />
+      )}
     </>
   );
 };
