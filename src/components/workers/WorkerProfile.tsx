@@ -4,7 +4,7 @@ import {
   ClipboardList, Car, Euro, CheckCircle2, Clock, Send, FileText,
   BarChart3, MessageSquare, Wrench, Sparkles, ChevronRight, Loader2,
   RotateCcw, CheckCheck, Landmark, Building2, Smartphone, User as UserIcon,
-  Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity,
+  Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -170,6 +170,7 @@ interface WorkerProfileProps {
   worker: Worker;
   onBack: () => void;
   onSave?: (worker: Worker) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
   initialEditing?: boolean;
 }
 
@@ -263,7 +264,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, initialEditing = false }) => {
+const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, onDelete, initialEditing = false }) => {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<MainTab>('datos');
 
@@ -493,6 +494,20 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
     }
   };
 
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente a ${worker.fullName}? Esta acción borrará su fila en el Excel.`)) {
+      setSaving(true);
+      try {
+        await onDelete(worker.id);
+      } catch (error) {
+        console.error('Error deleting worker from profile:', error);
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
+
   const totalRecords = normalCleans.length + initialCleans.length + handymanRecords.length;
 
   // Analytics chart data
@@ -669,12 +684,22 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, i
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => { setDraft(worker); setIsEditing(true); }}
-                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all border border-transparent"
-              >
-                <Edit2 size={13} />Editar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDelete}
+                  disabled={saving}
+                  className="p-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all border border-transparent disabled:opacity-50"
+                  title="Eliminar trabajador"
+                >
+                  {saving ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                </button>
+                <button
+                  onClick={() => { setDraft(worker); setIsEditing(true); }}
+                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all border border-transparent"
+                >
+                  <Edit2 size={13} />Editar
+                </button>
+              </div>
             )}
           </div>
         </div>

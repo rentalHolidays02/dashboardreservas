@@ -21,9 +21,24 @@ import {
 
 // Google Sheets API Configuration
 const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
-const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4';
+const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4'; // Alojamientos
+const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; // Pagos Generales (Operarios)
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyqePxhuFfKsWekF_yC6Pex_5IdQhWhLXY08MIZIxqAsQLkw2BoFEoXB6rSdXG2KjT_/exec';
+const WORKERS_RANGE = "'informacion operarios'!A:Z";
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwobBqmty7b3ZH9ryaABvQBuO2NyRXwcZs261raZnDSA9Zn2zaw6aPME4yUXTybWyod/exec';
+const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
+
+// Utilidad para limpiar números formateados (ej: "10,00 €" -> 10.0)
+const parseExcelNumber = (val: any): number => {
+  if (val === undefined || val === null || val === '') return 0;
+  const str = String(val)
+    .replace('€', '')
+    .replace(/\s/g, '')
+    .replace('.', '') // Eliminar puntos de miles
+    .replace(',', '.'); // Cambiar coma decimal por punto
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+};
 
 // Simulación de persistencia en localStorage para el MVP
 const getStoredWorkers = (): Worker[] => {
@@ -119,32 +134,143 @@ export const appsScriptApi = {
   },
 
   getWorkers: async (): Promise<Worker[]> => {
-    await delay(500);
-    return currentWorkers;
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Error en la API de Google Sheets (Operarios): ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.values || data.values.length === 0) {
+        return currentWorkers;
+      }
+
+      const allValues = data.values as any[][];
+      const headers = allValues[0] as string[];
+      const rows = allValues.slice(1);
+
+      const workers: Worker[] = rows
+        .map((row: any[], index: number): Worker => {
+          const getVal = (headerName: string) => {
+            const idx = headers.findIndex((h: string) => h && h.trim().toUpperCase() === headerName.trim().toUpperCase());
+            return idx !== -1 ? row[idx] : undefined;
+          };
+
+          const medioPago = String(getVal('MEDIO DE PAGO') || '').toLowerCase();
+          const tipoPago: Worker['tipoPago'] = medioPago.includes('bizum') ? 'bizum' : 
+                                               medioPago.includes('tarjeta') ? 'tarjeta' : 
+                                               'efectivo';
+
+          return {
+            id: `real_worker_${index + 2}`,
+            fullName: String(getVal('OPERARIO') || 'Sin nombre'),
+            telefono: String(getVal('MOVIL') || ''),
+            iban: String(getVal('CUENTA BANCARIA') || ''),
+            tipoPago,
+            pagoPorReserva: parseExcelNumber(getVal('PAGO POR RESERVA')),
+            precioPorKm: parseExcelNumber(getVal('KILOMETRAJE')),
+            notes: String(getVal('OBSERVACIONES') || ''),
+            // Campos de resumen (se calculan o vienen de otro sitio)
+            netMoneyMonth: 0,
+            cleansCountMonth: 0,
+            kmsMonth: 0,
+            accommodations: []
+          };
+        })
+        .filter((w: Worker) => w.fullName && w.fullName.trim() !== '' && w.fullName !== 'Sin nombre');
+
+      saveWorkers(workers);
+      return workers;
+    } catch (error) {
+      console.error('Error fetching workers from Sheets:', error);
+      return currentWorkers;
+    }
   },
 
   updateWorker: async (workerData: Worker): Promise<Worker> => {
-    await delay(1000);
-    const updatedWorkers = currentWorkers.map(w => 
-      w.id === workerData.id ? { ...workerData } : w
-    );
-    saveWorkers(updatedWorkers);
-    return workerData;
+    try {
+      const payload = {
+        ...workerData,
+        // Limpiar comillas existentes y añadir la comilla simple para forzar formato texto en Excel
+        telefono: workerData.telefono ? `'${workerData.telefono.replace(/^'/, '')}` : '',
+        telefonoBizum: workerData.telefonoBizum ? `'${workerData.telefonoBizum.replace(/^'/, '')}` : '',
+        action: 'update'
+      };
+      
+      fetch(WORKERS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const updatedWorkers = currentWorkers.map(w => 
+        w.id === workerData.id ? { ...workerData } : w
+      );
+      saveWorkers(updatedWorkers);
+      return workerData;
+    } catch (error) {
+      console.error('Error updating worker in Sheets:', error);
+      throw error;
+    }
   },
 
   addWorker: async (workerData: Omit<Worker, 'id'>): Promise<Worker> => {
-    await delay(1000);
-    // Generar nuevo ID numérico
-    const lastId = currentWorkers.length > 0 
-      ? Math.max(...currentWorkers.map(w => parseInt(w.id))) 
-      : 0;
-    const newWorker: Worker = {
-      ...workerData,
-      id: (lastId + 1).toString()
-    };
-    const updatedWorkers = [...currentWorkers, newWorker];
-    saveWorkers(updatedWorkers);
-    return newWorker;
+    try {
+      const payload = {
+        ...workerData,
+        telefono: workerData.telefono ? `'${workerData.telefono.replace(/^'/, '')}` : '',
+        telefonoBizum: workerData.telefonoBizum ? `'${workerData.telefonoBizum.replace(/^'/, '')}` : '',
+      };
+
+      // Intentamos sincronizar con Google Sheets
+      fetch(WORKERS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      // Generar ID temporal local hasta la próxima recarga del Excel
+      const tempId = `temp_${Date.now()}`;
+      const newWorker: Worker = {
+        ...workerData,
+        id: tempId
+      };
+      
+      const updatedWorkers = [...currentWorkers, newWorker];
+      saveWorkers(updatedWorkers);
+      return newWorker;
+    } catch (error) {
+      console.error('Error adding worker to Sheets:', error);
+      throw error;
+    }
+  },
+
+  deleteWorker: async (id: string): Promise<boolean> => {
+    try {
+      await fetch(WORKERS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({ id, action: 'delete' })
+      });
+
+      const updatedWorkers = currentWorkers.filter(w => w.id !== id);
+      saveWorkers(updatedWorkers);
+      return true;
+    } catch (error) {
+      console.error('Error deleting worker from Sheets:', error);
+      throw error;
+    }
   },
 
   getRecentCheckIns: async (limit = 10): Promise<CheckInOut[]> => {
