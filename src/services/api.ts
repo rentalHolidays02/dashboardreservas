@@ -23,6 +23,7 @@ import {
 const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
 const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4'; // Alojamientos
 const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; // Pagos Generales (Operarios)
+const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; // INFORMES_OPERARIOS
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
@@ -38,6 +39,24 @@ const parseExcelNumber = (val: any): number => {
     .replace(',', '.'); // Cambiar coma decimal por punto
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
+};
+
+// Utilidad para normalizar cabeceras (quitar acentos, espacios y pasar a minúsculas)
+const normalizeHeader = (h: string) => {
+  if (!h) return '';
+  return h.trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+};
+
+const parseBool = (val: any): boolean => {
+  if (val === true || val === 'TRUE' || val === 'true' || val === '1') return true;
+  if (typeof val === 'string') {
+    const v = normalizeHeader(val);
+    return v === 'si' || v === 'true' || v === '1';
+  }
+  return false;
 };
 
 // Simulación de persistencia en localStorage para el MVP
@@ -154,7 +173,8 @@ export const appsScriptApi = {
       const workers: Worker[] = rows
         .map((row: any[], index: number): Worker => {
           const getVal = (headerName: string) => {
-            const idx = headers.findIndex((h: string) => h && h.trim().toUpperCase() === headerName.trim().toUpperCase());
+            const norm = normalizeHeader(headerName);
+            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
             return idx !== -1 ? row[idx] : undefined;
           };
 
@@ -319,7 +339,8 @@ export const appsScriptApi = {
       const accommodations: Accommodation[] = rows
         .map((row: any[], index: number): Accommodation => {
           const getVal = (headerName: string) => {
-            const idx = headers.findIndex((h: string) => h && h.trim() === headerName.trim());
+            const norm = normalizeHeader(headerName);
+            const idx = headers.findIndex((h: string) => h && normalizeHeader(h) === norm);
             return idx !== -1 ? row[idx] : undefined;
           };
 
@@ -443,18 +464,181 @@ export const appsScriptApi = {
   },
 
   getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
-    await delay(400);
-    return MOCK_NORMAL_CLEANS;
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Error fetching normal cleans: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.values || data.values.length <= 1) {
+        return MOCK_NORMAL_CLEANS;
+      }
+
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      const records: NormalCleanRecord[] = rows
+        .map((row: any[], index: number): NormalCleanRecord | null => {
+          const getVal = (headerName: string) => {
+            const norm = normalizeHeader(headerName);
+            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+            return idx !== -1 ? row[idx] : undefined;
+          };
+
+          const nombre = String(getVal('Nombre') || '');
+          const apellidos = String(getVal('Apellidos') || '');
+          if (!nombre && !apellidos) return null;
+
+          return {
+            id: `nc_${index + 2}`,
+            telefono: String(getVal('Telefono') || ''),
+            nombre,
+            apellidos,
+            checkinFecha: String(getVal('Checkin Fecha Trabajador') || ''),
+            checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
+            checkoutFecha: String(getVal('Checkout Fecha Trabajador') || ''),
+            checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
+            apartamento: String(getVal('Apartamento') || ''),
+            horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
+            horaSalida: String(getVal('Hora Limpieza Salida') || ''),
+            sigueHuesped: parseBool(getVal('Sigue Huesped')),
+            fechaSalidaReserva: String(getVal('Fecha Salida Reserva') || ''),
+            recogeLlaves: parseBool(getVal('Recoge Llaves')),
+            km: parseExcelNumber(getVal('Km')),
+            observaciones: String(getVal('Observaciones') || ''),
+            checked: parseBool(getVal('Checked')),
+          };
+        })
+        .filter((r): r is NormalCleanRecord => r !== null);
+
+      return records;
+    } catch (error) {
+      console.error('Error fetching normal cleans from Sheets:', error);
+      return MOCK_NORMAL_CLEANS;
+    }
   },
 
   getInitialCleans: async (): Promise<InitialCleanRecord[]> => {
-    await delay(400);
-    return MOCK_INITIAL_CLEANS;
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Inicial!A:M?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Error fetching initial cleans: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.values || data.values.length <= 1) {
+        return MOCK_INITIAL_CLEANS;
+      }
+
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      const records: InitialCleanRecord[] = rows
+        .map((row: any[], index: number): InitialCleanRecord | null => {
+          const getVal = (headerName: string) => {
+            const norm = normalizeHeader(headerName);
+            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+            return idx !== -1 ? row[idx] : undefined;
+          };
+
+          const nombre = String(getVal('Nombre') || '');
+          const apellidos = String(getVal('Apellidos') || '');
+          if (!nombre && !apellidos) return null;
+
+          const parseBool = (val: any): boolean => {
+            if (val === true || val === 'TRUE' || val === 'true' || val === '1' || val === 'Sí' || val === 'SI' || val === 'si') return true;
+            return false;
+          };
+
+          return {
+            id: `ic_${index + 2}`,
+            telefono: String(getVal('Telefono') || ''),
+            nombre,
+            apellidos,
+            checkinFecha: String(getVal('Checkin Fecha Trabajador') || ''),
+            checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
+            checkoutFecha: String(getVal('Checkout Fecha Trabajador') || ''),
+            checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
+            apartamento: String(getVal('Apartamento') || ''),
+            horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
+            horaSalida: String(getVal('Hora Limpieza Salida') || ''),
+            km: parseExcelNumber(getVal('Km')),
+            observaciones: String(getVal('Observaciones') || ''),
+            checked: parseBool(getVal('Checked')),
+          };
+        })
+        .filter((r): r is InitialCleanRecord => r !== null);
+
+      return records;
+    } catch (error) {
+      console.error('Error fetching initial cleans from Sheets:', error);
+      return MOCK_INITIAL_CLEANS;
+    }
   },
 
   getHandymanRecords: async (): Promise<HandymanRecord[]> => {
-    await delay(400);
-    return MOCK_HANDYMAN_RECORDS;
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Manitas!A:M?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`Error fetching handyman records: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.values || data.values.length <= 1) {
+        return MOCK_HANDYMAN_RECORDS;
+      }
+
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      const records: HandymanRecord[] = rows
+        .map((row: any[], index: number): HandymanRecord | null => {
+          const getVal = (headerName: string) => {
+            const norm = normalizeHeader(headerName);
+            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+            return idx !== -1 ? row[idx] : undefined;
+          };
+
+          const nombre = String(getVal('Nombre') || '');
+          const apellidos = String(getVal('Apellidos') || '');
+          if (!nombre && !apellidos) return null;
+
+          const parseBool = (val: any): boolean => {
+            if (val === true || val === 'TRUE' || val === 'true' || val === '1' || val === 'Sí' || val === 'SI' || val === 'si') return true;
+            return false;
+          };
+
+          return {
+            id: `hm_${index + 2}`,
+            telefono: String(getVal('Telefono') || ''),
+            nombre,
+            apellidos,
+            fechaLlegada: String(getVal('Checkin Fecha Trabajador') || ''),
+            ubicacionInicio: String(getVal('Checkin Ubicacion Trabajador') || ''),
+            fechaFin: String(getVal('Checkout Fecha Trabajador') || ''),
+            ubicacionFin: String(getVal('Checkout Ubicacion Trabajador') || ''),
+            alojamiento: String(getVal('Apartamento') || ''),
+            horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
+            horaFinTarea: String(getVal('Hora Reparacion Salida') || ''),
+            cantidadMinutos: parseExcelNumber(getVal('Km')),
+            observacionesTarea: String(getVal('Observaciones') || ''),
+            estadoCompletado: parseBool(getVal('Checked')) ? 'Completado' : 'Pendiente',
+          };
+        })
+        .filter((r): r is HandymanRecord => r !== null);
+
+      return records;
+    } catch (error) {
+      console.error('Error fetching handyman records from Sheets:', error);
+      return MOCK_HANDYMAN_RECORDS;
+    }
   },
 
   getPagos: async (desde: string, hasta: string): Promise<PagoRecord[]> => {
