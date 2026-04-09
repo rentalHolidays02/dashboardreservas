@@ -27,15 +27,28 @@ const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
+const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
+const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
+const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzCG3ACe12pP9GmGjNpWCK9iMrBTSXMTJmYT6BjcFj5e-BsP2PL3Sf4isXObYHppLk1YA/exec';
 
 // Utilidad para limpiar números formateados (ej: "10,00 €" -> 10.0)
 const parseExcelNumber = (val: any): number => {
   if (val === undefined || val === null || val === '') return 0;
-  const str = String(val)
-    .replace('€', '')
-    .replace(/\s/g, '')
-    .replace('.', '') // Eliminar puntos de miles
-    .replace(',', '.'); // Cambiar coma decimal por punto
+  if (typeof val === 'number') return val;
+  
+  let str = String(val).trim().replace('€', '').replace(/\s/g, '');
+  
+  // Si tiene punto y coma, el punto es de miles (1.234,56)
+  if (str.includes(',') && str.includes('.')) {
+    str = str.replace(/\./g, '').replace(',', '.');
+  } 
+  // Si solo tiene coma, es el decimal (0,50)
+  else if (str.includes(',')) {
+    str = str.replace(',', '.');
+  }
+  // Si tiene un punto y NO tiene coma, en esta App lo tratamos como decimal (0.50)
+  // A menos que sea un número muy grande, pero para KMS siempre será decimal.
+  
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
 };
@@ -280,11 +293,92 @@ export const appsScriptApi = {
       .slice(0, limit);
   },
 
-  getRecentIncidencias: async (limit = 5): Promise<Incidencia[]> => {
-    await delay(500);
-    return [...MOCK_INCIDENCIAS]
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, limit);
+  getRecentIncidencias: async (limit = 50): Promise<Incidencia[]> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${INCIDENCIAS_SPREADSHEET_ID}/values/${encodeURIComponent(INCIDENCIAS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`Error en la API de Google Sheets (Incidencias): ${response.statusText}`);
+      }
+  
+      const data = await response.json();
+      if (!data.values || data.values.length === 0) {
+        return MOCK_INCIDENCIAS;
+      }
+  
+      const allValues = data.values as any[][];
+      const headers = allValues[0] as string[];
+      const rows = allValues.slice(1);
+  
+      const incidencias: Incidencia[] = rows
+        .map((row: any[], index: number): Incidencia => {
+          const getVal = (headerName: string) => {
+            const idx = headers.findIndex((h: string) => h && h.trim().toUpperCase() === headerName.trim().toUpperCase());
+            return idx !== -1 ? row[idx] : undefined;
+          };
+  
+          const nombre = String(getVal('NOMBRE') || '').trim();
+          const apellidos = String(getVal('APELLIDOS') || '').trim();
+          const fechaExcel = String(getVal('FECHA') || '').trim();
+          
+          // Formatear fecha para que sea válida para JS (Sheets suele venir en DD/MM/YYYY)
+          let timestamp = new Date().toISOString();
+          if (fechaExcel) {
+            try {
+              if (fechaExcel.includes('/')) {
+                const parts = fechaExcel.split(',')[0].split('/');
+                const timePart = fechaExcel.includes(',') ? fechaExcel.split(',')[1].trim() : '00:00:00';
+                // DD/MM/YYYY -> YYYY-MM-DD
+                timestamp = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T${timePart}`;
+              } else {
+                timestamp = new Date(fechaExcel).toISOString();
+              }
+            } catch (e) {
+              console.warn('Error parseando fecha de incidencia:', fechaExcel);
+            }
+          }
+  
+          return {
+            id: `real_inc_${index + 2}`,
+            userName: `${nombre} ${apellidos}`.replace(/\s+/g, ' ').trim() || 'Desconocido',
+            description: String(getVal('DETALLES INCIDENCIA') || '').trim(),
+            timestamp,
+            accommodationId: `real_acc_${index}`, // ID ficticio basado en fila
+            accommodationName: String(getVal('APARTAMENTO') || 'Sin especificar').trim(),
+            coste: 0,
+            pagadoPor: 'empresa',
+            kms: parseExcelNumber(getVal('KMS TOTAL')),
+            checked: String(getVal('CHECKED')).toUpperCase() === 'TRUE'
+          };
+        })
+        .filter(inc => inc.description && inc.description.trim() !== '') // Solo las que tienen descripción
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, limit);
+  
+      return incidencias;
+    } catch (error) {
+      console.error('Error fetching incidencias from Sheets:', error);
+      return MOCK_INCIDENCIAS;
+    }
+  },
+
+  updateIncidencia: async (incidencia: Incidencia): Promise<boolean> => {
+    try {
+      await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({ ...incidencia, action: 'update' })
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error updating incidencia:', error);
+      throw error;
+    }
   },
 
   getAnalytics: async () => {

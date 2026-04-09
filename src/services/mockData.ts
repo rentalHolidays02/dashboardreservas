@@ -84,6 +84,8 @@ export interface Incidencia {
   accommodationName: string;
   coste: number;
   pagadoPor: 'limpiador' | 'empresa';
+  kms?: number;
+  checked?: boolean;
 }
 
 export const MOCK_INCIDENCIAS: Incidencia[] = [

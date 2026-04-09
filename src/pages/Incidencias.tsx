@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Loader2, Search, Filter } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Loader2, Search, Filter, MapPin, CheckCircle2, ChevronRight } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { Incidencia } from '../services/mockData';
 import IncidentFilterModal, { IncidentFilters } from '../components/incidencias/IncidentFilterModal';
+import IncidentEditModal from '../components/incidencias/IncidentEditModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const fmtDate = (iso: string) =>
@@ -27,12 +28,39 @@ const Incidencias: React.FC = () => {
     maxCost: 1000
   });
 
+  // Edit Modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<Incidencia | null>(null);
+
   useEffect(() => {
+    fetchIncidencias();
+  }, []);
+
+  const fetchIncidencias = (showGlobalLoading = true) => {
+    if (showGlobalLoading) setLoading(true);
     appsScriptApi.getRecentIncidencias(50).then(data => {
       setIncidencias(data);
       setLoading(false);
     });
-  }, []);
+  };
+
+  const handleSaveIncident = async (incidentData: Incidencia) => {
+    // 1. Actualización optimista en local
+    setIncidencias(prev => prev.map(inc => 
+      inc.id === incidentData.id ? incidentData : inc
+    ));
+    
+    // 2. Guardar en el Excel por detrás
+    try {
+      await appsScriptApi.updateIncidencia(incidentData);
+      // 3. Recargar silenciosamente para confirmar
+      fetchIncidencias(false);
+    } catch (error) {
+      console.error('Error al guardar:', error);
+      alert('Error al sincronizar con el Excel, pero los cambios se ven en pantalla.');
+      fetchIncidencias(false);
+    }
+  };
 
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
@@ -44,13 +72,17 @@ const Incidencias: React.FC = () => {
 
   const filteredIncidencias = React.useMemo(() => {
     return incidencias.filter(inc => {
-      const s = searchTerm.toLowerCase();
-      const matchSearch = 
-        inc.userName.toLowerCase().includes(s) ||
-        inc.accommodationName.toLowerCase().includes(s) ||
-        inc.description.toLowerCase().includes(s);
-
-      if (!matchSearch) return false;
+      const s = searchTerm.trim().toLowerCase();
+      
+      // Si hay búsqueda, comprobar si coincide en alguno de los campos
+      if (s) {
+        const matchSearch = 
+          inc.userName.toLowerCase().includes(s) ||
+          inc.accommodationName.toLowerCase().includes(s) ||
+          inc.description.toLowerCase().includes(s);
+        
+        if (!matchSearch) return false;
+      }
 
       // Filter matching
       if (filters.paidBy !== 'all' && inc.pagadoPor !== filters.paidBy) return false;
@@ -126,10 +158,25 @@ const Incidencias: React.FC = () => {
         ) : (
           <ul className="divide-y divide-stone-100 dark:divide-stone-800">
             {filteredIncidencias.map((inc) => (
-              <li key={inc.id} className="px-5 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group">
+              <li 
+                key={inc.id} 
+                className="px-5 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group relative"
+                onClick={() => {
+                  setSelectedIncident(inc);
+                  setIsEditModalOpen(true);
+                }}
+              >
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs text-slate-400 dark:text-stone-500">{inc.userName}</span>
-                  <span className="text-xs text-slate-400 dark:text-stone-500 tabular-nums">{fmtDate(inc.timestamp)}</span>
+                  <div className="flex items-center gap-2">
+                    {inc.checked && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded-md">
+                        <CheckCircle2 size={10} />
+                        Revisada
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-400 dark:text-stone-500 tabular-nums">{fmtDate(inc.timestamp)}</span>
+                  </div>
                 </div>
 
                 <p className="text-sm font-normal text-slate-800 dark:text-stone-200 leading-snug mb-3">
@@ -162,6 +209,15 @@ const Incidencias: React.FC = () => {
                         Empresa
                       </span>
                     )}
+                    
+                    {inc.kms !== undefined ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 border border-blue-100 dark:border-blue-900/30 rounded-md">
+                        <MapPin size={10} />
+                        {Number(inc.kms).toFixed(2).replace('.', ',')} km
+                      </span>
+                    ) : null}
+                    
+                    <ChevronRight size={14} className="text-slate-300 dark:text-stone-600 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
               </li>
@@ -169,6 +225,13 @@ const Incidencias: React.FC = () => {
           </ul>
         )}
       </div>
+
+      <IncidentEditModal 
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        incident={selectedIncident}
+        onSave={handleSaveIncident}
+      />
     </div>
   );
 };
