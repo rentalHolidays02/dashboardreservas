@@ -126,12 +126,6 @@ const Sidebar: React.FC<SidebarProps> = ({
           >
             <PanelLeft size={16} />
           </button>
-          <button
-            onClick={onClose}
-            className="xl:hidden flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:bg-slate-100"
-          >
-            <PanelLeft size={18} />
-          </button>
         </div>
 
         {/* ── Navigation ───────────────────────────────────────────────── */}
