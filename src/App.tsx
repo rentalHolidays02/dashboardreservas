@@ -13,6 +13,7 @@ import Analisis from './pages/Analisis';
 import GenerarInforme from './pages/GenerarInforme';
 import Profile from './pages/Profile';
 import GestionUsuarios from './pages/GestionUsuarios';
+import EntregaDeLlaves from './pages/EntregaDeLlaves';
 import MainLayout from './components/layout/MainLayout';
 import ChatBot from './components/chatbot/ChatBot';
 import { User } from './services/mockData';
@@ -167,6 +168,19 @@ function App() {
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
                 <Profile onUserUpdate={handleLoginSuccess} />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/entrega-de-llaves"
+          element={
+            user ? (
+              <MainLayout userRole={user.role} onLogout={handleLogout}>
+                <EntregaDeLlaves />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
