@@ -268,14 +268,17 @@ export const appsScriptApi = {
 
   deleteWorker: async (id: string): Promise<boolean> => {
     try {
-      await fetch(WORKERS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify({ id, action: 'delete' })
-      });
+      // Solo enviar al Apps Script si el ID viene del Excel real
+      // Los IDs temporales (temp_*) no tienen fila real y enviarles delete podría romper el Excel
+      const isRealExcelRow = id.startsWith('real_worker_');
+      if (isRealExcelRow) {
+        await fetch(WORKERS_APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ id, action: 'delete' })
+        });
+      }
 
       const updatedWorkers = currentWorkers.filter(w => w.id !== id);
       saveWorkers(updatedWorkers);
@@ -288,18 +291,21 @@ export const appsScriptApi = {
 
   restoreWorker: async (worker: Worker): Promise<void> => {
     try {
-      const payload = {
-        ...worker,
-        telefono: worker.telefono ? `'${worker.telefono.replace(/^'/, '')}` : '',
-        telefonoBizum: worker.telefonoBizum ? `'${worker.telefonoBizum.replace(/^'/, '')}` : '',
-        action: 'restore',
-      };
-      fetch(WORKERS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload),
-      });
+      const isRealExcelRow = worker.id.startsWith('real_worker_');
+      if (isRealExcelRow) {
+        const payload = {
+          ...worker,
+          telefono: worker.telefono ? `'${worker.telefono.replace(/^'/, '')}` : '',
+          telefonoBizum: worker.telefonoBizum ? `'${worker.telefonoBizum.replace(/^'/, '')}` : '',
+          action: 'restore',
+        };
+        fetch(WORKERS_APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(payload),
+        });
+      }
       const updatedWorkers = [worker, ...currentWorkers.filter(w => w.id !== worker.id)];
       saveWorkers(updatedWorkers);
     } catch (error) {
@@ -540,14 +546,17 @@ export const appsScriptApi = {
 
   deleteAccommodation: async (id: string): Promise<boolean> => {
     try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify({ id, action: 'delete' })
-      });
+      // Solo enviar al Apps Script si el ID viene del Excel real (empieza por "real_" pero NO por "real_new_")
+      // Los IDs locales (real_new_*, a*) no tienen fila real en el Excel y enviarles delete rompería las cabeceras
+      const isRealExcelRow = id.startsWith('real_') && !id.startsWith('real_new_');
+      if (isRealExcelRow) {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ id, action: 'delete' })
+        });
+      }
 
       const updatedAccommodations = currentAccommodations.filter(a => a.id !== id);
       saveAccommodations(updatedAccommodations);
@@ -560,12 +569,15 @@ export const appsScriptApi = {
 
   restoreAccommodation: async (accommodation: Accommodation): Promise<void> => {
     try {
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ ...accommodation, action: 'restore' }),
-      });
+      const isRealExcelRow = accommodation.id.startsWith('real_') && !accommodation.id.startsWith('real_new_');
+      if (isRealExcelRow) {
+        fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ ...accommodation, action: 'restore' }),
+        });
+      }
       const updatedAccommodations = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
       saveAccommodations(updatedAccommodations);
     } catch (error) {
