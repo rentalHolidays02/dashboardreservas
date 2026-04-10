@@ -1,536 +1,393 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { User } from '../services/mockData';
-import { useTheme } from '../context/ThemeContext';
+import React, { useState } from 'react';
 import {
-  User as UserIcon,
+  User,
   Mail,
-  Lock,
-  Camera,
-  Save,
-  Eye,
-  EyeOff,
-  Loader2,
-  Check,
-  X,
+  Shield,
+  KeyRound,
   Bell,
   Moon,
   Sun,
-  ToggleLeft,
-  ToggleRight
+  Check,
+  Eye,
+  EyeOff,
+  LogOut,
+  Activity,
+  Lock,
+  ChevronRight,
+  Pencil,
+  X,
+  Save,
+  AlertTriangle,
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 interface ProfileProps {
-  onUserUpdate?: (user: User) => void;
+  user: { email: string; role: 'admin' | 'viewer'; name: string };
+  onLogout: () => void;
 }
 
-const Profile: React.FC<ProfileProps> = ({ onUserUpdate }) => {
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  viewer: 'Visualizador',
+  editor: 'Editor',
+};
+
+const ROLE_COLOR: Record<string, string> = {
+  admin: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  editor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  viewer: 'bg-slate-100 text-slate-600 dark:bg-stone-800 dark:text-stone-400',
+};
+
+const ACTIVITY_LOG = [
+  { id: 1, action: 'Generó informe mensual', time: 'Hace 2 horas', icon: Activity },
+  { id: 2, action: 'Editó trabajador "María García"', time: 'Hace 5 horas', icon: Pencil },
+  { id: 3, action: 'Accedió a Pagos', time: 'Ayer a las 14:30', icon: Activity },
+  { id: 4, action: 'Creó incidencia en Apt. Ramblas 12', time: 'Ayer a las 11:15', icon: AlertTriangle },
+  { id: 5, action: 'Modificó alojamiento "Casa Marina 3B"', time: 'Hace 2 días', icon: Pencil },
+];
+
+const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const { theme, toggleTheme } = useTheme();
 
-  // Get user from localStorage
-  const [user, setUser] = useState<User | null>(null);
-  const [name, setName] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'preferences'>('profile');
+  // Edit name state
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(user.name);
+  const [savedName, setSavedName] = useState(user.name);
 
-  // Loading and success states
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [passwordSaved, setPasswordSaved] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
+  // Password change state
+  const [pwSection, setPwSection] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [pwSaved, setPwSaved] = useState(false);
+  const [pwError, setPwError] = useState('');
 
-  // Preferences states
-  const [emailNotifications, setEmailNotifications] = useState(true);
+  // Notification prefs
+  const [notifIncidencias, setNotifIncidencias] = useState(true);
+  const [notifPagos, setNotifPagos] = useState(true);
+  const [notifInformes, setNotifInformes] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const initials = savedName
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
 
-  useEffect(() => {
-    const saved = localStorage.getItem('rh_user');
-    if (saved) {
-      const userData = JSON.parse(saved);
-      setUser(userData);
-      setName(userData.name || '');
-      const savedImage = localStorage.getItem('rh_user_image');
-      if (savedImage) {
-        setProfileImage(savedImage);
-      }
-    }
-
-    const savedPrefs = localStorage.getItem('rh_user_preferences');
-    if (savedPrefs) {
-      setEmailNotifications(JSON.parse(savedPrefs).email ?? true);
-    }
-  }, []);
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert('La imagen no puede superar los 2MB');
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setProfileImage(base64);
-        localStorage.setItem('rh_user_image', base64);
-      };
-      reader.readAsDataURL(file);
+  const handleSaveName = () => {
+    if (nameValue.trim()) {
+      setSavedName(nameValue.trim());
+      setEditingName(false);
     }
   };
 
-  const handleSaveProfile = async () => {
-    if (!user) return;
-
-    setSavingProfile(true);
-    setProfileSaved(false);
-
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const updatedUser = { ...user, name };
-    localStorage.setItem('rh_user', JSON.stringify(updatedUser));
-    setUser(updatedUser);
-
-    if (onUserUpdate) {
-      onUserUpdate(updatedUser);
-    }
-
-    setSavingProfile(false);
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2000);
+  const handleCancelName = () => {
+    setNameValue(savedName);
+    setEditingName(false);
   };
 
-  const handleSavePassword = async () => {
-    setPasswordError('');
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError('Todos los campos son obligatorios');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setPasswordError('Las contraseñas no coinciden');
-      return;
-    }
-
-    if (newPassword.length < 4) {
-      setPasswordError('La contraseña debe tener al menos 4 caracteres');
-      return;
-    }
-
-    setSavingPassword(true);
-    setPasswordSaved(false);
-
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-
-    setSavingPassword(false);
-    setPasswordSaved(true);
-    setTimeout(() => setPasswordSaved(false), 2000);
+  const handleSavePassword = () => {
+    setPwError('');
+    if (!currentPw) { setPwError('Introduce tu contraseña actual.'); return; }
+    if (newPw.length < 6) { setPwError('La nueva contraseña debe tener al menos 6 caracteres.'); return; }
+    if (newPw !== confirmPw) { setPwError('Las contraseñas no coinciden.'); return; }
+    setPwSaved(true);
+    setCurrentPw(''); setNewPw(''); setConfirmPw('');
+    setTimeout(() => { setPwSaved(false); setPwSection(false); }, 2000);
   };
-
-  const handleToggleEmailNotifications = () => {
-    const newValue = !emailNotifications;
-    setEmailNotifications(newValue);
-    localStorage.setItem('rh_user_preferences', JSON.stringify({ email: newValue }));
-  };
-
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-orange-500" size={24} />
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 w-full max-w-2xl mx-auto">
-      {/* Profile Card */}
-      <div className="bg-white dark:bg-stone-900 border border-slate-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden">
-        {/* Profile Header with Image */}
-        <div className="relative bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 px-6 sm:px-8 md:px-10 py-8 sm:py-10 md:py-12">
-          {/* Decorative circles */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/4 blur-2xl" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/4 blur-xl" />
+    <div className="space-y-6 animate-in fade-in duration-500 pb-10">
 
-          <div className="relative flex flex-col sm:flex-row items-center gap-4 sm:gap-6 md:gap-8">
+      {/* ── Page header ── */}
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-1 mb-2">
+        <h1 className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display shrink-0">
+          Mi perfil
+        </h1>
+      </header>
+
+      {/* ── Top card: avatar + info ── */}
+      <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+
+
+        <div className="px-6 py-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             {/* Avatar */}
-            <div className="relative group">
-              <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-white/20 backdrop-blur-sm border-4 border-white/30 shadow-xl flex items-center justify-center overflow-hidden transition-transform hover:scale-105">
-                {profileImage ? (
-                  <img
-                    src={profileImage}
-                    alt="Profile"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-4xl sm:text-5xl font-semibold text-white">
-                    {name.charAt(0).toUpperCase()}
-                  </span>
-                )}
+            <div className="flex items-end gap-4">
+              <div className="w-20 h-20 rounded-2xl bg-stone-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 text-lg font-normal transition-colors">
+                {initials}
               </div>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-1 right-1 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center hover:bg-orange-50 transition-all hover:scale-110 group-hover:shadow-xl"
-                title="Cambiar foto de perfil"
-              >
-                <Camera size={18} className="text-orange-600" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageSelect}
-                className="hidden"
-              />
+              <div className="mb-1">
+                {editingName ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      autoFocus
+                      value={nameValue}
+                      onChange={(e) => setNameValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') handleCancelName(); }}
+                      className="text-lg font-semibold bg-transparent border-b-2 border-orange-400 outline-none text-slate-800 dark:text-stone-100 w-48"
+                    />
+                    <button onClick={handleSaveName} className="p-1 text-orange-500 hover:text-orange-600 transition-colors"><Save size={16} /></button>
+                    <button onClick={handleCancelName} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"><X size={16} /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-semibold text-slate-800 dark:text-stone-100 leading-tight">{savedName}</h2>
+                    <button
+                      onClick={() => setEditingName(true)}
+                      className="p-1 text-slate-300 hover:text-orange-500 dark:text-stone-600 dark:hover:text-orange-400 transition-colors"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ROLE_COLOR[user.role]}`}>
+                    {ROLE_LABEL[user.role] ?? user.role}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-emerald-500">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                    En línea
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* Name and Email */}
-            <div className="text-center sm:text-left flex-1">
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">{user.name}</h2>
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-2">
-                <Mail size={16} className="text-white/80" />
-                <span className="text-white/90 text-sm sm:text-base">{user.email}</span>
+            {/* Quick info + logout */}
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1 text-sm text-slate-500 dark:text-stone-400">
+                <span className="flex items-center gap-2">
+                  <Mail size={13} className="text-slate-400" />
+                  {user.email}
+                </span>
+
               </div>
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1.5 self-start px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800/50 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-xs font-medium"
+              >
+                <LogOut size={13} />
+                Cerrar sesión
+              </button>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-slate-200 dark:border-stone-800 bg-slate-50/50 dark:bg-stone-900/50 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`flex-1 min-w-fit px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium transition-all relative whitespace-nowrap ${
-              activeTab === 'profile'
-                ? 'text-orange-600 dark:text-orange-400'
-                : 'text-slate-600 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-300 hover:bg-slate-100/50 dark:hover:bg-stone-800/50'
-            }`}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <UserIcon size={16} />
-              Datos personales
-            </span>
-            {activeTab === 'profile' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-orange-600" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('password')}
-            className={`flex-1 min-w-fit px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium transition-all relative whitespace-nowrap ${
-              activeTab === 'password'
-                ? 'text-orange-600 dark:text-orange-400'
-                : 'text-slate-600 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-300 hover:bg-slate-100/50 dark:hover:bg-stone-800/50'
-            }`}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <Lock size={16} />
-              Seguridad
-            </span>
-            {activeTab === 'password' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-orange-600" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('preferences')}
-            className={`flex-1 min-w-fit px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium transition-all relative whitespace-nowrap ${
-              activeTab === 'preferences'
-                ? 'text-orange-600 dark:text-orange-400'
-                : 'text-slate-600 dark:text-stone-400 hover:text-slate-800 dark:hover:text-stone-300 hover:bg-slate-100/50 dark:hover:bg-stone-800/50'
-            }`}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <Bell size={16} />
-              Preferencias
-            </span>
-            {activeTab === 'preferences' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-orange-600" />
-            )}
-          </button>
-        </div>
+      {/* ── Two-column grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Tab Content */}
-        <div className="p-6 sm:p-8">
-          {activeTab === 'profile' && (
-            <div className="space-y-6">
-              {/* Name Field */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-stone-300">
-                  Nombre completo
-                </label>
-                <div className="relative">
-                  <UserIcon
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none"
-                  />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-stone-800/50 border-2 border-slate-200 dark:border-stone-700 rounded-xl text-slate-900 dark:text-stone-100 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
-                    placeholder="Tu nombre completo"
-                  />
-                </div>
-              </div>
+        {/* LEFT column (2/3) */}
+        <div className="lg:col-span-2 space-y-6">
 
-              {/* Email (Read-only) */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-stone-300">
-                  Correo electrónico
-                </label>
-                <div className="relative">
-                  <Mail
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none"
-                  />
-                  <input
-                    type="email"
-                    value={user.email}
-                    readOnly
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-100 dark:bg-stone-800/30 border-2 border-slate-200 dark:border-stone-700 rounded-xl text-slate-600 dark:text-stone-400 text-base cursor-not-allowed"
-                  />
-                </div>
-                <p className="text-sm text-slate-500 dark:text-stone-500 flex items-center gap-1.5">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-stone-500"></span>
-                  El correo electrónico no se puede modificar
-                </p>
-              </div>
-
-              {/* Save Button */}
-              <div className="pt-4 flex items-center gap-3">
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={savingProfile || name === user.name}
-                  className="flex items-center justify-center gap-2.5 px-8 py-3.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:scale-105 disabled:hover:scale-100 disabled:hover:shadow-none text-base shadow-md"
-                >
-                  {savingProfile ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      <span>Guardando...</span>
-                    </>
-                  ) : profileSaved ? (
-                    <>
-                      <Check size={18} />
-                      <span>¡Guardado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save size={18} />
-                      <span>Guardar cambios</span>
-                    </>
-                  )}
-                </button>
-
-                {profileSaved && (
-                  <span className="text-sm text-green-600 dark:text-green-400 font-medium animate-in fade-in">
-                    Cambios guardados correctamente
-                  </span>
-                )}
+          {/* Security card */}
+          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            <div className="module-header">
+              <div className="flex items-center gap-2">
+                <Lock size={15} className="text-orange-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Seguridad</span>
               </div>
             </div>
-          )}
 
-          {activeTab === 'password' && (
-            <div className="space-y-6">
-              {/* Current Password */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-stone-300">
-                  Contraseña actual
-                </label>
-                <div className="relative">
-                  <Lock
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none"
-                  />
-                  <input
-                    type={showCurrentPassword ? 'text' : 'password'}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50 dark:bg-stone-800/50 border-2 border-slate-200 dark:border-stone-700 rounded-xl text-slate-900 dark:text-stone-100 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
-                  >
-                    {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* New Password */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-stone-300">
-                  Nueva contraseña
-                </label>
-                <div className="relative">
-                  <Lock
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none"
-                  />
-                  <input
-                    type={showNewPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50 dark:bg-stone-800/50 border-2 border-slate-200 dark:border-stone-700 rounded-xl text-slate-900 dark:text-stone-100 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
-                  >
-                    {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Confirm Password */}
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-slate-700 dark:text-stone-300">
-                  Confirmar nueva contraseña
-                </label>
-                <div className="relative">
-                  <Lock
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none"
-                  />
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50 dark:bg-stone-800/50 border-2 border-slate-200 dark:border-stone-700 rounded-xl text-slate-900 dark:text-stone-100 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
-                  >
-                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Error Message */}
-              {passwordError && (
-                <div className="flex items-center gap-3 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-4 py-3.5 rounded-xl text-base border-2 border-red-200 dark:border-red-800/40 animate-in fade-in">
-                  <X size={18} className="shrink-0" />
-                  <span className="font-medium">{passwordError}</span>
-                </div>
-              )}
-
-              {/* Save Button */}
-              <div className="pt-4 flex items-center gap-3">
+            <div className="divide-y divide-stone-100 dark:divide-stone-800">
+              {/* Change password row */}
+              <div>
                 <button
-                  onClick={handleSavePassword}
-                  disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
-                  className="flex items-center justify-center gap-2.5 px-8 py-3.5 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-slate-300 disabled:to-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:scale-105 disabled:hover:scale-100 disabled:hover:shadow-none text-base shadow-md"
+                  onClick={() => { setPwSection((v) => !v); setPwError(''); }}
+                  className="flex items-center justify-between w-full px-5 py-4 hover:bg-slate-50/50 dark:hover:bg-stone-800/30 transition-colors"
                 >
-                  {savingPassword ? (
-                    <>
-                      <Loader2 size={18} className="animate-spin" />
-                      <span>Actualizando...</span>
-                    </>
-                  ) : passwordSaved ? (
-                    <>
-                      <Check size={18} />
-                      <span>¡Actualizada!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Lock size={18} />
-                      <span>Actualizar contraseña</span>
-                    </>
-                  )}
-                </button>
-
-                {passwordSaved && (
-                  <span className="text-sm text-green-600 dark:text-green-400 font-medium animate-in fade-in">
-                    Contraseña actualizada correctamente
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'preferences' && (
-            <div className="space-y-6">
-              {/* Appearance */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-slate-800 dark:text-stone-200 flex items-center gap-2">
-                  <Sun size={18} className="text-orange-500" />
-                  Apariencia
-                </h3>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => theme !== 'light' && toggleTheme()}
-                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                      theme === 'light'
-                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
-                        : 'border-slate-200 dark:border-stone-700 hover:border-orange-300 dark:hover:border-orange-700'
-                    }`}
-                  >
-                    <Sun size={24} className={theme === 'light' ? 'text-orange-500' : 'text-slate-400 dark:text-stone-500'} />
-                    <span className={`text-sm font-medium ${theme === 'light' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-stone-400'}`}>
-                      Claro
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => theme !== 'dark' && toggleTheme()}
-                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
-                      theme === 'dark'
-                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
-                        : 'border-slate-200 dark:border-stone-700 hover:border-orange-300 dark:hover:border-orange-700'
-                    }`}
-                  >
-                    <Moon size={24} className={theme === 'dark' ? 'text-orange-500' : 'text-slate-400 dark:text-stone-500'} />
-                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-600 dark:text-stone-400'}`}>
-                      Oscuro
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Email Notifications */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-slate-800 dark:text-stone-200 flex items-center gap-2">
-                  <Bell size={18} className="text-orange-500" />
-                  Notificaciones
-                </h3>
-
-                <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-stone-800/50 rounded-xl border border-slate-200 dark:border-stone-700">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                      <Mail size={16} className="text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700 dark:text-stone-300">Notificaciones por email</p>
-                      <p className="text-xs text-slate-500 dark:text-stone-400">Recibe actualizaciones importantes</p>
+                    <span className="w-8 h-8 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center">
+                      <KeyRound size={15} className="text-orange-500" />
+                    </span>
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-slate-700 dark:text-stone-200">Cambiar contraseña</p>
+                      <p className="text-xs text-slate-400 dark:text-stone-500">Última vez hace 30 días</p>
                     </div>
                   </div>
-                  <button onClick={handleToggleEmailNotifications} className="transition-all">
-                    {emailNotifications ? (
-                      <ToggleRight size={28} className="text-orange-500" />
-                    ) : (
-                      <ToggleLeft size={28} className="text-slate-400 dark:text-stone-500" />
+                  <ChevronRight size={16} className={`text-slate-300 dark:text-stone-600 transition-transform duration-200 ${pwSection ? 'rotate-90' : ''}`} />
+                </button>
+
+                {pwSection && (
+                  <div className="px-5 pb-5 pt-1 space-y-3">
+                    {/* Current password */}
+                    <div className="relative">
+                      <input
+                        type={showCurrentPw ? 'text' : 'password'}
+                        placeholder="Contraseña actual"
+                        value={currentPw}
+                        onChange={(e) => setCurrentPw(e.target.value)}
+                        className="w-full text-sm bg-stone-50/50 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/50 rounded-lg px-4 py-2.5 pr-10 outline-none focus:border-orange-400 dark:focus:border-orange-500 text-slate-700 dark:text-stone-200 placeholder-slate-300 dark:placeholder-stone-600 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPw((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-stone-300"
+                      >
+                        {showCurrentPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    {/* New password */}
+                    <div className="relative">
+                      <input
+                        type={showNewPw ? 'text' : 'password'}
+                        placeholder="Nueva contraseña"
+                        value={newPw}
+                        onChange={(e) => setNewPw(e.target.value)}
+                        className="w-full text-sm bg-stone-50/50 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/50 rounded-lg px-4 py-2.5 pr-10 outline-none focus:border-orange-400 dark:focus:border-orange-500 text-slate-700 dark:text-stone-200 placeholder-slate-300 dark:placeholder-stone-600 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPw((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-stone-300"
+                      >
+                        {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    {/* Confirm */}
+                    <input
+                      type="password"
+                      placeholder="Confirmar nueva contraseña"
+                      value={confirmPw}
+                      onChange={(e) => setConfirmPw(e.target.value)}
+                      className="w-full text-sm bg-stone-50/50 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-700/50 rounded-lg px-4 py-2.5 outline-none focus:border-orange-400 dark:focus:border-orange-500 text-slate-700 dark:text-stone-200 placeholder-slate-300 dark:placeholder-stone-600 transition-colors"
+                    />
+
+                    {pwError && (
+                      <p className="text-xs text-red-500 flex items-center gap-1.5">
+                        <AlertTriangle size={12} /> {pwError}
+                      </p>
                     )}
-                  </button>
+                    {pwSaved && (
+                      <p className="text-xs text-emerald-500 flex items-center gap-1.5">
+                        <Check size={12} /> Contraseña actualizada correctamente
+                      </p>
+                    )}
+
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={handleSavePassword}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium transition-colors"
+                      >
+                        <Save size={13} /> Guardar
+                      </button>
+                      <button
+                        onClick={() => { setPwSection(false); setCurrentPw(''); setNewPw(''); setConfirmPw(''); setPwError(''); }}
+                        className="px-4 py-2 rounded-lg text-xs text-slate-500 dark:text-stone-400 hover:bg-slate-100 dark:hover:bg-stone-800 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Role row */}
+              <div className="flex items-center justify-between px-5 py-4">
+                <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center">
+                    <Shield size={15} className="text-slate-400 dark:text-stone-500" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700 dark:text-stone-200">Rol y permisos</p>
+                    <p className="text-xs text-slate-400 dark:text-stone-500">Gestionado por el administrador del sistema</p>
+                  </div>
                 </div>
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ROLE_COLOR[user.role]}`}>
+                  {ROLE_LABEL[user.role]}
+                </span>
               </div>
             </div>
-          )}
+          </section>
+
+          {/* Activity log */}
+          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            <div className="module-header">
+              <div className="flex items-center gap-2">
+                <Activity size={15} className="text-orange-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Actividad reciente</span>
+              </div>
+            </div>
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800">
+              {ACTIVITY_LOG.map((item) => (
+                <li key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
+                  <span className="w-7 h-7 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center shrink-0">
+                    <item.icon size={13} className="text-orange-400" />
+                  </span>
+                  <span className="text-sm text-slate-600 dark:text-stone-300 flex-1">{item.action}</span>
+                  <span className="text-xs text-slate-400 dark:text-stone-500 whitespace-nowrap">{item.time}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+
+        {/* RIGHT column (1/3) */}
+        <div className="space-y-6">
+
+          {/* Preferences */}
+          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            <div className="module-header">
+              <div className="flex items-center gap-2">
+                <Sun size={15} className="text-orange-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Apariencia</span>
+              </div>
+            </div>
+            <div className="px-5 py-4">
+              <button
+                onClick={toggleTheme}
+                className="flex items-center justify-between w-full group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center transition-colors group-hover:bg-orange-50 dark:group-hover:bg-orange-800/40">
+                    {theme === 'dark' ? <Moon size={15} className="text-orange-400" /> : <Sun size={15} className="text-orange-400" />}
+                  </span>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-slate-700 dark:text-stone-200">Tema de la interfaz</p>
+                    <p className="text-xs text-slate-400 dark:text-stone-500">{theme === 'dark' ? 'Modo oscuro activo' : 'Modo claro activo'}</p>
+                  </div>
+                </div>
+                {/* Toggle pill */}
+                <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${theme === 'dark' ? 'bg-orange-500' : 'bg-slate-200 dark:bg-stone-700'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-300 ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </button>
+            </div>
+          </section>
+
+          {/* Notifications */}
+          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            <div className="module-header">
+              <div className="flex items-center gap-2">
+                <Bell size={15} className="text-orange-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Notificaciones</span>
+              </div>
+            </div>
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800 px-2 py-1">
+              {[
+                { label: 'Incidencias nuevas', sub: 'Alertas de incidencias registradas', value: notifIncidencias, set: setNotifIncidencias },
+                { label: 'Pagos pendientes', sub: 'Avisos de pagos sin confirmar', value: notifPagos, set: setNotifPagos },
+                { label: 'Informes generados', sub: 'Notificación al generar un informe', value: notifInformes, set: setNotifInformes },
+              ].map(({ label, sub, value, set }) => (
+                <li key={label} className="flex items-center justify-between px-3 py-3.5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors rounded-xl">
+                  <div>
+                    <p className="text-sm text-slate-700 dark:text-stone-200">{label}</p>
+                    <p className="text-xs text-slate-400 dark:text-stone-500">{sub}</p>
+                  </div>
+                  <button
+                    onClick={() => set((v: boolean) => !v)}
+                    className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${value ? 'bg-orange-500' : 'bg-slate-200 dark:bg-stone-700'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-300 ${value ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+
         </div>
       </div>
     </div>
