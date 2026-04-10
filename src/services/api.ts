@@ -63,6 +63,75 @@ const normalizeHeader = (h: string) => {
     .replace(/[\u0300-\u036f]/g, "");
 };
 
+// Utilidad para calcular distancia entre dos puntos (Haversine)
+export const getDistanceMeters = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371e3; // Radio de la Tierra en metros
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+};
+
+// Parsear coordenadas "lat, lng" a [number, number]
+export const parseCoords = (str: string | undefined): [number, number] | null => {
+  if (!str) return null;
+  const parts = str.split(',').map(s => parseFloat(s.trim()));
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return [parts[0], parts[1]];
+  }
+  return null;
+};
+
+// Geocodificación con caché local
+const GEO_CACHE_KEY = 'rh_geocoding_cache';
+export const geocodeAddress = async (address: string): Promise<{ lat: number, lng: number } | null> => {
+  const cache = JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || '{}');
+  if (cache[address]) return cache[address];
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'BaseDatosPagosRH/1.0 (contact: admin@rh.com)'
+      }
+    });
+    const data = await response.json();
+
+    if (data && data.length > 0) {
+      const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      cache[address] = result;
+      localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
+      return result;
+    }
+
+    // Fallback: Try a simplified search if the full one fails
+    // (Remove province if it exists, as it sometimes causes mismatches)
+    const simplified = address.split(',').filter((_, i, arr) => i !== arr.length - 2).join(',');
+    if (simplified !== address) {
+      const resp2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(simplified)}&format=json&limit=1`, {
+        headers: { 'User-Agent': 'BaseDatosPagosRH/1.0 (contact: admin@rh.com)' }
+      });
+      const data2 = await resp2.json();
+      if (data2 && data2.length > 0) {
+        const result = { lat: parseFloat(data2[0].lat), lng: parseFloat(data2[0].lon) };
+        cache[address] = result;
+        localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
+        return result;
+      }
+    }
+  } catch (error) {
+    console.warn('Geocoding error for:', address, error);
+  }
+  return null;
+};
+
 const parseBool = (val: any): boolean => {
   if (val === true || val === 'TRUE' || val === 'true' || val === '1') return true;
   if (typeof val === 'string') {
@@ -458,12 +527,13 @@ export const appsScriptApi = {
 
           return {
             id: `real_${index + 2}`,
-            name: String(getVal('PROPIEDAD') || 'Sin nombre'),
-            ref: String(getVal('REF') || getVal('Ref') || getVal('ref') || ''),
-            address: String(getVal('DIRECCIÓN') || getVal('Dirección') || ''),
+            name: String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || 'Sin nombre').trim(),
+            ref: String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
+            address: String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim(),
             city: String(getVal('POBLACIÓN') || ''),
-            zipCode: String(getVal('CP') || ''),
-            notes: String(getVal('OBSERVACIONES') || ''),
+            zipCode: String(getVal('CP') || '').trim(),
+            provincia: String(getVal('PROVINCIA') || ''),
+            notes: String(getVal('OBSERVACIONES') || '').trim(),
             active: true
           };
         })
@@ -624,12 +694,43 @@ export const appsScriptApi = {
             checked: parseBool(getVal('Checked')),
           };
         })
-        .filter((r): r is NormalCleanRecord => r !== null);
+        .filter((r: NormalCleanRecord | null): r is NormalCleanRecord => r !== null);
 
       return records;
     } catch (error) {
       console.error('Error fetching normal cleans from Sheets:', error);
       return MOCK_NORMAL_CLEANS;
+    }
+  },
+
+  updateCleanStatus: async (type: 'normal' | 'initial' | 'handyman', id: string, checked: boolean): Promise<boolean> => {
+    try {
+      const rowIndex = parseInt(id.split('_')[1]);
+      let sheetName = '';
+      if (type === 'normal') sheetName = 'Checkout_Limpieza_Normal';
+      else if (type === 'initial') sheetName = 'Checkout_Limpieza_Inicial';
+      else if (type === 'handyman') sheetName = 'Checkout_Manitas';
+
+      const payload = {
+        action: 'updateCleanStatus',
+        sheetName,
+        rowIndex,
+        checked
+      };
+
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error updating clean status:', error);
+      return false;
     }
   },
 
@@ -684,7 +785,7 @@ export const appsScriptApi = {
             checked: parseBool(getVal('Checked')),
           };
         })
-        .filter((r): r is InitialCleanRecord => r !== null);
+        .filter((r: InitialCleanRecord | null): r is InitialCleanRecord => r !== null);
 
       return records;
     } catch (error) {
@@ -744,7 +845,7 @@ export const appsScriptApi = {
             estadoCompletado: parseBool(getVal('Checked')) ? 'Completado' : 'Pendiente',
           };
         })
-        .filter((r): r is HandymanRecord => r !== null);
+        .filter((r: HandymanRecord | null): r is HandymanRecord => r !== null);
 
       return records;
     } catch (error) {

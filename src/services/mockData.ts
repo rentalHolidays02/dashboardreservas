@@ -34,6 +34,7 @@ export interface Accommodation {
   address: string;
   city: string;
   zipCode: string;
+  provincia?: string;
   notes?: string;
   active: boolean;
   image?: string;
