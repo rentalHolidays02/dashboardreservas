@@ -4,11 +4,8 @@ import {
   LayoutDashboard,
   Users,
   Calendar,
-  LogOut,
   Banknote,
   AlertTriangle,
-  Moon,
-  Sun,
   Home,
   FileText,
   User,
@@ -198,21 +195,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
 
-          {/* Dark mode toggle */}
-          <button
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md mb-1
-              text-slate-400 dark:text-stone-500 hover:text-slate-700 dark:hover:text-stone-300 hover:bg-white/25 dark:hover:bg-stone-700/40 transition-colors"
-          >
-            <span className="shrink-0 w-8 h-8 flex items-center justify-center">
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </span>
-            <span className="sidebar-fade text-sm tracking-tight whitespace-nowrap">
-              {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-            </span>
-          </button>
-
           {/* Profile link */}
           <Link
             to="/perfil"
@@ -239,20 +221,6 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </Link>
 
-          {/* Logout — same layout, icon span gets bg in mini */}
-          <button
-            onClick={onLogout}
-            title={collapsed ? 'Cerrar sesión' : undefined}
-            className="flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-lg
-              text-slate-400 dark:text-stone-500 hover:bg-black/5 dark:hover:bg-black/20 hover:text-red-500 transition-colors"
-          >
-            <span className="shrink-0 w-8 h-8 flex items-center justify-center">
-              <LogOut size={18} />
-            </span>
-            <span className="sidebar-fade text-sm tracking-tight whitespace-nowrap">
-              Cerrar sesión
-            </span>
-          </button>
         </div>
 
       </div>

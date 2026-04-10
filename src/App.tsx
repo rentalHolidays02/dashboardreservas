@@ -11,9 +11,9 @@ import Pagos from './pages/Pagos';
 import Alojamientos from './pages/Alojamientos';
 import Analisis from './pages/Analisis';
 import GenerarInforme from './pages/GenerarInforme';
-import Profile from './pages/Profile';
 import GestionUsuarios from './pages/GestionUsuarios';
 import EntregaDeLlaves from './pages/EntregaDeLlaves';
+import Profile from './pages/Profile';
 import MainLayout from './components/layout/MainLayout';
 import ChatBot from './components/chatbot/ChatBot';
 import { User } from './services/mockData';
@@ -162,12 +162,13 @@ function App() {
           }
         />
 
+
         <Route
-          path="/perfil"
+          path="/entrega-de-llaves"
           element={
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
-                <Profile onUserUpdate={handleLoginSuccess} />
+                <EntregaDeLlaves />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
@@ -176,11 +177,11 @@ function App() {
         />
 
         <Route
-          path="/entrega-de-llaves"
+          path="/perfil"
           element={
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
-                <EntregaDeLlaves />
+                <Profile user={user} onLogout={handleLogout} />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
