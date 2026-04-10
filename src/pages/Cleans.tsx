@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -15,15 +15,44 @@ import {
   Filter,
   Info,
   Key,
+  KeyRound,
   User,
   MessageSquare,
+  Check,
 } from 'lucide-react';
-import { appsScriptApi } from '../services/api';
-import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker } from '../services/mockData';
+import { appsScriptApi, getDistanceMeters, parseCoords, geocodeAddress } from '../services/api';
+import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker, Accommodation } from '../services/mockData';
 import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 type TabType = 'normal' | 'initial' | 'handyman';
+
+// Helper to normalize strings for comparison keys
+const normalizeKey = (s: string) => s.trim().toLowerCase();
+
+// Helper to find accommodation coords with fuzzy matching
+const findAccommodationCoords = (aptName: string, geoData: Record<string, { lat: number, lng: number }>): { lat: number; lng: number } | undefined => {
+  const normalizedName = normalizeKey(aptName);
+  // Exact match first
+  if (geoData[normalizedName]) return geoData[normalizedName];
+  // Fuzzy match: try to find partial match
+  for (const key of Object.keys(geoData)) {
+    if (key.includes(normalizedName) || normalizedName.includes(key)) {
+      return geoData[key];
+    }
+  }
+  return undefined;
+};
+
+// Clean address for OSM (c/ -> Calle, n- -> empty, etc)
+const cleanAddressForSearch = (addr: string) => {
+  return addr
+    .replace(/\bc\/\b/gi, 'Calle ')
+    .replace(/\bn-\b/gi, '')
+    .replace(/\snº\s/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
 
 const Cleans: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('normal');
@@ -32,6 +61,8 @@ const Cleans: React.FC = () => {
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
   const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [geoData, setGeoData] = useState<Record<string, { lat: number, lng: number }>>({});
   const [searchTerm, setSearchTerm] = useState('');
 
   // Filter Modal state
@@ -49,8 +80,23 @@ const Cleans: React.FC = () => {
     return map;
   }, [workers]);
 
+
   useEffect(() => {
     appsScriptApi.getWorkers().then(setWorkers);
+    appsScriptApi.getAccommodations().then(accs => {
+      setAccommodations(accs);
+      // Trigger geocoding for each unique address
+      accs.forEach(async (acc) => {
+        const cleanedStreet = cleanAddressForSearch(acc.address);
+        const fullAddress = `${cleanedStreet}, ${acc.zipCode} ${acc.city}, ${acc.provincia || ''}, Spain`;
+        
+        const coords = await geocodeAddress(fullAddress);
+        if (coords) {
+          setGeoData(prev => ({ ...prev, [normalizeKey(acc.name)]: coords }));
+        }
+      });
+    });
+
     const fetchAllData = async () => {
       setLoading(true);
       try {
@@ -90,11 +136,11 @@ const Cleans: React.FC = () => {
     let checked = false;
 
     if ('nombre' in record) {
-      fullName = `${record.nombre} ${record.apellidos}`.toLowerCase();
-      telefono = record.telefono.toLowerCase();
-      apt = ('apartamento' in record ? record.apartamento : record.alojamiento).toLowerCase();
-      fecha = 'checkinFecha' in record ? record.checkinFecha : record.fechaLlegada;
-      checked = 'checked' in record ? record.checked : record.estadoCompletado === 'Completado';
+      fullName = `${record.nombre || ''} ${record.apellidos || ''}`.toLowerCase();
+      telefono = String(record.telefono || '').toLowerCase();
+      apt = String(('apartamento' in record ? record.apartamento : (record as any).alojamiento) || '').toLowerCase();
+      fecha = 'checkinFecha' in record ? record.checkinFecha : (record as HandymanRecord).fechaLlegada;
+      checked = 'checked' in record ? record.checked : (record as HandymanRecord).estadoCompletado === 'Completado';
     }
 
     const matchSearch = 
@@ -205,10 +251,40 @@ const Cleans: React.FC = () => {
       </div>
 
       {/* Content Area */}
-      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-hidden">
-        {activeTab === 'normal' && <TableNormalCleans data={filteredNormal} photoMap={photoMap} />}
-        {activeTab === 'initial' && <TableInitialCleans data={filteredInitial} photoMap={photoMap} />}
-        {activeTab === 'handyman' && <TableHandyman data={filteredHandyman} photoMap={photoMap} />}
+      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-x-auto">
+        {activeTab === 'normal' && (
+          <TableNormalCleans 
+            data={filteredNormal} 
+            photoMap={photoMap} 
+            geoData={geoData}
+            onUpdate={(id, checked) => {
+              setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+              appsScriptApi.updateCleanStatus('normal', id, checked);
+            }} 
+          />
+        )}
+        {activeTab === 'initial' && (
+          <TableInitialCleans 
+            data={filteredInitial} 
+            photoMap={photoMap} 
+            geoData={geoData}
+            onUpdate={(id, checked) => {
+              setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+              appsScriptApi.updateCleanStatus('initial', id, checked);
+            }} 
+          />
+        )}
+        {activeTab === 'handyman' && (
+          <TableHandyman 
+            data={filteredHandyman} 
+            photoMap={photoMap} 
+            geoData={geoData}
+            onUpdate={(id, checked) => {
+              setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
+              appsScriptApi.updateCleanStatus('handyman', id, checked);
+            }} 
+          />
+        )}
       </div>
     </div>
   );
@@ -216,12 +292,12 @@ const Cleans: React.FC = () => {
 
 
 // Verification cell component with green/red buttons
-const VerificationCell = React.forwardRef<HTMLButtonElement, { verified: boolean; onClick: (verified: boolean) => void }>(
+const VerificationCell = React.forwardRef<HTMLElement, { verified: boolean; onClick: (ev: React.MouseEvent<HTMLElement>) => void }>(
   ({ verified, onClick }, ref) => (
     <button
-      ref={ref}
+      ref={ref as any}
       type="button"
-      onClick={() => onClick(!verified)}
+      onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium transition ${verified
         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-900'
         : 'bg-red-100 text-red-700 dark:bg-red-900/70 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900'}`}
@@ -232,80 +308,104 @@ const VerificationCell = React.forwardRef<HTMLButtonElement, { verified: boolean
   )
 );
 
-// Placeholder coords — swap for real data later
-const PLACEHOLDER_ACCOMMODATION: [number, number] = [40.4168, -3.7038];
-const PLACEHOLDER_USER: [number, number] = [40.419, -3.7005];
-const ACCOMMODATION_RADIUS_METERS = 80;
+// Radio de verificación en metros
+const VERIFICATION_RADIUS_METERS = 80;
 
 // Mini map using leaflet directly (no react-leaflet)
-const MiniMap: React.FC = () => {
+const MiniMap: React.FC<{ target?: [number, number]; markers?: [number, number][] }> = ({ target, markers }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!containerRef.current || mapRef.current || !target) return;
 
     const map = L.map(containerRef.current, {
-      center: PLACEHOLDER_ACCOMMODATION,
-      zoom: 15,
+      center: target,
+      zoom: 17,
       zoomControl: false,
       attributionControl: false,
-      dragging: false,
-      touchZoom: false,
-      doubleClickZoom: false,
-      scrollWheelZoom: false,
-      boxZoom: false,
-      keyboard: false,
+      dragging: true,
+      touchZoom: true,
+      doubleClickZoom: true,
+      scrollWheelZoom: true,
+      boxZoom: true,
+      keyboard: true,
     });
     mapRef.current = map;
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-    // Accommodation radius
-    L.circle(PLACEHOLDER_ACCOMMODATION, {
-      radius: ACCOMMODATION_RADIUS_METERS,
+    // Círculo de verificación - centro en el apartamento
+    L.circle(target, {
+      radius: VERIFICATION_RADIUS_METERS,
       color: '#f97316',
       fillColor: '#f97316',
-      fillOpacity: 0.08,
-      opacity: 0.3,
-      weight: 1,
+      fillOpacity: 0.15,
+      opacity: 0.6,
+      weight: 2,
     }).addTo(map);
 
-    // User marker
-    const userIcon = L.divIcon({
-      className: '',
-      html: `<div style="width:12px;height:12px;border-radius:50%;background:#f97316;border:2px solid white;box-shadow:0 0 0 2px #f97316;"></div>`,
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
+    // Marcador del apartamento (centro del círculo)
+    L.circleMarker(target, {
+      radius: 8,
+      color: 'white',
+      fillColor: '#f97316',
+      fillOpacity: 1,
+      weight: 3,
+    }).addTo(map).bindPopup('Apartamento');
+
+    // Marcadores del trabajador (checkin/checkout)
+    markers?.forEach((m, i) => {
+      const userIcon = L.divIcon({
+        className: '',
+        html: `<div style="width:14px;height:14px;border-radius:50%;background:${i === 0 ? '#10b981' : '#3b82f6'};border:2.5px solid white;box-shadow:0 0 0 1px rgba(0,0,0,0.1);"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+      });
+      L.marker(m, { icon: userIcon }).addTo(map).bindPopup(i === 0 ? 'Entrada' : 'Salida');
     });
-    L.marker(PLACEHOLDER_USER, { icon: userIcon }).addTo(map);
+
+    // Ajustar el zoom para mostrar todos los puntos
+    if (markers && markers.length > 0) {
+      const group = L.featureGroup([
+        L.marker(target),
+        ...markers.map(m => L.marker(m))
+      ]);
+      map.fitBounds(group.getBounds().pad(0.3));
+    }
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [target, markers]);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 };
 
 // Location verification modal component
-const LocationVerificationModal: React.FC<{ isOpen: boolean; onClose: () => void; anchorRef: React.RefObject<HTMLButtonElement | null> }> = ({ isOpen, onClose, anchorRef }) => {
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+const LocationVerificationModal: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void; 
+  anchorRef: HTMLElement | null;
+  targetCoords?: [number, number];
+  userCoords?: [number, number][];
+}> = ({ isOpen, onClose, anchorRef, targetCoords, userCoords }) => {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [show, setShow] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && anchorRef.current) {
-      const rect = anchorRef.current.getBoundingClientRect();
-      const popupW = 220;
+  useLayoutEffect(() => {
+    if (isOpen && anchorRef) {
+      const rect = anchorRef.getBoundingClientRect();
+      const popupW = 280;
       const left = Math.min(rect.left, window.innerWidth - popupW - 8);
       setPos({ top: rect.bottom + 6, left });
-      // Mount map after container is visible in DOM
-      setTimeout(() => setShow(true), 20);
+      setTimeout(() => setShow(true), 100);
     } else {
       setShow(false);
+      setPos(null);
     }
-  }, [isOpen]);
+  }, [isOpen, anchorRef]);
 
   return createPortal(
     <>
@@ -316,12 +416,36 @@ const LocationVerificationModal: React.FC<{ isOpen: boolean; onClose: () => void
         onClick={onClose}
       />
       <div
-        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 ${
-          isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl ${
+          isOpen && pos ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
-        style={{ top: pos.top, left: pos.left, width: 220, height: 200 }}
+        style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, width: 280, height: 240 }}
       >
-        {show && <MiniMap />}
+        {show && targetCoords && (
+          <div className="w-full h-full relative">
+            <MiniMap target={targetCoords} markers={userCoords} />
+            <div className="absolute top-2 right-2 flex flex-col gap-1.5 z-[1000]">
+               <div className="flex items-center gap-1.5 bg-white/90 dark:bg-stone-900/90 px-2 py-1 rounded-md border border-stone-100 dark:border-stone-800 text-[10px] font-medium shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-[#f97316]" />
+                  <span>Apt.</span>
+               </div>
+               <div className="flex items-center gap-1.5 bg-white/90 dark:bg-stone-900/90 px-2 py-1 rounded-md border border-stone-100 dark:border-stone-800 text-[10px] font-medium shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-[#10b981]" />
+                  <span>Entrada</span>
+               </div>
+               <div className="flex items-center gap-1.5 bg-white/90 dark:bg-stone-900/90 px-2 py-1 rounded-md border border-stone-100 dark:border-stone-800 text-[10px] font-medium shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
+                  <span>Salida</span>
+               </div>
+            </div>
+          </div>
+        )}
+        {!targetCoords && isOpen && (
+          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center gap-2">
+            <XCircle size={24} className="text-red-400" />
+            <p className="text-xs text-slate-500 font-medium">Ubicación del apartamento no encontrada</p>
+          </div>
+        )}
       </div>
     </>,
     document.body
@@ -335,6 +459,16 @@ const toMinutes = (time: string): number => {
   return h * 60 + m;
 };
 
+const formatTime = (time: string): string => {
+  if (!time) return '';
+  const part = time.includes(' ') ? time.split(' ')[1] : time;
+  const parts = part.split(':');
+  if (parts.length >= 2) {
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+  }
+  return part;
+};
+
 const diffMinutes = (a: string, b: string): number =>
   Math.abs(toMinutes(a) - toMinutes(b));
 
@@ -342,26 +476,30 @@ const diffMinutes = (a: string, b: string): number =>
 interface DateVerificationModalProps {
   isOpen: boolean;
   onClose: () => void;
-  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  anchorRef: HTMLElement | null;
   appEntry: string;   // from checkinFecha
   appExit: string;    // from checkoutFecha
   userEntry: string;  // horaEntrada
   userExit: string;   // horaSalida
+  onVerify?: () => void;
+  isVerified?: boolean;
 }
 
 const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
-  isOpen, onClose, anchorRef, appEntry, appExit, userEntry, userExit,
+  isOpen, onClose, anchorRef, appEntry, appExit, userEntry, userExit, onVerify, isVerified
 }) => {
-  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  useEffect(() => {
-    if (isOpen && anchorRef.current) {
-      const rect = anchorRef.current.getBoundingClientRect();
+  useLayoutEffect(() => {
+    if (isOpen && anchorRef) {
+      const rect = anchorRef.getBoundingClientRect();
       const popupW = 240;
       const left = Math.min(rect.left, window.innerWidth - popupW - 8);
       setPos({ top: rect.bottom + 6, left });
+    } else {
+      setPos(null);
     }
-  }, [isOpen]);
+  }, [isOpen, anchorRef]);
 
   const entryDiff = diffMinutes(appEntry, userEntry);
   const exitDiff = diffMinutes(appExit, userExit);
@@ -378,7 +516,7 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
           {/* App value */}
           <div className="flex-1 bg-slate-50 dark:bg-stone-800 rounded-lg px-2.5 py-1.5">
             <p className="text-[9px] text-slate-400 dark:text-stone-500 mb-0.5">App</p>
-            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{appTime}</p>
+            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{formatTime(appTime)}</p>
           </div>
           {/* Diff badge */}
           <div className={`flex flex-col items-center px-1.5 py-1 rounded-lg text-[9px] font-bold tabular-nums ${ok ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400'}`}>
@@ -388,7 +526,7 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
           {/* User value */}
           <div className="flex-1 bg-slate-50 dark:bg-stone-800 rounded-lg px-2.5 py-1.5">
             <p className="text-[9px] text-slate-400 dark:text-stone-500 mb-0.5">Usuario</p>
-            <p className={`text-xs font-semibold tabular-nums ${ok ? 'text-slate-700 dark:text-stone-200' : 'text-red-500 dark:text-red-400'}`}>{user}</p>
+            <p className={`text-xs font-semibold tabular-nums ${ok ? 'text-slate-700 dark:text-stone-200' : 'text-red-500 dark:text-red-400'}`}>{formatTime(user)}</p>
           </div>
         </div>
       </div>
@@ -402,8 +540,8 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
         onClick={onClose}
       />
       <div
-        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-        style={{ top: pos.top, left: pos.left, width: 240 }}
+        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl ${isOpen && pos ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        style={{ top: pos?.top ?? 0, left: pos?.left ?? 0, width: 240 }}
       >
         {/* Header */}
         <div className={`px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 ${allOk ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
@@ -417,6 +555,17 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
           <Row label="Entrada" app={appEntry} user={userEntry} ok={entryOk} diff={entryDiff} />
           <Row label="Salida" app={appExit} user={userExit} ok={exitOk} diff={exitDiff} />
         </div>
+        {/* Actions */}
+        {!isVerified && onVerify && (
+          <div className="px-3 pb-3">
+            <button
+              onClick={(e) => { e.stopPropagation(); onVerify(); }}
+              className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-xl transition-colors shadow-lg shadow-orange-500/20"
+            >
+              Confirmar Verificación
+            </button>
+          </div>
+        )}
       </div>
     </>,
     document.body
@@ -488,12 +637,19 @@ const ObservationButton: React.FC<{ text?: string }> = ({ text }) => {
 };
 
 // Sub-components: Tables
-// Sub-components: Tables
-const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
-  const [locationModalOpen, setLocationModalOpen] = useState(false);
-  const locationBtnRef = useRef<HTMLButtonElement>(null);
-  const [dateModal, setDateModal] = useState<{ open: boolean; record: NormalCleanRecord | null }>({ open: false, record: null });
-  const dateBtnRef = useRef<HTMLButtonElement>(null);
+const TableNormalCleans: React.FC<{ 
+  data: NormalCleanRecord[]; 
+  photoMap: Record<string, string>; 
+  geoData: Record<string, { lat: number, lng: number }>;
+  onUpdate: (id: string, checked: boolean) => void 
+}> = ({ data, geoData, onUpdate }) => {
+  const [locationModal, setLocationModal] = useState<{ 
+    open: boolean; 
+    anchor: HTMLElement | null;
+    targetCoords?: [number, number];
+    userCoords?: [number, number][];
+  }>({ open: false, anchor: null });
+  const [dateModal, setDateModal] = useState<{ open: boolean; record: NormalCleanRecord | null; anchor: HTMLElement | null }>({ open: false, record: null, anchor: null });
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const toggleRow = (id: string) => {
@@ -502,12 +658,12 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
 
   return (
     <>
-      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+      <table className="min-w-[800px] w-full text-left border-collapse text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Verificar Hora</th>
-            <th className={thClass}>Verificar Ubicación</th>
+            <th className={thClass}>Hora</th>
+            <th className={thClass}>Ubicación</th>
             <th className={thClass}>Apartamento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
@@ -516,25 +672,55 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
           {data.map((r) => (
             <React.Fragment key={r.id}>
-              <tr 
+              <tr
                 onClick={() => toggleRow(r.id)}
                 className={`group cursor-pointer transition-colors duration-200 ${
-                  expandedId === r.id 
-                    ? 'bg-orange-50/30 dark:bg-orange-900/10' 
+                  expandedId === r.id
+                    ? 'bg-orange-50/30 dark:bg-orange-900/10'
                     : 'hover:bg-stone-100/50 dark:hover:bg-stone-700/30'
                 }`}
               >
                 <td className={tdClass}>
                   <div className="flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${expandedId === r.id ? 'bg-orange-500 scale-125' : 'bg-transparent'}`} />
-                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="flex flex-col">
+                      <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                      <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
+                    </div>
+                    <div className="flex items-center gap-1 ml-1">
+                      {r.recogeLlaves && (
+                        <KeyRound size={12} className="text-orange-400 dark:text-orange-300" />
+                      )}
+                      {!r.sigueHuesped && (
+                        <Check size={12} className="text-emerald-500 dark:text-emerald-400" />
+                      )}
+                    </div>
                   </div>
                 </td>
                 <td className={tdClass} onClick={(e) => e.stopPropagation()}>
-                  <VerificationCell verified={r.checked} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
+                  <VerificationCell verified={r.checked} onClick={(ev) => setDateModal({ open: true, record: r, anchor: ev.currentTarget })} />
                 </td>
                 <td className={tdClass} onClick={(e) => e.stopPropagation()}>
-                  <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
+                  {(() => {
+                    const target = findAccommodationCoords(r.apartamento, geoData);
+                    const checkin = parseCoords(r.checkinUbicacion);
+                    const checkout = parseCoords(r.checkoutUbicacion);
+                    const isVerified = target && checkin && checkout &&
+                      getDistanceMeters(checkin[0], checkin[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS &&
+                      getDistanceMeters(checkout[0], checkout[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS;
+
+                    return (
+                      <VerificationCell
+                        verified={!!isVerified}
+                        onClick={(ev) => setLocationModal({
+                          open: true,
+                          anchor: ev.currentTarget,
+                          targetCoords: target ? [target.lat, target.lng] : undefined,
+                          userCoords: [checkin, checkout].filter(c => c !== null) as [number, number][]
+                        })}
+                      />
+                    );
+                  })()}
                 </td>
                 <td className={tdClass}>
                   <span className="inline-block bg-white dark:bg-stone-800 text-black dark:text-stone-100 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
@@ -543,14 +729,14 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
                 </td>
                 <td className={`${tdClass}`}>
                   <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
-                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaEntrada} - {r.horaSalida}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaEntrada)} - {formatTime(r.horaSalida)}</div>
                 </td>
                 <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
               </tr>
               {expandedId === r.id && (
                 <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
                   <td colSpan={6} className="px-8 py-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       {/* Observaciones */}
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
@@ -562,6 +748,14 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
                             {r.observaciones || 'Sin observaciones adicionales.'}
                           </p>
                         </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <CheckCircle2 size={12} className="text-orange-500" />
+                          <span>Estado Verificado (Checked)</span>
+                        </div>
+                        <VerificationCell verified={r.checked} onClick={() => onUpdate(r.id, !r.checked)} />
                       </div>
 
                       {/* Llaves */}
@@ -611,36 +805,59 @@ const TableNormalCleans: React.FC<{ data: NormalCleanRecord[]; photoMap: Record<
           ))}
         </tbody>
       </table>
-      <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} anchorRef={locationBtnRef} />
+      <LocationVerificationModal 
+        isOpen={locationModal.open} 
+        onClose={() => setLocationModal({ open: false, anchor: null })} 
+        anchorRef={locationModal.anchor}
+        {...(locationModal as any)}
+      />
       {dateModal.record && (
         <DateVerificationModal
           isOpen={dateModal.open}
-          onClose={() => setDateModal({ open: false, record: null })}
-          anchorRef={dateBtnRef}
+          onClose={() => setDateModal({ open: false, record: null, anchor: null })}
+          anchorRef={dateModal.anchor}
           appEntry={dateModal.record.checkinFecha}
           appExit={dateModal.record.checkoutFecha}
           userEntry={dateModal.record.horaEntrada}
           userExit={dateModal.record.horaSalida}
+          isVerified={dateModal.record.checked}
+          onVerify={() => {
+            onUpdate(dateModal.record!.id, true);
+            setDateModal(prev => ({ ...prev, open: false }));
+          }}
         />
       )}
     </>
   );
 };
 
-const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
-  const [locationModalOpen, setLocationModalOpen] = useState(false);
-  const locationBtnRef = useRef<HTMLButtonElement>(null);
-  const [dateModal, setDateModal] = useState<{ open: boolean; record: InitialCleanRecord | null }>({ open: false, record: null });
-  const dateBtnRef = useRef<HTMLButtonElement>(null);
+const TableInitialCleans: React.FC<{ 
+  data: InitialCleanRecord[]; 
+  photoMap: Record<string, string>; 
+  geoData: Record<string, { lat: number, lng: number }>;
+  onUpdate: (id: string, checked: boolean) => void 
+}> = ({ data, geoData, onUpdate }) => {
+  const [locationModal, setLocationModal] = useState<{ 
+    open: boolean; 
+    anchor: HTMLElement | null;
+    targetCoords?: [number, number];
+    userCoords?: [number, number][];
+  }>({ open: false, anchor: null });
+  const [dateModal, setDateModal] = useState<{ open: boolean; record: InitialCleanRecord | null; anchor: HTMLElement | null }>({ open: false, record: null, anchor: null });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggleRow = (id: string) => {
+    setExpandedId(prev => prev === id ? null : id);
+  };
 
   return (
     <>
-      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+      <table className="min-w-[800px] w-full text-left border-collapse text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Verificar Hora</th>
-            <th className={thClass}>Verificar Ubicación</th>
+            <th className={thClass}>Hora</th>
+            <th className={thClass}>Ubicación</th>
             <th className={thClass}>Apartamento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
@@ -649,63 +866,144 @@ const TableInitialCleans: React.FC<{ data: InitialCleanRecord[]; photoMap: Recor
         </thead>
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
           {data.map((r) => (
-            <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
-              <td className={tdClass}>
-                <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
-              </td>
-              <td className={tdClass}>
-                <VerificationCell verified={r.checked} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
-              </td>
-              <td className={tdClass}>
-                <VerificationCell verified={r.checked} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
-              </td>
-              <td className={tdClass}>
-                <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-                  {r.apartamento}
-                </span>
-              </td>
-              <td className={`${tdClass}`}>
-                <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
-                <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaEntrada} - {r.horaSalida}</div>
-              </td>
-              <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
-              <td className={`${tdClass} text-center`}>
-                <ObservationButton text={r.observaciones} />
-              </td>
-            </tr>
+            <React.Fragment key={r.id}>
+              <tr
+                onClick={() => toggleRow(r.id)}
+                className={`group cursor-pointer transition-colors duration-200 ${
+                  expandedId === r.id
+                    ? 'bg-orange-50/30 dark:bg-orange-900/10'
+                    : 'hover:bg-stone-100/50 dark:hover:bg-stone-700/30'
+                }`}
+              >
+                <td className={tdClass}>
+                  <div className="flex flex-col">
+                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
+                  </div>
+                </td>
+                <td className={tdClass} onClick={(e) => e.stopPropagation()}>
+                  <VerificationCell verified={r.checked} onClick={(ev) => setDateModal({ open: true, record: r, anchor: ev.currentTarget })} />
+                </td>
+                <td className={tdClass} onClick={(e) => e.stopPropagation()}>
+                  {(() => {
+                    const target = findAccommodationCoords(r.apartamento, geoData);
+                    const checkin = parseCoords(r.checkinUbicacion);
+                    const checkout = parseCoords(r.checkoutUbicacion);
+                    const isVerified = target && checkin && checkout &&
+                      getDistanceMeters(checkin[0], checkin[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS &&
+                      getDistanceMeters(checkout[0], checkout[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS;
+
+                    return (
+                      <VerificationCell
+                        verified={!!isVerified}
+                        onClick={(ev) => setLocationModal({
+                          open: true,
+                          anchor: ev.currentTarget,
+                          targetCoords: target ? [target.lat, target.lng] : undefined,
+                          userCoords: [checkin, checkout].filter(c => c !== null) as [number, number][]
+                        })}
+                      />
+                    );
+                  })()}
+                </td>
+                <td className={tdClass}>
+                  <span className="inline-block bg-white dark:bg-stone-800 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal text-slate-500 dark:text-stone-400">
+                    {r.apartamento}
+                  </span>
+                </td>
+                <td className={`${tdClass}`}>
+                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaEntrada)} - {formatTime(r.horaSalida)}</div>
+                </td>
+                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
+                <td className={`${tdClass} text-center`}>
+                  <ObservationButton text={r.observaciones} />
+                </td>
+              </tr>
+              {expandedId === r.id && (
+                <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <td colSpan={7} className="px-8 py-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <MessageSquare size={12} className="text-orange-500" />
+                          <span>Observaciones</span>
+                        </div>
+                        <div className="bg-white/50 dark:bg-stone-800/50 rounded-xl p-3 border border-stone-100 dark:border-stone-700/50 min-h-[60px]">
+                          <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed italic">
+                            {r.observaciones || 'Sin observaciones adicionales.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <CheckCircle2 size={12} className="text-orange-500" />
+                          <span>Estado Verificado (Checked)</span>
+                        </div>
+                        <VerificationCell verified={r.checked} onClick={() => onUpdate(r.id, !r.checked)} />
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
           ))}
         </tbody>
       </table>
-      <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} anchorRef={locationBtnRef} />
+      <LocationVerificationModal 
+        isOpen={locationModal.open} 
+        onClose={() => setLocationModal({ open: false, anchor: null })} 
+        anchorRef={locationModal.anchor}
+        {...(locationModal as any)}
+      />
       {dateModal.record && (
         <DateVerificationModal
           isOpen={dateModal.open}
-          onClose={() => setDateModal({ open: false, record: null })}
-          anchorRef={dateBtnRef}
+          onClose={() => setDateModal({ open: false, record: null, anchor: null })}
+          anchorRef={dateModal.anchor}
           appEntry={dateModal.record.checkinFecha}
           appExit={dateModal.record.checkoutFecha}
           userEntry={dateModal.record.horaEntrada}
           userExit={dateModal.record.horaSalida}
+          isVerified={dateModal.record.checked}
+          onVerify={() => {
+            onUpdate(dateModal.record!.id, true);
+            setDateModal(prev => ({ ...prev, open: false }));
+          }}
         />
       )}
     </>
   );
 };
 
-const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string, string> }> = ({ data }) => {
-  const [locationModalOpen, setLocationModalOpen] = useState(false);
-  const locationBtnRef = useRef<HTMLButtonElement>(null);
-  const [dateModal, setDateModal] = useState<{ open: boolean; record: HandymanRecord | null }>({ open: false, record: null });
-  const dateBtnRef = useRef<HTMLButtonElement>(null);
+const TableHandyman: React.FC<{ 
+  data: HandymanRecord[]; 
+  photoMap: Record<string, string>; 
+  geoData: Record<string, { lat: number, lng: number }>;
+  onUpdate: (id: string, checked: boolean) => void 
+}> = ({ data, geoData, onUpdate }) => {
+  const [locationModal, setLocationModal] = useState<{ 
+    open: boolean; 
+    anchor: HTMLElement | null;
+    targetCoords?: [number, number];
+    userCoords?: [number, number][];
+  }>({ open: false, anchor: null });
+  const [dateModal, setDateModal] = useState<{ open: boolean; record: HandymanRecord | null; anchor: HTMLElement | null }>({ open: false, record: null, anchor: null });
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const toggleRow = (id: string) => {
+    setExpandedId(prev => prev === id ? null : id);
+  };
 
   return (
     <>
-      <table className="w-full text-left border-collapse text-xs sm:text-sm">
+      <table className="min-w-[800px] w-full text-left border-collapse text-xs sm:text-sm">
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Verificar Hora</th>
-            <th className={thClass}>Verificar Ubicación</th>
+            <th className={thClass}>Hora</th>
+            <th className={thClass}>Ubicación</th>
             <th className={thClass}>Alojamiento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
@@ -714,43 +1012,114 @@ const TableHandyman: React.FC<{ data: HandymanRecord[]; photoMap: Record<string,
         </thead>
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
           {data.map((r) => (
-            <tr key={r.id} className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors duration-200">
-              <td className={tdClass}>
-                <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
-              </td>
-              <td className={tdClass}>
-                <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => setDateModal({ open: true, record: r })} ref={dateBtnRef} />
-              </td>
-              <td className={tdClass}>
-                <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => setLocationModalOpen(true)} ref={locationBtnRef} />
-              </td>
-              <td className={tdClass}>
-                <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-                  {r.alojamiento}
-                </span>
-              </td>
-              <td className={`${tdClass}`}>
-                <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.fechaLlegada.split(' ')[0]}</div>
-                <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{r.horaInicioTarea} - {r.horaFinTarea}</div>
-              </td>
-              <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} km</td>
-              <td className={`${tdClass} text-center`}>
-                <ObservationButton text={r.observacionesTarea} />
-              </td>
-            </tr>
+            <React.Fragment key={r.id}>
+              <tr
+                onClick={() => toggleRow(r.id)}
+                className={`group cursor-pointer transition-colors duration-200 ${
+                  expandedId === r.id
+                    ? 'bg-orange-50/30 dark:bg-orange-900/10'
+                    : 'hover:bg-stone-100/50 dark:hover:bg-stone-700/30'
+                }`}
+              >
+                <td className={tdClass}>
+                  <div className="flex flex-col">
+                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
+                  </div>
+                </td>
+                <td className={tdClass} onClick={(e) => e.stopPropagation()}>
+                  <VerificationCell
+                    verified={r.estadoCompletado === 'Completado'}
+                    onClick={(ev) => setDateModal({ open: true, record: r, anchor: ev.currentTarget })}
+                  />
+                </td>
+                <td className={tdClass} onClick={(e) => e.stopPropagation()}>
+                  {(() => {
+                    const target = findAccommodationCoords(r.alojamiento, geoData);
+                    const checkin = parseCoords(r.ubicacionInicio);
+                    const checkout = parseCoords(r.ubicacionFin);
+                    const isVerified = target && checkin && checkout &&
+                      getDistanceMeters(checkin[0], checkin[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS &&
+                      getDistanceMeters(checkout[0], checkout[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS;
+
+                    return (
+                      <VerificationCell
+                        verified={!!isVerified}
+                        onClick={(ev) => setLocationModal({
+                          open: true,
+                          anchor: ev.currentTarget,
+                          targetCoords: target ? [target.lat, target.lng] : undefined,
+                          userCoords: [checkin, checkout].filter(c => c !== null) as [number, number][]
+                        })}
+                      />
+                    );
+                  })()}
+                </td>
+                <td className={tdClass}>
+                  <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
+                    {r.alojamiento}
+                  </span>
+                </td>
+                <td className={`${tdClass}`}>
+                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.fechaLlegada.split(' ')[0]}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaInicioTarea)} - {formatTime(r.horaFinTarea)}</div>
+                </td>
+                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} min</td>
+                <td className={`${tdClass} text-center`}>
+                  <ObservationButton text={r.observacionesTarea} />
+                </td>
+              </tr>
+              {expandedId === r.id && (
+                <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <td colSpan={7} className="px-8 py-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <MessageSquare size={12} className="text-orange-500" />
+                          <span>Observaciones del Trabajo</span>
+                        </div>
+                        <div className="bg-white/50 dark:bg-stone-800/50 rounded-xl p-3 border border-stone-100 dark:border-stone-700/50 min-h-[60px]">
+                          <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed italic">
+                            {r.observacionesTarea || 'Sin detalles adicionales.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <CheckCircle2 size={12} className="text-orange-500" />
+                          <span>Estado Verificado (Checked)</span>
+                        </div>
+                        <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => onUpdate(r.id, r.estadoCompletado !== 'Completado')} />
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
           ))}
         </tbody>
       </table>
-      <LocationVerificationModal isOpen={locationModalOpen} onClose={() => setLocationModalOpen(false)} anchorRef={locationBtnRef} />
+      <LocationVerificationModal 
+        isOpen={locationModal.open} 
+        onClose={() => setLocationModal({ open: false, anchor: null })} 
+        anchorRef={locationModal.anchor}
+        {...(locationModal as any)}
+      />
       {dateModal.record && (
         <DateVerificationModal
           isOpen={dateModal.open}
-          onClose={() => setDateModal({ open: false, record: null })}
-          anchorRef={dateBtnRef}
+          onClose={() => setDateModal({ open: false, record: null, anchor: null })}
+          anchorRef={dateModal.anchor}
           appEntry={dateModal.record.fechaLlegada}
           appExit={dateModal.record.fechaFin}
           userEntry={dateModal.record.horaInicioTarea}
           userExit={dateModal.record.horaFinTarea}
+          isVerified={dateModal.record.estadoCompletado === 'Completado'}
+          onVerify={() => {
+            onUpdate(dateModal.record!.id, true);
+            setDateModal(prev => ({ ...prev, open: false }));
+          }}
         />
       )}
     </>
