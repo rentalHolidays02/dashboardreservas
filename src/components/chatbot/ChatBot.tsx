@@ -12,13 +12,14 @@
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import {
-  MessageCircle, X, Send, Sparkles, Loader2, Check, Pencil,
+  MessageCircle, X, Send, Loader2, Check, Pencil,
   FileText, UserCog, AlertTriangle, CreditCard, User, ChevronRight, Mic,
 } from 'lucide-react';
 import { Worker, Accommodation, Incidencia, PagoRecord } from '../../services/mockData';
 import { appsScriptApi } from '../../services/api';
 import { generatePDF } from '../../services/pdfExport';
 import logoSrc from '../../assets/logo/LogoEstandar.png';
+import chatbotAvatar from '../../assets/chatbot-avatar.jpeg';
 
 // Tipos auxiliares para el estado de datos externos del bot
 
@@ -97,7 +98,7 @@ type ChatMessage = TextMessage | EditWorkerMessage | WizardMessage;
 // así la IA siempre trabaja con los datos más recientes aunque se hayan editado.
 
 const buildSystemPrompt = (workers: Worker[], accommodations: Accommodation[], incidencias: Incidencia[]) => `
-Eres Cristóbal, el asistente de un sistema de gestión de RH y Pagos para una empresa de limpieza de alojamientos turísticos. Eres amable, conciso y profesional. Responde siempre en español.
+Eres Cristóbal, el asistente de un sistema de gestión de Rental Holidays y Pagos para una empresa de limpieza de alojamientos turísticos. Eres amable, conciso y profesional. Responde siempre en español.
 
 TRABAJADORES (${workers.length}):
 ${workers.map(w => `- [id:${w.id}] ${w.fullName}: ${w.cleansCountMonth} limpiezas, ${w.kmsMonth} km, ${w.netMoneyMonth}€ neto, pago por ${w.tipoPago ?? 'sin definir'}`).join('\n')}
@@ -1125,8 +1126,8 @@ const ChatBot = () => {
         {/* Cabecera del popup */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100 dark:border-stone-800/50">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30 flex items-center justify-center">
-              <Sparkles size={13} className="text-orange-500" />
+            <div className="w-7 h-7 rounded-xl overflow-hidden border border-orange-100 dark:border-orange-800/30">
+              <img src={chatbotAvatar} alt="Cristóbal" className="w-full h-full object-cover" />
             </div>
             <div>
               <p className="text-[13px] font-normal text-slate-800 dark:text-stone-200 font-display leading-none">Cristóbal</p>
@@ -1160,11 +1161,11 @@ const ChatBot = () => {
               </div>
             );
 
-            // Mensaje del asistente (texto o widget IA) — con icono Sparkles a la izquierda
+            // Mensaje del asistente (texto o widget IA) — con avatar a la izquierda
             return (
               <div key={msg.id} className="flex items-start gap-2.5">
-                <div className="w-6 h-6 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30 flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles size={10} className="text-orange-500" />
+                <div className="w-6 h-6 rounded-lg overflow-hidden shrink-0 mt-0.5">
+                  <img src={chatbotAvatar} alt="Cristóbal" className="w-full h-full object-cover" />
                 </div>
                 {msg.kind === 'text' ? (
                   // Burbuja de texto normal
@@ -1182,8 +1183,8 @@ const ChatBot = () => {
           {/* Indicador de carga (spinner) — solo visible mientras la IA procesa */}
           {isLoading && (
             <div className="flex items-start gap-2.5">
-              <div className="w-6 h-6 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30 flex items-center justify-center shrink-0 mt-0.5">
-                <Sparkles size={10} className="text-orange-500" />
+              <div className="w-6 h-6 rounded-lg overflow-hidden shrink-0 mt-0.5">
+                <img src={chatbotAvatar} alt="Cristóbal" className="w-full h-full object-cover" />
               </div>
               <div className="bg-stone-50/80 dark:bg-stone-800/40 border border-stone-100/80 dark:border-stone-700/30 rounded-xl rounded-tl-sm px-3.5 py-2.5">
                 <Loader2 size={13} className="text-orange-400 animate-spin" />
