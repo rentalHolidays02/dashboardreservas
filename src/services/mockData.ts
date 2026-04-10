@@ -88,6 +88,29 @@ export interface Incidencia {
   checked?: boolean;
 }
 
+export interface EntregaLlaves {
+  id: string;
+  telefono: string;
+  nombre: string;
+  apellidos: string;
+  fechaUbicacionEntrega: string; // Columna D
+  apartamento: string;
+  nombreCliente: string;
+  fechaEntradaReserva: string;
+  fechaSalidaReserva: string;
+  entregaLlaves: boolean;
+  sabanasToallas: string; // "Sí", "No", "Sí, entregadas"
+  km: number;
+  observaciones: string;
+  fianzaMonto: string;
+  bizumMonto: string;
+  cantidadPagadaMonto: string;
+  fianzaGarantia: string;
+  bizumGarantia: string;
+  cantidadPagadaGarantia: string;
+  checked: boolean;
+}
+
 export const MOCK_INCIDENCIAS: Incidencia[] = [
   { id: 'i1', userName: 'María García',    description: 'persiana rota en habitación principal', timestamp: '2026-03-30T08:47:00', accommodationId: 'a1', accommodationName: 'Apt. Ramblas 12',   coste: 45.00, pagadoPor: 'empresa'   },
   { id: 'i2', userName: 'Juan Pérez',      description: 'mancha en el sofá difícil de limpiar',  timestamp: '2026-03-30T09:55:00', accommodationId: 'a2', accommodationName: 'Casa Marina 3B',   coste: 12.50, pagadoPor: 'limpiador' },
