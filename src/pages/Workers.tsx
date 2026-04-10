@@ -7,8 +7,10 @@ import WorkerFilterModal, { WorkerFilters } from '../components/workers/WorkerFi
 import { appsScriptApi } from '../services/api';
 import { Worker } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { useUndoToast } from '../context/UndoToastContext';
 
 const Workers: React.FC = () => {
+  const { showUndoToast } = useUndoToast();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [accommodations, setAccommodations] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,20 +107,30 @@ const Workers: React.FC = () => {
   };
 
   const handleDeleteWorker = async (id: string) => {
+    const workerToDelete = workers.find(w => w.id === id);
+    if (!workerToDelete) return;
+
     // Actualización optimista: lo quitamos de la vista ya mismo
     setWorkers(prev => prev.filter(w => w.id !== id));
-    
+    if (profileWorker && profileWorker.id === id) {
+      setProfileWorker(null);
+    }
+
     try {
       await appsScriptApi.deleteWorker(id);
-      if (profileWorker && profileWorker.id === id) {
-        setProfileWorker(null);
-      }
     } catch (error) {
       console.error('Error deleting worker:', error);
-      // Si falla, recargamos para restaurar al trabajador
       await fetchWorkers();
       throw error;
     }
+
+    showUndoToast(
+      `Trabajador "${workerToDelete.fullName}" eliminado`,
+      async () => {
+        await appsScriptApi.restoreWorker(workerToDelete);
+        setWorkers(prev => [workerToDelete, ...prev.filter(w => w.id !== workerToDelete.id)]);
+      }
+    );
   };
 
   const activeFiltersCount = React.useMemo(() => {
