@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Search,
@@ -10,142 +10,62 @@ import {
   KeyRound,
   BedDouble,
   ChevronDown,
+  Navigation,
+  MapPin,
+  Loader2,
 } from 'lucide-react';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface EntregaLlaves {
-  id: string;
-  // Contacto
-  telefono: string;
-  nombre: string;
-  apellidos: string;
-  // Reserva
-  apartamento: string;
-  nombreCliente: string;
-  fechaEntradaReserva: string;
-  fechaSalidaReserva: string;
-  // Entrega
-  fechaEntregaLlaves: string;
-  ubicacionLlaves: string;
-  entregaLlaves: boolean;
-  sabanasToallas: boolean;
-  km: string;
-  observaciones: string;
-  // Fianza monto
-  fianzaMonto: string;
-  bizumMonto: string;
-  cantidadPagadaMonto: string;
-  // Fianza garantía
-  fianzaGarantia: string;
-  bizumGarantia: string;
-  cantidadPagadaGarantia: string;
-  // Estado
-  checked: boolean;
-}
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_ENTREGAS: EntregaLlaves[] = [
-  {
-    id: '1',
-    telefono: '612 345 678',
-    nombre: 'Carlos',
-    apellidos: 'Martínez López',
-    apartamento: 'Apt. Retiro 4B',
-    nombreCliente: 'Carlos Martínez',
-    fechaEntradaReserva: '2026-04-10',
-    fechaSalidaReserva: '2026-04-15',
-    fechaEntregaLlaves: '2026-04-10',
-    ubicacionLlaves: 'Conserjería Edificio',
-    entregaLlaves: true,
-    sabanasToallas: true,
-    km: '12',
-    observaciones: 'Llegar antes de las 15:00',
-    fianzaMonto: '200',
-    bizumMonto: '654321987',
-    cantidadPagadaMonto: '200',
-    fianzaGarantia: '300',
-    bizumGarantia: '654321987',
-    cantidadPagadaGarantia: '300',
-    checked: true,
-  },
-  {
-    id: '2',
-    telefono: '698 765 432',
-    nombre: 'Laura',
-    apellidos: 'Sánchez Ruiz',
-    apartamento: 'Apt. Sol 2A',
-    nombreCliente: 'Laura Sánchez',
-    fechaEntradaReserva: '2026-04-12',
-    fechaSalidaReserva: '2026-04-18',
-    fechaEntregaLlaves: '2026-04-12',
-    ubicacionLlaves: 'Propietario en persona',
-    entregaLlaves: false,
-    sabanasToallas: false,
-    km: '5',
-    observaciones: '',
-    fianzaMonto: '150',
-    bizumMonto: '612987654',
-    cantidadPagadaMonto: '0',
-    fianzaGarantia: '250',
-    bizumGarantia: '612987654',
-    cantidadPagadaGarantia: '0',
-    checked: false,
-  },
-  {
-    id: '3',
-    telefono: '677 111 222',
-    nombre: 'Pedro',
-    apellidos: 'Gómez Vidal',
-    apartamento: 'Apt. Malasaña 1C',
-    nombreCliente: 'Pedro Gómez',
-    fechaEntradaReserva: '2026-04-20',
-    fechaSalidaReserva: '2026-04-25',
-    fechaEntregaLlaves: '2026-04-20',
-    ubicacionLlaves: 'Caja fuerte portal',
-    entregaLlaves: false,
-    sabanasToallas: true,
-    km: '8',
-    observaciones: 'Código caja: 1234',
-    fianzaMonto: '180',
-    bizumMonto: '677111222',
-    cantidadPagadaMonto: '180',
-    fianzaGarantia: '200',
-    bizumGarantia: '677111222',
-    cantidadPagadaGarantia: '0',
-    checked: false,
-  },
-];
+import { appsScriptApi } from '../services/api';
+import { EntregaLlaves, Accommodation } from '../services/mockData';
+import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmtDate = (s: string) => {
   if (!s) return '—';
+  
+  // Si viene en formato datetime-local: YYYY-MM-DDThh:mm
+  if (s.includes('T')) {
+    const [datePart, timePart] = s.split('T');
+    const [y, m, d] = datePart.split('-');
+    return `${d}/${m}/${y}, ${timePart}`;
+  }
+
+  // Soporta formato YYYY-MM-DD o DD/MM/YYYY con hora separado por coma
+  if (s.includes('/')) return s.split(',')[0]; 
   const [y, m, d] = s.split('-');
   return `${d}/${m}/${y}`;
+};
+
+const fmtPhone = (t: string) => {
+  if (!t) return '';
+  const digits = t.replace(/\D/g, '');
+  let res = '';
+  if (digits.length > 0) res += digits.slice(0, 3);
+  if (digits.length > 3) res += ' ' + digits.slice(3, 5);
+  if (digits.length > 5) res += ' ' + digits.slice(5, 7);
+  if (digits.length > 7) res += ' ' + digits.slice(7, 9);
+  return res;
 };
 
 const emptyEntrega = (): Omit<EntregaLlaves, 'id'> => ({
   telefono: '',
   nombre: '',
   apellidos: '',
+  fechaUbicacionEntrega: '',
   apartamento: '',
   nombreCliente: '',
   fechaEntradaReserva: '',
   fechaSalidaReserva: '',
-  fechaEntregaLlaves: '',
-  ubicacionLlaves: '',
   entregaLlaves: false,
-  sabanasToallas: false,
-  km: '',
+  sabanasToallas: 'No',
+  km: 0,
   observaciones: '',
-  fianzaMonto: '',
+  fianzaMonto: 'Efectivo',
   bizumMonto: '',
-  cantidadPagadaMonto: '',
-  fianzaGarantia: '',
+  cantidadPagadaMonto: '0',
+  fianzaGarantia: 'Efectivo',
   bizumGarantia: '',
-  cantidadPagadaGarantia: '',
+  cantidadPagadaGarantia: '0',
   checked: false,
 });
 
@@ -166,43 +86,82 @@ const BoolBadge: React.FC<{ value: boolean }> = ({ value }) =>
 
 interface ModalProps {
   initial: Partial<EntregaLlaves> | null;
-  onSave: (data: Omit<EntregaLlaves, 'id'>) => void;
+  onSave: (data: Omit<EntregaLlaves, 'id'>) => Promise<void>;
   onClose: () => void;
   onDelete?: () => void;
+  accommodations: Accommodation[];
 }
 
-const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete }) => {
+const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete, accommodations }) => {
   const isEdit = !!initial?.id;
-  const [form, setForm] = useState<Omit<EntregaLlaves, 'id'>>({ ...emptyEntrega(), ...initial });
+  const [form, setForm] = useState<Omit<EntregaLlaves, 'id'>>(() => {
+    const base = { ...emptyEntrega(), ...initial };
+    if (initial?.apartamento) {
+      // Buscamos coincidencia exacta ignorando mayúsculas y espacios
+      const match = accommodations.find(
+        a => a.name.toLowerCase().trim() === initial.apartamento!.toLowerCase().trim()
+      );
+      if (match) base.apartamento = match.name;
+    }
+    return base;
+  });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
-  const set = (field: keyof Omit<EntregaLlaves, 'id'>, value: string | boolean) =>
+  const set = (field: keyof Omit<EntregaLlaves, 'id'>, value: any) =>
     setForm(f => ({ ...f, [field]: value }));
 
   const inputCls = 'w-full rounded-lg border border-white/60 dark:border-stone-700/50 bg-white/80 dark:bg-stone-900 text-slate-700 dark:text-stone-300 px-3 py-1.5 text-xs focus:outline-none focus:border-stone-300 dark:focus:border-stone-600 placeholder:text-slate-300 dark:placeholder:text-stone-600 transition-all';
   const labelCls = 'block text-[11px] text-slate-400 dark:text-stone-500 mb-1';
   const sectionTitleCls = 'text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest mb-2.5';
 
-  const BoolToggle = ({ label, field }: { label: string; field: keyof Omit<EntregaLlaves, 'id'> }) => (
-    <div>
-      <label className={labelCls}>{label}</label>
-      <button
-        type="button"
-        onClick={() => set(field, !(form[field] as boolean))}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-all w-full
-          ${form[field]
-            ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-            : 'border-white/60 dark:border-stone-700/50 bg-white/80 dark:bg-stone-900 text-slate-400 dark:text-stone-500'
-          }`}
-      >
-        <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all
-          ${form[field] ? 'bg-green-500 border-green-500' : 'border-slate-300 dark:border-stone-500'}`}>
-          {form[field] && <Check size={9} className="text-white" strokeWidth={3} />}
-        </span>
-        {form[field] ? 'Sí' : 'No'}
-      </button>
-    </div>
-  );
+  const BoolToggle = ({ label, field, customTrue = 'Sí', customFalse = 'No' }: { label: string; field: keyof Omit<EntregaLlaves, 'id'>, customTrue?: string, customFalse?: string }) => {
+    const isTrue = typeof form[field] === 'string' ? form[field] === customTrue : !!form[field];
+    return (
+      <div>
+        <label className={labelCls}>{label}</label>
+        <button
+          type="button"
+          onClick={() => set(field, typeof form[field] === 'string' ? (isTrue ? customFalse : customTrue) : !isTrue)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-all w-full
+            ${isTrue
+              ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+              : 'border-white/60 dark:border-stone-700/50 bg-white/80 dark:bg-stone-900 text-slate-400 dark:text-stone-500'
+            }`}
+        >
+          <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all
+            ${isTrue ? 'bg-green-500 border-green-500' : 'border-slate-300 dark:border-stone-500'}`}>
+            {isTrue && <Check size={9} className="text-white" strokeWidth={3} />}
+          </span>
+          {isTrue ? customTrue : customFalse}
+        </button>
+      </div>
+    );
+  };
+
+  const handleGetLocation = () => {
+    setGettingLocation(true);
+    if (!navigator.geolocation) {
+      alert('Tu navegador no soporta geolocalización');
+      setGettingLocation(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const dateStr = new Date().toLocaleString();
+        const locStr = `${dateStr} | ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
+        set('fechaUbicacionEntrega', locStr);
+        setGettingLocation(false);
+      },
+      (err) => {
+        console.error(err);
+        alert('No se pudo obtener la ubicación');
+        setGettingLocation(false);
+      }
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -223,7 +182,15 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
           </button>
         </div>
 
-        <form onSubmit={e => { e.preventDefault(); onSave(form); }} className="px-6 py-5 space-y-5">
+        <form onSubmit={async e => { 
+          e.preventDefault(); 
+          setIsSaving(true);
+          try {
+            await onSave(form); 
+          } finally {
+            setIsSaving(false);
+          }
+        }} className="px-6 py-5 space-y-5">
 
           {/* Contacto */}
           <div>
@@ -231,7 +198,22 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
             <div className="grid grid-cols-3 gap-2.5">
               <div>
                 <label className={labelCls}>Teléfono</label>
-                <input type="text" value={form.telefono} onChange={e => set('telefono', e.target.value)} placeholder="6XX XXX XXX" className={inputCls} />
+                <input 
+                  type="text" 
+                  value={fmtPhone(form.telefono)} 
+                  onChange={e => {
+                    // Quitamos todo lo que no sea número y limitamos a 9 caracteres
+                    const digits = e.target.value.replace(/\D/g, '');
+                    if (digits.length <= 9) set('telefono', digits);
+                  }}
+                  placeholder="6XX XX XX XX" 
+                  pattern="^([6789]\d{2})( \d{2}){3}$|^[6789]\d{8}$"
+                  title="Introduce un teléfono español válido (9 dígitos)"
+                  className={`${inputCls} ${form.telefono && !/^[6789]\d{8}$/.test(form.telefono.replace(/\D/g, '')) ? 'border-red-300 dark:border-red-700 bg-red-50/30' : ''}`} 
+                />
+                {form.telefono && !/^[6789]\d{8}$/.test(form.telefono.replace(/\D/g, '')) && (
+                  <p className="text-[10px] text-red-400 mt-0.5">Teléfono no válido (9 dígitos, empieza por 6,7,8,9)</p>
+                )}
               </div>
               <div>
                 <label className={labelCls}>Nombre</label>
@@ -250,7 +232,19 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
             <div className="grid grid-cols-2 gap-2.5">
               <div>
                 <label className={labelCls}>Apartamento</label>
-                <input type="text" value={form.apartamento} onChange={e => set('apartamento', e.target.value)} placeholder="Nombre del apartamento" className={inputCls} />
+                <input 
+                  list="apartamentos-list"
+                  type="text"
+                  value={form.apartamento} 
+                  onChange={e => set('apartamento', e.target.value)} 
+                  placeholder="Escribe o selecciona..."
+                  className={inputCls}
+                />
+                <datalist id="apartamentos-list">
+                  {accommodations.map(acc => (
+                    <option key={acc.id} value={acc.name} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className={labelCls}>Nombre cliente</label>
@@ -258,11 +252,11 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               </div>
               <div>
                 <label className={labelCls}>Fecha entrada reserva</label>
-                <input type="date" value={form.fechaEntradaReserva} onChange={e => set('fechaEntradaReserva', e.target.value)} className={inputCls} />
+                <input type="datetime-local" value={form.fechaEntradaReserva} onChange={e => set('fechaEntradaReserva', e.target.value)} className={inputCls} />
               </div>
               <div>
                 <label className={labelCls}>Fecha salida reserva</label>
-                <input type="date" value={form.fechaSalidaReserva} onChange={e => set('fechaSalidaReserva', e.target.value)} className={inputCls} />
+                <input type="datetime-local" value={form.fechaSalidaReserva} onChange={e => set('fechaSalidaReserva', e.target.value)} className={inputCls} />
               </div>
             </div>
           </div>
@@ -271,16 +265,28 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
           <div>
             <p className={sectionTitleCls}>Entrega de llaves</p>
             <div className="grid grid-cols-2 gap-2.5">
-              <div>
-                <label className={labelCls}>Fecha y ubicación</label>
-                <input type="date" value={form.fechaEntregaLlaves} onChange={e => set('fechaEntregaLlaves', e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Ubicación llaves</label>
-                <input type="text" value={form.ubicacionLlaves} onChange={e => set('ubicacionLlaves', e.target.value)} placeholder="Conserjería, Caja fuerte..." className={inputCls} />
+              <div className="col-span-2">
+                <label className={labelCls}>Fecha y ubicación (GPS)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={form.fechaUbicacionEntrega} 
+                    onChange={e => set('fechaUbicacionEntrega', e.target.value)}
+                    placeholder="Escribe manualmente o usa el botón GPS..." 
+                    className={`${inputCls} flex-1`} 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={handleGetLocation} 
+                    disabled={gettingLocation}
+                    className="px-3 py-1.5 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 hover:bg-orange-200 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {gettingLocation ? <Loader2 className="animate-spin" size={14} /> : <MapPin size={14} />}
+                  </button>
+                </div>
               </div>
               <BoolToggle label="Llaves entregadas" field="entregaLlaves" />
-              <BoolToggle label="Sábanas y Toallas" field="sabanasToallas" />
+              <BoolToggle label="Sábanas y Toallas" field="sabanasToallas" customTrue="Sí, entregadas" customFalse="No" />
               <div>
                 <label className={labelCls}>Km</label>
                 <input type="number" min="0" value={form.km} onChange={e => set('km', e.target.value)} placeholder="0" className={inputCls} />
@@ -298,8 +304,12 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               <p className={sectionTitleCls}>Fianza — Monto</p>
               <div className="space-y-2">
                 <div>
-                  <label className={labelCls}>Fianza (€)</label>
-                  <input type="number" min="0" value={form.fianzaMonto} onChange={e => set('fianzaMonto', e.target.value)} placeholder="0.00" className={inputCls} />
+                  <label className={labelCls}>Medio de Pago</label>
+                  <select value={form.fianzaMonto} onChange={e => set('fianzaMonto', e.target.value)} className={inputCls}>
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Bizum">Bizum</option>
+                    <option value="Tarjeta">Tarjeta</option>
+                  </select>
                 </div>
                 <div>
                   <label className={labelCls}>Número Bizum</label>
@@ -315,8 +325,12 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               <p className={sectionTitleCls}>Fianza — Garantía</p>
               <div className="space-y-2">
                 <div>
-                  <label className={labelCls}>Fianza (€)</label>
-                  <input type="number" min="0" value={form.fianzaGarantia} onChange={e => set('fianzaGarantia', e.target.value)} placeholder="0.00" className={inputCls} />
+                  <label className={labelCls}>Medio de Pago</label>
+                  <select value={form.fianzaGarantia} onChange={e => set('fianzaGarantia', e.target.value)} className={inputCls}>
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Bizum">Bizum</option>
+                    <option value="Tarjeta">Tarjeta</option>
+                  </select>
                 </div>
                 <div>
                   <label className={labelCls}>Número Bizum</label>
@@ -366,6 +380,7 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               <button type="submit"
                 className="px-4 py-1.5 text-xs rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors">
                 {isEdit ? 'Guardar cambios' : 'Crear entrega'}
+                {isSaving && <Loader2 size={12} className="animate-spin ml-1 inline" />}
               </button>
             </div>
           </div>
@@ -390,12 +405,8 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
         <div className="space-y-3">
           <p className={sectionLabel}>Entrega</p>
           <div>
-            <p className={fieldLabel}>Fecha entrega llaves</p>
-            <p className={fieldValue}>{fmtDate(e.fechaEntregaLlaves)}</p>
-          </div>
-          <div>
-            <p className={fieldLabel}>Ubicación llaves</p>
-            <p className={fieldValue}>{e.ubicacionLlaves || '—'}</p>
+            <p className={fieldLabel}>Fecha y Ubicación</p>
+            <p className={fieldValue}>{e.fechaUbicacionEntrega || '—'}</p>
           </div>
           <div>
             <p className={fieldLabel}>Km recorridos</p>
@@ -408,7 +419,7 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
             </div>
             <div>
               <p className={fieldLabel}>Sábanas y Toallas</p>
-              <div className="mt-0.5"><BoolBadge value={e.sabanasToallas} /></div>
+              <p className={fieldValue}>{e.sabanasToallas}</p>
             </div>
           </div>
           {e.observaciones && (
@@ -432,8 +443,8 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
           </div>
           <div>
             <p className={fieldLabel}>Cantidad pagada</p>
-            <p className={`${fieldValue} font-medium ${e.cantidadPagadaMonto && e.fianzaMonto && e.cantidadPagadaMonto === e.fianzaMonto ? 'text-green-600 dark:text-green-400' : ''}`}>
-              {e.cantidadPagadaMonto ? `${e.cantidadPagadaMonto} €` : '—'}
+            <p className={`${fieldValue} font-medium ${e.cantidadPagadaMonto && e.cantidadPagadaMonto !== '0' ? 'text-green-600 dark:text-green-400' : ''}`}>
+              {e.cantidadPagadaMonto ? `${e.cantidadPagadaMonto} € (${e.fianzaMonto})` : '—'}
             </p>
           </div>
         </div>
@@ -451,8 +462,8 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
           </div>
           <div>
             <p className={fieldLabel}>Cantidad pagada</p>
-            <p className={`${fieldValue} font-medium ${e.cantidadPagadaGarantia && e.fianzaGarantia && e.cantidadPagadaGarantia === e.fianzaGarantia ? 'text-green-600 dark:text-green-400' : ''}`}>
-              {e.cantidadPagadaGarantia ? `${e.cantidadPagadaGarantia} €` : '—'}
+            <p className={`${fieldValue} font-medium ${e.cantidadPagadaGarantia && e.cantidadPagadaGarantia !== '0' ? 'text-green-600 dark:text-green-400' : ''}`}>
+              {e.cantidadPagadaGarantia ? `${e.cantidadPagadaGarantia} € (${e.fianzaGarantia})` : '—'}
             </p>
           </div>
         </div>
@@ -469,11 +480,33 @@ const COLS = 'grid-cols-[2fr_1.1fr_1.2fr_0.9fr_0.9fr_100px]';
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const EntregaDeLlaves: React.FC = () => {
-  const [entregas, setEntregas] = useState<EntregaLlaves[]>(MOCK_ENTREGAS);
+  const [entregas, setEntregas] = useState<EntregaLlaves[]>([]);
+  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalData, setModalData] = useState<Partial<EntregaLlaves> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const fetchData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+    try {
+      const [entries, accs] = await Promise.all([
+        appsScriptApi.getEntregaLlaves(),
+        appsScriptApi.getAccommodations()
+      ]);
+      setEntregas(entries);
+      setAccommodations(accs);
+    } catch (error) {
+      console.error('Error fetching delivery data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -496,22 +529,42 @@ const EntregaDeLlaves: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (data: Omit<EntregaLlaves, 'id'>) => {
-    if (modalData?.id) {
-      setEntregas(prev => prev.map(e => e.id === modalData.id ? { ...data, id: modalData.id } : e));
-    } else {
-      setEntregas(prev => [...prev, { ...data, id: Date.now().toString() }]);
+  const handleSave = async (data: Omit<EntregaLlaves, 'id'>) => {
+    try {
+      if (modalData?.id) {
+        // Optimistic update
+        setEntregas(prev => prev.map(e => e.id === modalData.id ? { ...data, id: modalData.id } : e));
+        await appsScriptApi.updateEntregaLlaves({ ...data, id: modalData.id });
+      } else {
+        // En adición no podemos hacer update optimista tan fácil sin ID real
+        await appsScriptApi.addEntregaLlaves(data);
+      }
+      fetchData(false);
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error('Error saving delivery:', error);
+      alert('Error al guardar la entrega');
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (modalData?.id) {
-      setEntregas(prev => prev.filter(e => e.id !== modalData.id));
-      if (selectedId === modalData.id) setSelectedId(null);
-      setIsModalOpen(false);
+      const original = [...entregas];
+      try {
+        setEntregas(prev => prev.filter(e => e.id !== modalData.id));
+        await appsScriptApi.deleteEntregaLlaves(modalData.id);
+        if (selectedId === modalData.id) setSelectedId(null);
+        setIsModalOpen(false);
+      } catch (error) {
+        setEntregas(original);
+        alert('Error al eliminar');
+      }
     }
   };
+
+  if (loading && entregas.length === 0) {
+    return <LoadingSpinner message="Cargando entregas de llaves..." />;
+  }
 
   return (
     <div className="flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-700 space-y-4">
@@ -588,7 +641,7 @@ const EntregaDeLlaves: React.FC = () => {
                         {e.entregaLlaves && (
                           <KeyRound size={12} className="shrink-0 text-orange-400 dark:text-orange-300" />
                         )}
-                        {e.sabanasToallas && (
+                        {e.sabanasToallas === 'Sí, entregadas' && (
                           <BedDouble size={12} className="shrink-0 text-slate-400 dark:text-stone-400" />
                         )}
                       </div>
@@ -597,7 +650,7 @@ const EntregaDeLlaves: React.FC = () => {
                   </div>
 
                   {/* Teléfono */}
-                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{e.telefono || '—'}</p>
+                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{fmtPhone(e.telefono) || '—'}</p>
 
                   {/* Apartamento */}
                   <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2.5 py-1 rounded-md max-w-[140px] truncate soft-shadow">
@@ -645,6 +698,7 @@ const EntregaDeLlaves: React.FC = () => {
           onSave={handleSave}
           onClose={() => setIsModalOpen(false)}
           onDelete={modalData?.id ? handleDelete : undefined}
+          accommodations={accommodations}
         />
       )}
     </div>

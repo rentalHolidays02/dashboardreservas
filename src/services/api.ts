@@ -11,6 +11,7 @@ import {
   Worker,
   CheckInOut,
   Incidencia,
+  EntregaLlaves,
   NormalCleanRecord,
   InitialCleanRecord,
   HandymanRecord,
@@ -31,6 +32,8 @@ const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWgu
 const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
 const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxX8IQ6wsfmnJt77UWCpR3Zt0ND0RDFXafIEgrzZtBC5QzMSeLLYipcYx3l6qRWvPA9LA/exec';
+const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:S";
+const ENTREGA_LLAVES_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbGhmFQLhv7ndi_pdnFLGgUTYKcygm1H3H8R0kpOGX_SyxHI2G3snlaDHkawH1DUneUA/exec';
 
 // Utilidad para limpiar números formateados (ej: "10,00 €" -> 10.0)
 const parseExcelNumber = (val: any): number => {
@@ -443,6 +446,141 @@ export const appsScriptApi = {
       return true;
     } catch (error) {
       console.error('Error deleting incidencia:', error);
+      throw error;
+    }
+  },
+
+  getEntregaLlaves: async (): Promise<EntregaLlaves[]> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${INCIDENCIAS_SPREADSHEET_ID}/values/${encodeURIComponent(ENTREGA_LLAVES_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Error fetching Entrega de Llaves: ${response.statusText}`);
+
+      const data = await response.json();
+      if (!data.values || data.values.length === 0) return [];
+
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      return rows.map((row: any[], index: number) => {
+        const getVal = (headerName: string) => {
+          const idx = headers.findIndex(h => h && h.trim().toUpperCase() === headerName.toUpperCase());
+          return idx !== -1 ? row[idx] : undefined;
+        };
+
+        const rawTel = String(getVal('TELEFONO') || '').replace(/\D/g, '');
+        const cleanTel = (rawTel.startsWith('34') && rawTel.length >= 11) ? rawTel.slice(-9) : rawTel;
+
+        const parseDateInput = (val: any) => {
+          if (!val) return '';
+          let raw = String(val).trim();
+          let dateValue = raw;
+          let timeValue = "12:00"; // Hora por defecto si no trae
+
+          if (raw.includes(',')) {
+            const parts = raw.split(',');
+            dateValue = parts[0].trim();
+            const timeMatch = parts[1].match(/\d{1,2}:\d{2}/);
+            if (timeMatch) timeValue = timeMatch[0];
+          } else if (raw.includes(' ')) {
+            const parts = raw.split(' ');
+            dateValue = parts[0].trim();
+            const timeMatch = parts[1]?.match(/\d{1,2}:\d{2}/);
+            if (timeMatch) timeValue = timeMatch[0];
+          }
+
+          let ymd = dateValue;
+          if (dateValue.includes('/')) {
+            const p = dateValue.split('/');
+            if (p.length === 3) ymd = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+          } else if (dateValue.includes('-')) {
+             const p = dateValue.split('-');
+             if (p[0].length <= 2 && p.length === 3) {
+                ymd = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+             }
+          }
+
+          const [h, m] = timeValue.split(':');
+          return `${ymd}T${h.padStart(2, '0')}:${m}`;
+        };
+
+        const parsePaymentMethod = (val: any) => {
+          const s = String(val || '').trim().toLowerCase();
+          if (s.includes('bizum')) return 'Bizum';
+          if (s.includes('tarjeta')) return 'Tarjeta';
+          return 'Efectivo';
+        };
+
+        return {
+          id: `real_key_${index + 2}`,
+          telefono: cleanTel,
+          nombre: String(getVal('NOMBRE') || ''),
+          apellidos: String(getVal('APELLIDOS') || ''),
+          fechaUbicacionEntrega: String(getVal('FECHA Y UBICACION DE LLAVES ENTREGADAS') || ''),
+          apartamento: String(getVal('APARTAMENTO') || ''),
+          nombreCliente: String(getVal('NOMBRE CLIENTE') || ''),
+          fechaEntradaReserva: parseDateInput(getVal('FECHA ENTRADA RESERVA')),
+          fechaSalidaReserva: parseDateInput(getVal('FECHA SALIDA RE') || getVal('FECHA SALIDA RESERVA')),
+          entregaLlaves: String(getVal('ENTREGA LLAVES')).toUpperCase() === 'SÍ',
+          sabanasToallas: String(getVal('SÁBANAS Y TOALLAS') || ''),
+          km: parseExcelNumber(getVal('KM')),
+          observaciones: String(getVal('OBSERVACIONES') || ''),
+          fianzaMonto: parsePaymentMethod(getVal('FIANZA (MONTO)')),
+          bizumMonto: String(getVal('NUMERO BIZUM (MONTO)') || ''),
+          cantidadPagadaMonto: String(parseExcelNumber(getVal('CANTIDAD PAGADA (MONTO)'))),
+          fianzaGarantia: parsePaymentMethod(getVal('FIANZA (GARANTIA)')),
+          bizumGarantia: String(getVal('NUMERO BIZUM (GARANTIA)') || ''),
+          cantidadPagadaGarantia: String(parseExcelNumber(getVal('CANTIDAD PAGADA (GARANTIA)'))),
+          checked: String(getVal('CHECKED')).toUpperCase() === 'TRUE'
+        };
+      });
+    } catch (error) {
+      console.error('Error in getEntregaLlaves:', error);
+      return [];
+    }
+  },
+
+  addEntregaLlaves: async (data: Omit<EntregaLlaves, 'id'>): Promise<boolean> => {
+    try {
+      await fetch(ENTREGA_LLAVES_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ ...data, action: 'add' })
+      });
+      return true;
+    } catch (error) {
+      console.error('Error adding Entrega de Llaves:', error);
+      throw error;
+    }
+  },
+
+  updateEntregaLlaves: async (data: EntregaLlaves): Promise<boolean> => {
+    try {
+      await fetch(ENTREGA_LLAVES_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ ...data, action: 'update' })
+      });
+      return true;
+    } catch (error) {
+      console.error('Error updating Entrega de Llaves:', error);
+      throw error;
+    }
+  },
+
+  deleteEntregaLlaves: async (id: string): Promise<boolean> => {
+    try {
+      await fetch(ENTREGA_LLAVES_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ id, action: 'delete' })
+      });
+      return true;
+    } catch (error) {
+      console.error('Error deleting Entrega de Llaves:', error);
       throw error;
     }
   },
