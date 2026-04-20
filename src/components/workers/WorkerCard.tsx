@@ -54,10 +54,15 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
             <h3 className="text-sm font-normal text-slate-800 dark:text-stone-100 leading-tight transition-colors">
               {toTitleCase(worker.fullName)}
             </h3>
-            <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500 mt-0.5">
-              <Phone size={10} className="flex-shrink-0 text-orange-500" />
-              {worker.telefono || '—'}
-            </span>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500">
+                <Phone size={10} className="flex-shrink-0 text-orange-500" />
+                {worker.telefono || '—'}
+              </span>
+              <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-md border ${worker.tipoTrabajador === 'Manitas' ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-900/30 dark:border-blue-800/50' : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-stone-800 dark:text-stone-400 dark:border-stone-700'}`}>
+                {worker.tipoTrabajador || 'Limpiador'}
+              </span>
+            </div>
           </div>
         </div>
         <button
@@ -70,8 +75,8 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
       </div>
 
       {/* Stats strip */}
-      <div className="mx-5 mb-4 grid grid-cols-2 divide-x divide-stone-100 dark:divide-stone-800 bg-stone-50 dark:bg-stone-800/50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 flex flex-col justify-center">
+      <div className="mx-5 mb-4 grid grid-cols-3 divide-x divide-stone-100 dark:divide-stone-800 bg-stone-50 dark:bg-stone-800/50 rounded-xl overflow-hidden">
+        <div className="px-3 py-2.5 flex flex-col justify-center">
           <div className="text-xs font-bold text-slate-700 dark:text-stone-200">
             {worker.tipoPago ? PAGO_CONFIG[worker.tipoPago] : '—'}
           </div>
@@ -79,11 +84,17 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
             {worker.pagoPorReserva != null ? `${worker.pagoPorReserva}€ por reserva` : '—'}
           </div>
         </div>
-        <div className="px-4 py-2.5 text-center flex flex-col justify-center">
+        <div className="px-3 py-2.5 text-center flex flex-col justify-center">
           <div className="text-sm font-bold text-orange-600 dark:text-orange-400 tabular-nums">
             {(worker.owedMoney ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
           </div>
           <div className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Por cobrar</div>
+        </div>
+        <div className="px-3 py-2.5 text-center flex flex-col justify-center" title="Sábanas y toallas pagadas en efectivo (no resta del 'Por cobrar')">
+          <div className={`text-sm font-bold tabular-nums ${(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}>
+            {(worker.sabanasToallasDebidas ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+          </div>
+          <div className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Sábanas/Toallas</div>
         </div>
       </div>
 

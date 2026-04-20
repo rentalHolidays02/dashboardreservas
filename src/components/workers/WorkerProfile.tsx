@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Worker, PagoRecord, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
 import { appsScriptApi, PaymentAction } from '../../services/api';
+import { computeWorkerSeries, WorkerMetric } from '../../utils/payments';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
 import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
@@ -41,96 +42,6 @@ const METRIC_META: Record<AnalyticMetric, {
   duracion:   { label: 'Duración media',    shortLabel: 'min', format: v => `${v} min`,       totalLabel: 'media/tarea', icon: <Clock size={12} />,       accent: '#f97316', isAvg: true  },
   eficiencia: { label: 'Tasa verificación', shortLabel: '%',   format: v => `${v}%`,          totalLabel: 'media',     icon: <CheckCircle2 size={12} />,  accent: '#f97316', isAvg: true  },
 };
-
-const BASE_ANALYTIC: Record<AnalyticMetric, { mensual: number; semanal: number; trimestral: number }> = {
-  ingresos:   { mensual: 1250, semanal: 290,  trimestral: 1250 },
-  limpiezas:  { mensual: 12,   semanal: 2.8,  trimestral: 12   },
-  km:         { mensual: 300,  semanal: 70,   trimestral: 300  },
-  duracion:   { mensual: 65,   semanal: 65,   trimestral: 65   },
-  eficiencia: { mensual: 85,   semanal: 85,   trimestral: 85   },
-};
-
-function generateAnalyticData(
-  period: AnalyticPeriod, metric: AnalyticMetric, worker: Worker,
-  desde?: string, hasta?: string,
-): AnalyticPoint[] {
-  const isAbsolute = metric === 'duracion' || metric === 'eficiencia';
-  const workerScale = isAbsolute ? 1 : (
-    metric === 'ingresos'  ? worker.netMoneyMonth  / BASE_ANALYTIC.ingresos.mensual :
-    metric === 'limpiezas' ? worker.cleansCountMonth / BASE_ANALYTIC.limpiezas.mensual :
-    metric === 'km'        ? worker.kmsMonth         / BASE_ANALYTIC.km.mensual : 1
-  );
-  const seed = worker.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-
-  const sin  = (x: number) => Math.sin(x);
-  const rnd  = (i: number, amp: number) => amp * sin(i * 0.41 + seed * 0.13) + amp * 0.5 * sin(i * 0.87 + seed * 0.07);
-
-  if (period === 'semanal') {
-    const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const rawWeek: Record<AnalyticMetric, number[]> = {
-      ingresos:   [180, 220, 195, 240, 280, 150, 120],
-      limpiezas:  [2,   3,   2,   3,   4,   2,   1  ],
-      km:         [45,  60,  50,  70,  85,  40,  25 ],
-      duracion:   [58,  62,  55,  68,  72,  60,  50 ],
-      eficiencia: [88,  92,  85,  94,  90,  86,  80 ],
-    };
-    return days.map((label, i) => ({
-      label,
-      valor: isAbsolute ? rawWeek[metric][i] : Math.round(rawWeek[metric][i] * workerScale),
-    }));
-  }
-
-  if (period === 'mensual') {
-    const today = new Date();
-    const result: AnalyticPoint[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today); d.setDate(today.getDate() - i);
-      let val = 0;
-      if      (metric === 'ingresos')   val = Math.round(Math.max(0, (38 + rnd(i, 14)) * workerScale));
-      else if (metric === 'limpiezas')  val = Math.round(Math.max(0, (0.35 + rnd(i, 0.28)) * workerScale));
-      else if (metric === 'km')         val = Math.round(Math.max(0, (9.5 + rnd(i, 5.5)) * workerScale));
-      else if (metric === 'duracion')   val = Math.round(58 + Math.abs(rnd(i, 22)));
-      else                              val = Math.round(Math.min(100, 80 + Math.abs(rnd(i, 14))));
-      result.push({ label: `${d.getDate()} ${d.toLocaleString('es-ES', { month: 'short' })}`, valor: val });
-    }
-    return result;
-  }
-
-  if (period === 'trimestral') {
-    const today = new Date();
-    const result: AnalyticPoint[] = [];
-    for (let i = 12; i >= 0; i--) {
-      const d = new Date(today); d.setDate(today.getDate() - i * 7);
-      const progress = (12 - i) / 12;
-      let val = 0;
-      if      (metric === 'ingresos')   val = Math.round(Math.max(10,  (250 + 150 * progress + rnd(i, 80)) * workerScale));
-      else if (metric === 'limpiezas')  val = Math.round(Math.max(1,   (2.5 + 1.5 * progress + rnd(i, 1)) * workerScale));
-      else if (metric === 'km')         val = Math.round(Math.max(5,   (65 + 40 * progress + rnd(i, 28)) * workerScale));
-      else if (metric === 'duracion')   val = Math.round(52 + 20 * progress + Math.abs(rnd(i, 14)));
-      else                              val = Math.round(Math.min(100, 72 + 18 * progress + Math.abs(rnd(i, 9))));
-      result.push({ label: `${d.getDate()} ${d.toLocaleString('es-ES', { month: 'short' })}`, valor: val });
-    }
-    return result;
-  }
-
-  // personalizado
-  if (!desde || !hasta || desde > hasta) return [];
-  const start = new Date(desde + 'T00:00:00');
-  const end   = new Date(hasta + 'T00:00:00');
-  const days  = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-  const result: AnalyticPoint[] = [];
-  for (let i = 0; i < Math.min(days, 90); i++) {
-    const d = new Date(start); d.setDate(start.getDate() + i);
-    let val = 0;
-    if      (metric === 'ingresos')   val = Math.round(Math.abs((38 + rnd(i, 16)) * workerScale));
-    else if (metric === 'limpiezas')  val = Math.round(Math.abs((0.35 + rnd(i, 0.3)) * workerScale));
-    else if (metric === 'km')         val = Math.round(Math.abs((9.5 + rnd(i, 6)) * workerScale));
-    else if (metric === 'duracion')   val = Math.round(55 + Math.abs(rnd(i, 24)));
-    else                              val = Math.round(Math.min(100, 78 + Math.abs(rnd(i, 16))));
-    result.push({ label: `${d.getDate()} ${d.toLocaleString('es-ES', { month: 'short' })}`, valor: val });
-  }
-  return result;
-}
 
 // ─── PulseDot (dashboard style) ──────────────────────────────────────────────
 const PulseDotAnalytic: React.FC<{ cx?: number; cy?: number; accent?: string }> = ({ cx, cy, accent = '#f97316' }) => {
@@ -367,7 +278,11 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
   const selectedAmount = useMemo(() => pagos.filter(p => selectedPagoIds.has(p.id)).reduce((a, p) => a + p.importe, 0), [pagos, selectedPagoIds]);
   const kmCost = (worker.kmsMonth ?? 0) * (worker.precioPorKm ?? 0);
   const cleansCost = (worker.cleansCountMonth ?? 0) * (worker.pagoPorReserva ?? 0);
-  const totalDue = kmCost + cleansCost;
+  const extraHoursCost = (worker.extraHoursMonth ?? 0) * 10;
+  // owedMoney ya contiene el total derivado (reservas + extras + km). Si no hay datos, usamos el cálculo clásico.
+  const totalDue = worker.owedMoney && worker.owedMoney > 0
+    ? worker.owedMoney
+    : kmCost + cleansCost + extraHoursCost;
   // paidPagos ya está memoizado; lo usamos directamente
   const currentCyclePaid = paidPagos.reduce((a, p) => a + p.importe, 0);
   const remainingDue = Math.max(0, totalDue - currentCyclePaid);
@@ -514,13 +429,22 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
 
   const totalRecords = normalCleans.length + initialCleans.length + handymanRecords.length;
 
-  // Analytics chart data
+  // Analytics chart data — construido desde los registros reales del trabajador
   const analyticsChartData = useMemo<AnalyticPoint[]>(() => {
-    if (analyticsPeriod === 'personalizado') {
-      return generateAnalyticData('personalizado', analyticsMetric, worker, analyticsDesde, analyticsHasta);
-    }
-    return generateAnalyticData(analyticsPeriod, analyticsMetric, worker);
-  }, [analyticsPeriod, analyticsMetric, analyticsDesde, analyticsHasta, worker]);
+    const series = computeWorkerSeries(
+      worker,
+      normalCleans,
+      initialCleans,
+      handymanRecords,
+      {
+        period: analyticsPeriod,
+        metric: analyticsMetric as WorkerMetric,
+        desde: analyticsDesde,
+        hasta: analyticsHasta,
+      }
+    );
+    return series.map(s => ({ label: s.label, valor: s.valor }));
+  }, [analyticsPeriod, analyticsMetric, analyticsDesde, analyticsHasta, worker, normalCleans, initialCleans, handymanRecords]);
 
   // Trigger re-animation on custom date change
   useEffect(() => {
@@ -550,28 +474,19 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
     return firstHalf === 0 ? 0 : Math.round(((secondHalf - firstHalf) / firstHalf) * 100);
   }, [analyticsChartData]);
 
-  // Monthly breakdown for bar chart
+  // Monthly breakdown for bar chart (sólo datos reales del trabajador)
   const monthlyBreakdown = useMemo(() => {
     const map: Record<string, { normal: number; initial: number; handyman: number }> = {};
     const add = (fecha: string, type: 'normal' | 'initial' | 'handyman') => {
+      if (!fecha) return;
       const m = fecha.slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(m)) return;
       if (!map[m]) map[m] = { normal: 0, initial: 0, handyman: 0 };
       map[m][type]++;
     };
     normalCleans.forEach(r => add(r.checkinFecha, 'normal'));
     initialCleans.forEach(r => add(r.checkinFecha, 'initial'));
     handymanRecords.forEach(r => add(r.fechaLlegada, 'handyman'));
-    if (Object.keys(map).length === 0) {
-      // Simulated when no real data
-      const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'];
-      const s = worker.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-      return months.map((label, i) => ({
-        label,
-        normal: Math.round((worker.cleansCountMonth * 0.6) * (0.7 + 0.5 * Math.abs(Math.sin(i * 0.8 + s * 0.1)))),
-        initial: Math.round((worker.cleansCountMonth * 0.2) * (0.5 + 0.5 * Math.abs(Math.sin(i * 1.2 + s * 0.2)))),
-        handyman: Math.round((worker.cleansCountMonth * 0.2) * (0.4 + 0.6 * Math.abs(Math.sin(i * 0.9 + s * 0.3)))),
-      }));
-    }
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6)
@@ -579,7 +494,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
         label: new Date(m + '-01').toLocaleDateString('es-ES', { month: 'short' }),
         ...v,
       }));
-  }, [normalCleans, initialCleans, handymanRecords, worker]);
+  }, [normalCleans, initialCleans, handymanRecords]);
 
   const gridColor = theme === 'dark' ? '#44403c' : '#e7e5e4';
   const tickColor = theme === 'dark' ? '#78716c' : '#a8a29e';
@@ -729,37 +644,55 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
 
         {/* Stats strip */}
         <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-stone-50 dark:divide-stone-800">
-          {/* Por cobrar */}
+          {/* Por cobrar + Sábanas/Toallas */}
           <div className="px-5 py-4">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Euro size={12} className={remainingDue > 0 ? 'text-amber-500' : 'text-emerald-500'} />
-              <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Por cobrar</span>
+            <div className="flex items-start gap-6">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Euro size={12} className={remainingDue > 0 ? 'text-amber-500' : 'text-emerald-500'} />
+                  <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Por cobrar</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className={`text-lg font-medium tabular-nums ${remainingDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {fmtCurrency(animRemainingDue)}
+                  </p>
+                  {remainingDue > 0 && (
+                    <button
+                      onClick={() => { setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
+                      className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-orange-500 text-white hover:bg-orange-600 active:scale-95 transition-all flex-shrink-0"
+                    >
+                      Pagar
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
+                  {remainingDue <= 0
+                    ? 'Al día'
+                    : animRemainingLimpiezas > 0 && animRemainingKm > 0
+                      ? `${animRemainingLimpiezas} limpiezas · ${animRemainingKm} km`
+                      : animRemainingLimpiezas > 0
+                        ? `${animRemainingLimpiezas} limpiezas pendientes`
+                        : animRemainingKm > 0
+                          ? `${animRemainingKm} km pendientes`
+                          : 'Configura tarifas para ver el desglose'
+                  }
+                </p>
+              </div>
+
+              <div
+                className="min-w-0 pl-4 border-l border-stone-100 dark:border-stone-800"
+                title="Sábanas y toallas pagadas en efectivo. No resta del 'Por cobrar'."
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Banknote size={12} className={(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-500' : 'text-slate-400 dark:text-stone-500'} />
+                  <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Sábanas/Toallas</span>
+                </div>
+                <p className={`text-lg font-medium tabular-nums ${(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}>
+                  {fmtCurrency(worker.sabanasToallasDebidas ?? 0)}
+                </p>
+                <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">En efectivo · aparte</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <p className={`text-lg font-medium tabular-nums ${remainingDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {fmtCurrency(animRemainingDue)}
-              </p>
-              {remainingDue > 0 && (
-                <button
-                  onClick={() => { setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
-                  className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-orange-500 text-white hover:bg-orange-600 active:scale-95 transition-all flex-shrink-0"
-                >
-                  Pagar
-                </button>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
-              {remainingDue <= 0
-                ? 'Al día'
-                : animRemainingLimpiezas > 0 && animRemainingKm > 0
-                  ? `${animRemainingLimpiezas} limpiezas · ${animRemainingKm} km`
-                  : animRemainingLimpiezas > 0
-                    ? `${animRemainingLimpiezas} limpiezas pendientes`
-                    : animRemainingKm > 0
-                      ? `${animRemainingKm} km pendientes`
-                      : 'Configura tarifas para ver el desglose'
-              }
-            </p>
           </div>
 
           {/* KM */}
@@ -842,6 +775,12 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
             <EditableRow icon={<Hash size={12} />} label="DNI / NIE" value={draft.dni} mono isEditing={isEditing} onChange={v => setDraftField('dni', v)} />
             <EditableRow icon={<Phone size={12} />} label="Teléfono" value={draft.telefono} isEditing={isEditing} onChange={v => setDraftField('telefono', v)} type="tel" />
             <EditableRow icon={<Mail size={12} />} label="Email" value={draft.email} isEditing={isEditing} onChange={v => setDraftField('email', v)} type="email" />
+            <SelectRow 
+              icon={<UserIcon size={12} />} label="Tipo de trab." 
+              value={draft.tipoTrabajador || 'Limpiador'} isEditing={isEditing} 
+              options={[{ value: 'Limpiador', label: 'Limpiador' }, { value: 'Manitas', label: 'Manitas' }]} 
+              onChange={v => setDraftField('tipoTrabajador', v as Worker['tipoTrabajador'])} 
+            />
           </div>
 
           {/* Columna 2 — Método de pago */}

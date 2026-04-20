@@ -153,7 +153,7 @@ const Workers: React.FC = () => {
     const matchKms = (worker.kmsMonth || 0) >= filters.minKms && (worker.kmsMonth || 0) <= filters.maxKms;
     
     return matchSearch && matchTipoPago && matchCleans && matchKms;
-  });
+  }).sort((a, b) => (b.owedMoney || 0) - (a.owedMoney || 0));
 
   if (loading && workers.length === 0) {
     return <LoadingSpinner message="Sincronizando base de trabajadores..." />;

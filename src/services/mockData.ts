@@ -12,12 +12,15 @@ export interface Worker {
   dni?: string;
   netMoneyMonth: number;
   owedMoney: number;
+  sabanasToallasDebidas?: number;
   cleansCountMonth: number;
   kmsMonth: number;
+  extraHoursMonth?: number;
   accommodations: string[];
   tipoPago?: 'bizum' | 'tarjeta' | 'efectivo';
   pagoPorReserva?: number;
   precioPorKm?: number;
+  tipoTrabajador?: 'Limpiador' | 'Manitas';
   // Bizum
   telefonoBizum?: string;
   // Transferencia bancaria

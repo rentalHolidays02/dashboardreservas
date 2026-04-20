@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import AnalyticsCards from '../components/dashboard/AnalyticsCards';
 import WorkersTable from '../components/dashboard/WorkersTable';
 import { appsScriptApi } from '../services/api';
-import { Worker, CheckInOut, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
+import { Worker, CheckInOut, NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves } from '../services/mockData';
 import { Loader2, Search, Filter } from 'lucide-react';
 import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { computeWorkerEarningsInRange } from '../utils/payments';
 
 const Dashboard: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -16,12 +17,13 @@ const Dashboard: React.FC = () => {
   const [activeNormalCheckins, setActiveNormalCheckins] = useState<NormalCleanRecord[]>([]);
   const [activeInitialCheckins, setActiveInitialCheckins] = useState<InitialCleanRecord[]>([]);
   const [activeHandymanCheckins, setActiveHandymanCheckins] = useState<HandymanRecord[]>([]);
+  const [entregaLlaves, setEntregaLlaves] = useState<EntregaLlaves[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Period state
-  const [period, setPeriod] = useState<Period>('semanal');
+  const [period, setPeriod] = useState<Period>('mensual');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -31,7 +33,7 @@ const Dashboard: React.FC = () => {
       try {
         const [
           workersData, checkInsData, normalData, initialData, handymanData,
-          activeNormalData, activeInitialData, activeHandymanData
+          activeNormalData, activeInitialData, activeHandymanData, entregaData
         ] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getRecentCheckIns(),
@@ -41,6 +43,7 @@ const Dashboard: React.FC = () => {
           appsScriptApi.getNormalCheckins(),
           appsScriptApi.getInitialCheckins(),
           appsScriptApi.getHandymanCheckins(),
+          appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
         ]);
         setWorkers(workersData);
         setCheckIns(checkInsData);
@@ -50,6 +53,7 @@ const Dashboard: React.FC = () => {
         setActiveNormalCheckins(activeNormalData);
         setActiveInitialCheckins(activeInitialData);
         setActiveHandymanCheckins(activeHandymanData);
+        setEntregaLlaves(entregaData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -61,17 +65,33 @@ const Dashboard: React.FC = () => {
 
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
-    if (period !== 'semanal') count++;
+    if (period !== 'mensual') count++;
     if (customDesde || customHasta) count++;
     return count;
   }, [period, customDesde, customHasta]);
 
   const filteredWorkers = React.useMemo(() => {
-    return workers.filter(w => 
+    const matched = workers.filter(w =>
       w.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       w.accommodations.some(a => a.toLowerCase().includes(searchTerm.toLowerCase()))
     );
-  }, [workers, searchTerm]);
+
+    return matched.map(w => {
+      const earnings = computeWorkerEarningsInRange(
+        w, normalCleans, initialCleans, handymanRecords, entregaLlaves,
+        period, customDesde, customHasta
+      );
+      return {
+        ...w,
+        cleansCountMonth: earnings.cleanCount,
+        kmsMonth: Math.round(earnings.kms * 100) / 100,
+        extraHoursMonth: Math.round(earnings.extraHours * 100) / 100,
+        netMoneyMonth: Math.round(earnings.totalOwed * 100) / 100,
+        owedMoney: Math.round(earnings.totalOwed * 100) / 100,
+        efectivoRetenido: Math.round(earnings.efectivoRetenido * 100) / 100,
+      };
+    });
+  }, [workers, searchTerm, normalCleans, initialCleans, handymanRecords, entregaLlaves, period, customDesde, customHasta]);
 
   if (loading) {
     return <LoadingSpinner message="Cargando datos del dashboard..." />;

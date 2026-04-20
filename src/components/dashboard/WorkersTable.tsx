@@ -9,7 +9,7 @@ interface WorkersTableProps {
   onWorkerSelect?: (w: Worker | null) => void;
 }
 
-const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px]';
+const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_1fr_80px]';
 
 type SortKey = 'none' | 'owed_asc' | 'owed_desc' | 'cleans_desc' | 'kms_desc';
 
@@ -42,7 +42,7 @@ const AccommodationTags: React.FC<{ items: string[] }> = ({ items }) => {
 const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, onWorkerSelect }) => {
   const [query, setQuery]               = useState('');
   const [accommodation, setAccommodation] = useState('');
-  const [sort, setSort]                 = useState<SortKey>('none');
+  const [sort, setSort]                 = useState<SortKey>('owed_desc');
 
   const allAccommodations = useMemo(() =>
     Array.from(new Set(workers.flatMap(w => w.accommodations))).sort(),
@@ -68,7 +68,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
     return result;
   }, [workers, query, accommodation, sort]);
 
-  const hasFilters = query || accommodation || sort !== 'none';
+  const hasFilters = query || accommodation || sort !== 'owed_desc';
 
   const handleRowClick = (worker: Worker) => {
     onWorkerSelect?.(selectedWorker?.id === worker.id ? null : worker);
@@ -133,7 +133,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
 
           {hasFilters && (
             <button
-              onClick={() => { setQuery(''); setAccommodation(''); setSort('none'); }}
+              onClick={() => { setQuery(''); setAccommodation(''); setSort('owed_desc'); }}
               className="text-[11px] text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors px-1"
             >
               Limpiar
@@ -147,6 +147,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
           <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Alojamientos</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Dinero Debido</span>
+          <span className="text-xs text-slate-400 dark:text-stone-500" title="Sábanas y toallas pagadas en efectivo (no resta del Dinero Debido)">Sábanas/Toallas</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Limpiezas</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Kms</span>
           <span />
@@ -190,6 +191,13 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
 
                   <p className={`text-xs tabular-nums ${worker.owedMoney > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
                     {worker.owedMoney.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                  </p>
+
+                  <p
+                    className={`text-xs tabular-nums ${(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-400 dark:text-stone-500'}`}
+                    title="Sábanas y toallas en efectivo (aparte del dinero debido)"
+                  >
+                    {(worker.sabanasToallasDebidas ?? 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                   </p>
 
                   <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{worker.cleansCountMonth}</p>
