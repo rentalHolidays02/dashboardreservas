@@ -1,5 +1,6 @@
 import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import { Period } from '../components/dashboard/DashboardFilterModal';
+import { computeCleanPay } from './payments';
 
 export interface ChartPoint {
   label: string;
@@ -19,11 +20,13 @@ export const aggregateDailyData = (
   selectedWorkerId?: string | null
 ): ChartPoint[] => {
   const result: Record<string, ChartPoint> = {};
-  
-  // 1. Definir rango de fechas
-  const today = new Date('2026-03-31'); // Fecha base del sistema para mocks/docs
+
+  // Base date = hoy; permitimos sobrescribir con customHasta para modo personalizado.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   let iterations = 30;
   let step = 1;
+  let endDate = today;
 
   if (period === 'semanal') { iterations = 7; step = 1; }
   else if (period === 'mensual') { iterations = 30; step = 1; }
@@ -31,13 +34,13 @@ export const aggregateDailyData = (
   else if (period === 'personalizado' && customDesde && customHasta) {
     const start = new Date(customDesde);
     const end = new Date(customHasta);
+    endDate = end;
     iterations = Math.min(Math.round((end.getTime() - start.getTime()) / 86400000) + 1, 90);
   }
 
-  // Inicializar mapa de resultados con labels vacíos
   for (let i = iterations - 1; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i * step);
+    const d = new Date(endDate);
+    d.setDate(endDate.getDate() - i * step);
     const iso = d.toISOString().split('T')[0];
     const label = d.toLocaleString('es-ES', { day: 'numeric', month: 'short' });
     result[iso] = { label, dinero: 0, limpiezas: 0, km: 0 };
@@ -45,31 +48,67 @@ export const aggregateDailyData = (
 
   const selectedWorker = selectedWorkerId ? workers.find(w => w.id === selectedWorkerId) : null;
 
-  // 2. Procesar registros
-  const processRecord = (fecha: string, nombre: string, apellidos: string, km: number, isClean: boolean) => {
-    const datePart = fecha.split(' ')[0]; // YYYY-MM-DD
+  const findWorker = (nombre: string, apellidos: string): Worker | undefined => {
+    const target = `${nombre} ${apellidos}`.toLowerCase().trim();
+    return workers.find(w => (w.fullName || '').toLowerCase().trim() === target);
+  };
+
+  const processClean = (
+    fecha: string,
+    nombre: string,
+    apellidos: string,
+    apartamento: string,
+    horaEntrada: string,
+    horaSalida: string,
+    km: number
+  ) => {
+    const datePart = fecha.split(' ')[0].split('T')[0];
     if (!result[datePart]) return;
 
-    // Verificar si el registro pertenece al trabajador seleccionado (si hay uno)
     if (selectedWorker) {
       const match = `${nombre} ${apellidos}`.toLowerCase().trim() === selectedWorker.fullName.toLowerCase().trim();
       if (!match) return;
     }
 
-    // Encontrar al trabajador para aplicar sus tarifas (o el del registro)
-    const worker = workers.find(w => `${nombre} ${apellidos}`.toLowerCase().trim() === w.fullName.toLowerCase().trim());
-    
-    const pricePerReserva = worker?.pagoPorReserva ?? 20; // Default sensible
-    const pricePerKm = worker?.precioPorKm ?? 0.19; // Default sensible
+    const worker = findWorker(nombre, apellidos);
+    const pagoPorReserva = worker?.pagoPorReserva ?? 20;
+    const precioPorKm = worker?.precioPorKm ?? 0.19;
 
-    result[datePart].dinero += (isClean ? pricePerReserva : 0) + (km * pricePerKm);
-    result[datePart].km += km;
-    if (isClean) result[datePart].limpiezas += 1;
+    const pay = computeCleanPay(apartamento, horaEntrada, horaSalida, pagoPorReserva);
+    result[datePart].dinero += pay.base + pay.extraPay + (km || 0) * precioPorKm;
+    result[datePart].km += km || 0;
+    result[datePart].limpiezas += 1;
   };
 
-  normalCleans.forEach(r => processRecord(r.checkinFecha, r.nombre, r.apellidos, r.km, true));
-  initialCleans.forEach(r => processRecord(r.checkinFecha, r.nombre, r.apellidos, r.km, true));
-  handymanRecords.forEach(r => processRecord(r.fechaLlegada, r.nombre, r.apellidos, r.cantidadMinutos, false));
+  const processHandyman = (
+    fecha: string,
+    nombre: string,
+    apellidos: string,
+    km: number
+  ) => {
+    const datePart = fecha.split(' ')[0].split('T')[0];
+    if (!result[datePart]) return;
+
+    if (selectedWorker) {
+      const match = `${nombre} ${apellidos}`.toLowerCase().trim() === selectedWorker.fullName.toLowerCase().trim();
+      if (!match) return;
+    }
+
+    const worker = findWorker(nombre, apellidos);
+    const precioPorKm = worker?.precioPorKm ?? 0.19;
+    result[datePart].dinero += (km || 0) * precioPorKm;
+    result[datePart].km += km || 0;
+  };
+
+  normalCleans.forEach(r =>
+    processClean(r.checkinFecha, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+  );
+  initialCleans.forEach(r =>
+    processClean(r.checkinFecha, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+  );
+  handymanRecords.forEach(r =>
+    processHandyman(r.fechaLlegada, r.nombre, r.apellidos, r.cantidadMinutos)
+  );
 
   return Object.values(result);
 };

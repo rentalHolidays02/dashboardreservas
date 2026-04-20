@@ -32,6 +32,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
     email: '',
     dni: '',
     tipoPago: 'bizum' as 'bizum' | 'tarjeta' | 'efectivo',
+    tipoTrabajador: 'Limpiador' as 'Limpiador' | 'Manitas',
     pagoPorReserva: 0,
     precioPorKm: 0,
     telefonoBizum: '',
@@ -312,6 +313,14 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
           <div>
             <label className={labelClass}><Mail size={12} />Email</label>
             <input type="email" name="email" value={formData.email ?? ''} onChange={handleChange} placeholder="trabajador@ejemplo.com" className={inputClass} />
+          </div>
+
+          <div>
+            <label className={labelClass}><UserIcon size={12} />Tipo de Trabajador</label>
+            <select name="tipoTrabajador" value={formData.tipoTrabajador} onChange={handleChange} className={inputClass}>
+              <option value="Limpiador">Limpiador</option>
+              <option value="Manitas">Manitas</option>
+            </select>
           </div>
 
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest pt-1">Tarifas</p>

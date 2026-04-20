@@ -19,6 +19,7 @@ import {
   Accommodation,
   MOCK_ACCOMMODATIONS
 } from './mockData';
+import { computeWorkerEarnings } from '../utils/payments';
 
 // Google Sheets API Configuration
 const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
@@ -235,6 +236,8 @@ const getStoredWorkers = (): Worker[] => {
       netMoneyMonth: w.netMoneyMonth ?? 0,
       cleansCountMonth: w.cleansCountMonth ?? 0,
       kmsMonth: w.kmsMonth ?? 0,
+      extraHoursMonth: w.extraHoursMonth ?? 0,
+      sabanasToallasDebidas: w.sabanasToallasDebidas ?? 0,
       accommodations: w.accommodations ?? [],
     }));
   } catch (error) {
@@ -318,7 +321,7 @@ export const appsScriptApi = {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error(`Error en la API de Google Sheets (Operarios): ${response.statusText}`);
       }
@@ -332,7 +335,7 @@ export const appsScriptApi = {
       const headers = allValues[0] as string[];
       const rows = allValues.slice(1);
 
-      const workers: Worker[] = rows
+      const baseWorkers: Worker[] = rows
         .map((row: any[], index: number): Worker => {
           const getVal = (headerName: string) => {
             const norm = normalizeHeader(headerName);
@@ -341,8 +344,8 @@ export const appsScriptApi = {
           };
 
           const medioPago = String(getVal('MEDIO DE PAGO') || '').toLowerCase();
-          const tipoPago: Worker['tipoPago'] = medioPago.includes('bizum') ? 'bizum' : 
-                                               medioPago.includes('tarjeta') ? 'tarjeta' : 
+          const tipoPago: Worker['tipoPago'] = medioPago.includes('bizum') ? 'bizum' :
+                                               medioPago.includes('tarjeta') ? 'tarjeta' :
                                                'efectivo';
 
           return {
@@ -354,15 +357,38 @@ export const appsScriptApi = {
             pagoPorReserva: parseExcelNumber(getVal('PAGO POR RESERVA')),
             precioPorKm: parseExcelNumber(getVal('KILOMETRAJE')),
             notes: String(getVal('OBSERVACIONES') || ''),
-            // Campos de resumen (se cogen de la hoja Trabajadores)
-            netMoneyMonth: parseExcelNumber(getVal('DINERO NETO') || getVal('Total Generado') || getVal('INGRESOS')),
-            owedMoney: parseExcelNumber(getVal('DEBIDO') || getVal('A PAGAR') || getVal('SALDO') || getVal('PENDIENTE')),
-            cleansCountMonth: parseExcelNumber(getVal('LIMPIEZAS') || getVal('Reserva')),
-            kmsMonth: parseExcelNumber(getVal('Kms') || getVal('Km')),
+            netMoneyMonth: 0,
+            owedMoney: 0,
+            sabanasToallasDebidas: 0,
+            cleansCountMonth: 0,
+            kmsMonth: 0,
+            extraHoursMonth: 0,
             accommodations: []
           };
         })
         .filter((w: Worker) => w.fullName && w.fullName.trim() !== '' && w.fullName !== 'Sin nombre');
+
+      // Calcular valores derivados cruzando con registros de limpieza y entrega de llaves.
+      // Si alguna llamada falla, se continúa con arrays vacíos para no romper la carga.
+      const [normalCleans, initialCleans, handymanRecords, entregaLlaves] = await Promise.all([
+        appsScriptApi.getNormalCleans().catch(() => []),
+        appsScriptApi.getInitialCleans().catch(() => []),
+        appsScriptApi.getHandymanRecords().catch(() => []),
+        appsScriptApi.getEntregaLlaves().catch(() => []),
+      ]);
+
+      const workers: Worker[] = baseWorkers.map(w => {
+        const earnings = computeWorkerEarnings(w, normalCleans, initialCleans, handymanRecords, entregaLlaves);
+        return {
+          ...w,
+          cleansCountMonth: earnings.cleanCount,
+          kmsMonth: Math.round(earnings.kms * 100) / 100,
+          extraHoursMonth: Math.round(earnings.extraHours * 100) / 100,
+          netMoneyMonth: Math.round(earnings.totalOwed * 100) / 100,
+          owedMoney: Math.round(earnings.totalOwed * 100) / 100,
+          sabanasToallasDebidas: Math.round(earnings.sabanasToallasDebidas * 100) / 100,
+        };
+      });
 
       saveWorkers(workers);
       return workers;
@@ -1273,13 +1299,20 @@ export const appsScriptApi = {
     initial: InitialCleanRecord[];
     handyman: HandymanRecord[];
   }> => {
-    await delay(300);
+    const target = (fullName || '').trim().toLowerCase();
     const match = (nombre: string, apellidos: string) =>
-      `${nombre} ${apellidos}` === fullName;
+      `${nombre || ''} ${apellidos || ''}`.trim().toLowerCase() === target;
+
+    const [normal, initial, handyman] = await Promise.all([
+      appsScriptApi.getNormalCleans().catch(() => [] as NormalCleanRecord[]),
+      appsScriptApi.getInitialCleans().catch(() => [] as InitialCleanRecord[]),
+      appsScriptApi.getHandymanRecords().catch(() => [] as HandymanRecord[]),
+    ]);
+
     return {
-      normal:   MOCK_NORMAL_CLEANS.filter(r => match(r.nombre, r.apellidos)),
-      initial:  MOCK_INITIAL_CLEANS.filter(r => match(r.nombre, r.apellidos)),
-      handyman: MOCK_HANDYMAN_RECORDS.filter(r => match(r.nombre, r.apellidos)),
+      normal: normal.filter(r => match(r.nombre, r.apellidos)),
+      initial: initial.filter(r => match(r.nombre, r.apellidos)),
+      handyman: handyman.filter(r => match(r.nombre, r.apellidos)),
     };
   }
 };
