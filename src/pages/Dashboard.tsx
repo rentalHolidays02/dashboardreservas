@@ -23,7 +23,7 @@ const Dashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Period state
-  const [period, setPeriod] = useState<Period>('semanal');
+  const [period, setPeriod] = useState<Period>('mensual');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -65,7 +65,7 @@ const Dashboard: React.FC = () => {
 
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
-    if (period !== 'semanal') count++;
+    if (period !== 'mensual') count++;
     if (customDesde || customHasta) count++;
     return count;
   }, [period, customDesde, customHasta]);
@@ -88,7 +88,7 @@ const Dashboard: React.FC = () => {
         extraHoursMonth: Math.round(earnings.extraHours * 100) / 100,
         netMoneyMonth: Math.round(earnings.totalOwed * 100) / 100,
         owedMoney: Math.round(earnings.totalOwed * 100) / 100,
-        sabanasToallasDebidas: Math.round(earnings.sabanasToallasDebidas * 100) / 100,
+        efectivoRetenido: Math.round(earnings.efectivoRetenido * 100) / 100,
       };
     });
   }, [workers, searchTerm, normalCleans, initialCleans, handymanRecords, entregaLlaves, period, customDesde, customHasta]);
