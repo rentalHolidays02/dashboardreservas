@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, Calendar, Filter, Search, Download } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
-import { Worker, CheckInOut, Accommodation } from '../services/mockData';
+import { Worker, CheckInOut, Accommodation, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import MainLayout from '../components/layout/MainLayout';
 import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
 import StatsGrid from '../components/analytics/StatsGrid';
 import PerformanceChart from '../components/analytics/PerformanceChart';
 import RankingsGrid from '../components/analytics/RankingsGrid';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { aggregateDailyData } from '../utils/analytics';
 
 const Analisis: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInOut[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
+  const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
+  const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Period state
@@ -25,14 +29,20 @@ const Analisis: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [workersData, checkInsData, accData] = await Promise.all([
+        const [workersData, checkInsData, accData, normalData, initialData, handymanData] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getRecentCheckIns(100),
           appsScriptApi.getAccommodations(),
+          appsScriptApi.getNormalCleans(),
+          appsScriptApi.getInitialCleans(),
+          appsScriptApi.getHandymanRecords(),
         ]);
         setWorkers(workersData);
         setCheckIns(checkInsData);
         setAccommodations(accData);
+        setNormalCleans(normalData);
+        setInitialCleans(initialData);
+        setHandymanRecords(handymanData);
       } catch (error) {
         console.error('Error fetching analytics data:', error);
       } finally {
@@ -42,40 +52,17 @@ const Analisis: React.FC = () => {
     fetchData();
   }, []);
 
-  // Constants for data simulation
-  const BASELINE_MONTHLY = 1250;
-
-  // Chart Data Generation (Logic inspired by AnalyticsCards.tsx but expanded)
   const chartData = useMemo(() => {
-    const today = new Date('2026-03-31');
-    const result = [];
-    let iterations = 30;
-    let step = 1;
-
-    if (period === 'semanal') { iterations = 7; step = 1; }
-    else if (period === 'mensual') { iterations = 30; step = 1; }
-    else if (period === 'trimestral') { iterations = 12; step = 7; }
-    else if (period === 'personalizado' && customDesde && customHasta) {
-        const start = new Date(customDesde);
-        const end = new Date(customHasta);
-        iterations = Math.min(Math.round((end.getTime() - start.getTime()) / 86400000) + 1, 90);
-    }
-
-    const seed = period.length;
-    for (let i = iterations - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i * step);
-      const label = d.toLocaleString('es-ES', { day: 'numeric', month: 'short' });
-      
-      // Pseudo-random but deterministic values
-      const dinero = Math.round(800 + 400 * Math.sin(i * 0.5 + seed) + 200 * Math.cos(i * 0.8));
-      const limpiezas = Math.round(5 + 3 * Math.sin(i * 0.3 + seed));
-      const km = Math.round(40 + 20 * Math.cos(i * 0.4 + seed));
-
-      result.push({ label, dinero: Math.abs(dinero), limpiezas: Math.abs(limpiezas), km: Math.abs(km) });
-    }
-    return result;
-  }, [period, customDesde, customHasta]);
+    return aggregateDailyData(
+        workers,
+        normalCleans,
+        initialCleans,
+        handymanRecords,
+        period,
+        customDesde,
+        customHasta
+    );
+  }, [period, customDesde, customHasta, workers, normalCleans, initialCleans, handymanRecords]);
 
   // Aggregate Stats
   const stats = useMemo(() => {

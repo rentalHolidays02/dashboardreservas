@@ -40,6 +40,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
     titularCuenta: '',
     accommodations: [] as string[],
     netMoneyMonth: 0,
+    owedMoney: 0,
     cleansCountMonth: 0,
     kmsMonth: 0,
   };

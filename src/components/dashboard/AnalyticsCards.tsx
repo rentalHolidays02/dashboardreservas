@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HelpCircle, TrendingUp, CalendarRange, X } from 'lucide-react';
-import { CheckInOut, Worker } from '../../services/mockData';
+import { CheckInOut, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
 import { useTheme } from '../../context/ThemeContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from 'recharts';
 import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
+import { formatName } from '../../utils/formatters';
+import { aggregateDailyData } from '../../utils/analytics';
 
 interface AnalyticsCardsProps {
   checkIns: CheckInOut[];
@@ -16,6 +19,12 @@ interface AnalyticsCardsProps {
   period: Period;
   customDesde: string;
   customHasta: string;
+  normalCleans?: NormalCleanRecord[];
+  initialCleans?: InitialCleanRecord[];
+  handymanRecords?: HandymanRecord[];
+  activeNormalCheckins?: NormalCleanRecord[];
+  activeInitialCheckins?: InitialCleanRecord[];
+  activeHandymanCheckins?: HandymanRecord[];
 }
 
 export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
@@ -66,70 +75,6 @@ const PulseDot: React.FC<{
 
 type ChartPoint = { label: string; valor: number };
 
-const BASELINE_MONTHLY = 1250;
-
-const generateBaseData = (period: Exclude<Period, 'personalizado'>): ChartPoint[] => {
-  const today = new Date('2026-03-31');
-
-  if (period === 'semanal') {
-    const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const vals   = [820, 940, 1010, 1090, 1180, 980, 1050];
-    return labels.map((label, i) => ({ label, valor: vals[i] }));
-  }
-
-  if (period === 'mensual') {
-    const base = [780, 810, 830, 870, 850, 900, 920, 880, 940, 960,
-                  930, 970, 1000, 990, 1020, 1050, 1030, 1080, 1100, 1070,
-                  1110, 1090, 1140, 1160, 1130, 1180, 1210, 1190, 1230, 1250];
-    const result: ChartPoint[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d   = new Date(today);
-      d.setDate(today.getDate() - i);
-      const day = d.getDate();
-      const mon = d.toLocaleString('es-ES', { month: 'short' });
-      result.push({ label: `${day} ${mon}`, valor: base[29 - i] });
-    }
-    return result;
-  }
-
-  const vals = [640, 700, 720, 780, 760, 820, 850, 900, 880, 950, 980, 1040, 1090];
-  const result: ChartPoint[] = [];
-  for (let i = 12; i >= 0; i--) {
-    const d   = new Date(today);
-    d.setDate(today.getDate() - i * 7);
-    const day = d.getDate();
-    const mon = d.toLocaleString('es-ES', { month: 'short' });
-    result.push({ label: `${day} ${mon}`, valor: vals[12 - i] });
-  }
-  return result;
-};
-
-const generateCustomData = (desde: string, hasta: string): ChartPoint[] => {
-  if (!desde || !hasta || desde > hasta) return [];
-  const start = new Date(desde + 'T00:00:00');
-  const end   = new Date(hasta + 'T00:00:00');
-  const days  = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-  if (days <= 0) return [];
-
-  const result: ChartPoint[] = [];
-  const seed = start.getDate() + start.getMonth() * 31;
-  for (let i = 0; i < Math.min(days, 90); i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const valor = Math.round(800 + 250 * Math.sin(i * 0.4 + seed) + 150 * Math.sin(i * 0.9 + seed * 0.5));
-    const day = d.getDate();
-    const mon = d.toLocaleString('es-ES', { month: 'short' });
-    result.push({ label: `${day} ${mon}`, valor: Math.abs(valor) });
-  }
-  return result;
-};
-
-const BASE_DATA: Record<Exclude<Period, 'personalizado'>, ChartPoint[]> = {
-  semanal:    generateBaseData('semanal'),
-  mensual:    generateBaseData('mensual'),
-  trimestral: generateBaseData('trimestral'),
-};
-
 const PERIOD_OPTIONS: { id: Period; label: string }[] = [
   { id: 'semanal',       label: 'Semanal' },
   { id: 'mensual',       label: 'Mensual' },
@@ -153,11 +98,16 @@ const CustomTooltip: React.FC<{
 
 
 const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ 
-  checkIns, selectedWorker, onWorkerSelect, workers, period, customDesde, customHasta 
+  checkIns, selectedWorker, onWorkerSelect, workers = [], period, customDesde, customHasta,
+  normalCleans = [], initialCleans = [], handymanRecords = [],
+  activeNormalCheckins = [], activeInitialCheckins = [], activeHandymanCheckins = []
 }) => {
+  const navigate = useNavigate();
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
-    workers?.forEach(w => { if (w.photo) map[w.fullName] = w.photo; });
+    workers?.forEach(w => { 
+      if (w.photo) map[formatName(w.fullName)] = w.photo; 
+    });
     return map;
   }, [workers]);
   
@@ -185,16 +135,21 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
     }
   }, [selectedWorker?.id]);
 
-  const chartData = useMemo<ChartPoint[]>(() => {
-    const base: ChartPoint[] =
-      period === 'personalizado'
-        ? generateCustomData(customDesde, customHasta)
-        : BASE_DATA[period];
+  const chartData = useMemo(() => {
+    const dailyData = aggregateDailyData(
+      workers,
+      normalCleans,
+      initialCleans,
+      handymanRecords,
+      period,
+      customDesde,
+      customHasta,
+      selectedWorker?.id
+    );
 
-    if (!selectedWorker) return base;
-    const scale = selectedWorker.netMoneyMonth / BASELINE_MONTHLY;
-    return base.map(d => ({ ...d, valor: Math.round(d.valor * scale) }));
-  }, [period, customDesde, customHasta, selectedWorker]);
+    // Mapear al formato esperado por el gráfico de AnalyticsCards (valor)
+    return dailyData.map(d => ({ label: d.label, valor: d.dinero }));
+  }, [period, customDesde, customHasta, selectedWorker, workers, normalCleans, initialCleans, handymanRecords]);
 
   const prevCustom = useRef('');
   useEffect(() => {
@@ -205,6 +160,86 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
       setChartKey(k => k + 1);
     }
   }, [customDesde, customHasta, period]);
+
+  const combinedActivity = useMemo(() => {
+    const activity: any[] = [];
+
+    // 1. Trabajando (Checkins activos)
+    activeNormalCheckins.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkinFecha,
+        isFinished: false,
+        type: 'Limpieza Normal'
+      });
+    });
+
+    activeInitialCheckins.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkinFecha,
+        isFinished: false,
+        type: 'Limpieza Inicial'
+      });
+    });
+
+    activeHandymanCheckins.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.alojamiento,
+        timestamp: r.fechaLlegada,
+        isFinished: false,
+        type: 'Manitas'
+      });
+    });
+
+    // 2. Finalizado (Checkouts)
+    normalCleans.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkoutFecha || r.checkinFecha,
+        isFinished: true,
+        type: 'Limpieza Normal'
+      });
+    });
+
+    initialCleans.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkoutFecha || r.checkinFecha,
+        isFinished: true,
+        type: 'Limpieza Inicial'
+      });
+    });
+
+    handymanRecords.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.alojamiento,
+        timestamp: r.fechaFin || r.fechaLlegada,
+        isFinished: true,
+        type: 'Manitas'
+      });
+    });
+
+    // Ordenar por timestamp descendente
+    return activity.sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        if (isNaN(timeA) || isNaN(timeB)) return 0;
+        return timeB - timeA;
+    });
+  }, [normalCleans, initialCleans, handymanRecords, activeNormalCheckins, activeInitialCheckins, activeHandymanCheckins]);
 
   const xInterval = period === 'mensual' ? 4 : period === 'trimestral' ? 1 : period === 'personalizado' && chartData.length > 30 ? Math.floor(chartData.length / 10) : 0;
   const total          = chartData.reduce((acc, d) => acc + d.valor, 0);
@@ -232,7 +267,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
                 onClick={() => onWorkerSelect && onWorkerSelect(null)}
                 className="inline-flex items-center gap-1.5 text-[11px] bg-orange-50/50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200/50 dark:border-orange-800/50 rounded-lg px-2 py-1 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/50 group"
               >
-                <span className="font-medium">{selectedWorker.fullName}</span>
+                <span className="font-medium">{formatName(selectedWorker.fullName)}</span>
                 <X size={12} className="text-orange-400 group-hover:text-orange-600" />
               </button>
             )}
@@ -290,43 +325,57 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         </div>
       </div>
 
-      {/* Módulo 2: Actividad de limpiadores */}
+      {/* Módulo 2: Actividad (Limpieza normal, inicial y manitas) */}
       <div className="flex flex-col gap-2 min-h-0">
-        {checkIns.length === 0 ? (
+        <div className="px-1 mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-wider">Actividad Reciente</span>
+        </div>
+        
+        {combinedActivity.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <span className="text-xs text-slate-400 dark:text-stone-500">Sin actividad registrada</span>
           </div>
         ) : (
-          checkIns.slice(0, 4).map(entry => {
-            const isFinished = entry.type === 'check-out';
+          combinedActivity.slice(0, 4).map(entry => {
+            const formattedCleanerName = formatName(entry.cleanerName);
             return (
               <div
                 key={entry.id}
                 className={`bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-white/60 dark:border-stone-700/50 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white dark:hover:bg-stone-900/80 ${
-                  isFinished ? 'opacity-30' : 'opacity-100'
+                  entry.isFinished ? 'opacity-50' : 'opacity-100'
                 }`}
               >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
-                  {photoMap[entry.cleanerName] ? (
-                    <img src={photoMap[entry.cleanerName]} alt={entry.cleanerName} className="w-full h-full object-cover" />
+                  {photoMap[formattedCleanerName] ? (
+                    <img src={photoMap[formattedCleanerName]} alt={formattedCleanerName} className="w-full h-full object-cover" />
                   ) : (
                     <span className="w-full h-full flex items-center justify-center text-xs text-slate-500 dark:text-stone-400 font-medium">
-                      {entry.cleanerName.charAt(0)}
+                      {formattedCleanerName.charAt(0)}
                     </span>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{entry.cleanerName}</p>
-                  <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{entry.accommodation}</p>
+                <div className="min-w-0 pr-2">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-stone-300 truncate">{formattedCleanerName}</p>
+                  <a 
+                    href={entry.checkinUbicacion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.checkinUbicacion)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.accommodation)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors block truncate max-w-[140px]"
+                    title={entry.accommodation}
+                  >
+                    {entry.accommodation}
+                  </a>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-0.5 flex-shrink-0 pl-2">
-                <span className="text-[11px] text-slate-400 dark:text-stone-500 tabular-nums">{fmtTime(entry.timestamp)}</span>
+                <span className="text-[10px] text-slate-400 dark:text-stone-500 tabular-nums">
+                  {new Date(entry.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </span>
                 <span className="text-xs">
-                  {entry.type === 'check-in'
+                  {!entry.isFinished
                     ? <WorkingBadge />
-                    : <span className="text-[11px] text-slate-400 dark:text-stone-500">Finalizado</span>
+                    : <span className="text-[10px] text-slate-400 dark:text-stone-500 font-medium">Finalizado</span>
                   }
                 </span>
                 </div>
@@ -335,7 +384,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
           })
         )}
 
-        <button className="text-xs text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors text-center py-1 cursor-not-allowed select-none">
+        <button 
+          onClick={() => navigate('/cleans')}
+          className="text-xs text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors text-center py-2"
+        >
           Mostrar más
         </button>
       </div>

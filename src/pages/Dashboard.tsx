@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AnalyticsCards from '../components/dashboard/AnalyticsCards';
 import WorkersTable from '../components/dashboard/WorkersTable';
 import { appsScriptApi } from '../services/api';
-import { Worker, CheckInOut } from '../services/mockData';
+import { Worker, CheckInOut, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import { Loader2, Search, Filter } from 'lucide-react';
 import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -10,6 +10,12 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 const Dashboard: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInOut[]>([]);
+  const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
+  const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
+  const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
+  const [activeNormalCheckins, setActiveNormalCheckins] = useState<NormalCleanRecord[]>([]);
+  const [activeInitialCheckins, setActiveInitialCheckins] = useState<InitialCleanRecord[]>([]);
+  const [activeHandymanCheckins, setActiveHandymanCheckins] = useState<HandymanRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,12 +29,27 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [workersData, checkInsData] = await Promise.all([
+        const [
+          workersData, checkInsData, normalData, initialData, handymanData,
+          activeNormalData, activeInitialData, activeHandymanData
+        ] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getRecentCheckIns(),
+          appsScriptApi.getNormalCleans(),
+          appsScriptApi.getInitialCleans(),
+          appsScriptApi.getHandymanRecords(),
+          appsScriptApi.getNormalCheckins(),
+          appsScriptApi.getInitialCheckins(),
+          appsScriptApi.getHandymanCheckins(),
         ]);
         setWorkers(workersData);
         setCheckIns(checkInsData);
+        setNormalCleans(normalData);
+        setInitialCleans(initialData);
+        setHandymanRecords(handymanData);
+        setActiveNormalCheckins(activeNormalData);
+        setActiveInitialCheckins(activeInitialData);
+        setActiveHandymanCheckins(activeHandymanData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -118,6 +139,12 @@ const Dashboard: React.FC = () => {
         period={period}
         customDesde={customDesde}
         customHasta={customHasta}
+        normalCleans={normalCleans}
+        initialCleans={initialCleans}
+        handymanRecords={handymanRecords}
+        activeNormalCheckins={activeNormalCheckins}
+        activeInitialCheckins={activeInitialCheckins}
+        activeHandymanCheckins={activeHandymanCheckins}
       />
 
       {/* Bloque B: Tabla de Trabajadores */}
