@@ -277,10 +277,11 @@ export const appsScriptApi = {
             pagoPorReserva: parseExcelNumber(getVal('PAGO POR RESERVA')),
             precioPorKm: parseExcelNumber(getVal('KILOMETRAJE')),
             notes: String(getVal('OBSERVACIONES') || ''),
-            // Campos de resumen (se calculan o vienen de otro sitio)
-            netMoneyMonth: 0,
-            cleansCountMonth: 0,
-            kmsMonth: 0,
+            // Campos de resumen (se cogen de la hoja Trabajadores)
+            netMoneyMonth: parseExcelNumber(getVal('DINERO NETO') || getVal('Total Generado') || getVal('INGRESOS')),
+            owedMoney: parseExcelNumber(getVal('DEBIDO') || getVal('A PAGAR') || getVal('SALDO') || getVal('PENDIENTE')),
+            cleansCountMonth: parseExcelNumber(getVal('LIMPIEZAS') || getVal('Reserva')),
+            kmsMonth: parseExcelNumber(getVal('Kms') || getVal('Km')),
             accommodations: []
           };
         })

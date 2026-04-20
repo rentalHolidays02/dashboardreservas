@@ -11,6 +11,7 @@ export interface Worker {
   email?: string;
   dni?: string;
   netMoneyMonth: number;
+  owedMoney: number;
   cleansCountMonth: number;
   kmsMonth: number;
   accommodations: string[];
@@ -128,6 +129,7 @@ export const MOCK_WORKERS: Worker[] = [
     email: 'juan.perez@rhpagos.es',
     dni: '12345678A',
     netMoneyMonth: 1250.50,
+    owedMoney: 450.00,
     cleansCountMonth: 12,
     kmsMonth: 450,
     accommodations: ['Penthouse Diagonal', 'Casa Marina 3B', 'Ático Sol 7'],
@@ -141,6 +143,7 @@ export const MOCK_WORKERS: Worker[] = [
     email: 'maria.garcia@rhpagos.es',
     dni: '23456789B',
     netMoneyMonth: 980.20,
+    owedMoney: 0,
     cleansCountMonth: 8,
     kmsMonth: 120,
     accommodations: ['Apt. Ramblas 12', 'Loft Born 2'],
@@ -154,6 +157,7 @@ export const MOCK_WORKERS: Worker[] = [
     email: 'carlos.rodriguez@rhpagos.es',
     dni: '34567890C',
     netMoneyMonth: 1560.00,
+    owedMoney: 280.50,
     cleansCountMonth: 15,
     kmsMonth: 600,
     accommodations: ['Estudio Gracia 5', 'Casa Marina 3B', 'Loft Born 2', 'Ático Sol 7'],
@@ -167,6 +171,7 @@ export const MOCK_WORKERS: Worker[] = [
     email: 'ana.martinez@rhpagos.es',
     dni: '45678901D',
     netMoneyMonth: 1100.00,
+    owedMoney: 120.00,
     cleansCountMonth: 10,
     kmsMonth: 300,
     accommodations: ['Ático Sol 7'],

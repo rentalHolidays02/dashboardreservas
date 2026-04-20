@@ -81,7 +81,7 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
         </div>
         <div className="px-4 py-2.5 text-center flex flex-col justify-center">
           <div className="text-sm font-bold text-orange-600 dark:text-orange-400 tabular-nums">
-            {(worker.netMoneyMonth ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+            {(worker.owedMoney ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
           </div>
           <div className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Por cobrar</div>
         </div>

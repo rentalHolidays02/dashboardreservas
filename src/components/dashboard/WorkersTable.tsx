@@ -9,9 +9,9 @@ interface WorkersTableProps {
   onWorkerSelect?: (w: Worker | null) => void;
 }
 
-const COL_WORKERS = 'grid-cols-[1.8fr_1.2fr_1fr_1fr_0.8fr_140px]';
+const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px]';
 
-type SortKey = 'none' | 'net_asc' | 'net_desc' | 'cleans_desc' | 'kms_desc';
+type SortKey = 'none' | 'owed_asc' | 'owed_desc' | 'cleans_desc' | 'kms_desc';
 
 const AccommodationTags: React.FC<{ items: string[] }> = ({ items }) => {
   if (!items || items.length === 0) {
@@ -26,7 +26,7 @@ const AccommodationTags: React.FC<{ items: string[] }> = ({ items }) => {
   return (
     <div className="flex items-center gap-1.5">
       {visible.map((a) => (
-        <span key={a} className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2.5 py-1 rounded-md max-w-[120px] truncate soft-shadow">
+        <span key={a} className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2.5 py-1 rounded-md max-w-[160px] truncate soft-shadow">
           {a}
         </span>
       ))}
@@ -60,8 +60,8 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
     if (accommodation)
       result = result.filter(w => w.accommodations.includes(accommodation));
 
-    if (sort === 'net_asc')     result = [...result].sort((a, b) => a.netMoneyMonth - b.netMoneyMonth);
-    if (sort === 'net_desc')    result = [...result].sort((a, b) => b.netMoneyMonth - a.netMoneyMonth);
+    if (sort === 'owed_asc')    result = [...result].sort((a, b) => a.owedMoney - b.owedMoney);
+    if (sort === 'owed_desc')   result = [...result].sort((a, b) => b.owedMoney - a.owedMoney);
     if (sort === 'cleans_desc') result = [...result].sort((a, b) => b.cleansCountMonth - a.cleansCountMonth);
     if (sort === 'kms_desc')    result = [...result].sort((a, b) => b.kmsMonth - a.kmsMonth);
 
@@ -123,8 +123,8 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
               className="appearance-none pl-3 pr-7 py-1.5 text-xs text-slate-600 dark:text-stone-400 bg-white/80 dark:bg-stone-900 border border-white/60 dark:border-stone-700/50 rounded-lg outline-none focus:bg-white dark:focus:bg-stone-900 focus:border-stone-100 dark:focus:border-stone-600 transition-colors cursor-pointer"
             >
               <option value="none">Ordenar por...</option>
-              <option value="net_desc">Mayor dinero neto</option>
-              <option value="net_asc">Menor dinero neto</option>
+              <option value="owed_desc">Mayor dinero debido</option>
+              <option value="owed_asc">Menor dinero debido</option>
               <option value="cleans_desc">Más limpiezas</option>
               <option value="kms_desc">Más kilómetros</option>
             </select>
@@ -146,7 +146,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
         <div className={`grid ${COL_WORKERS} gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800`}>
           <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Alojamientos</span>
-          <span className="text-xs text-slate-400 dark:text-stone-500">Dinero Neto</span>
+          <span className="text-xs text-slate-400 dark:text-stone-500">Dinero Debido</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Limpiezas</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Kms</span>
           <span />
@@ -188,8 +188,8 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
 
                   <AccommodationTags items={worker.accommodations} />
 
-                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">
-                    {worker.netMoneyMonth.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                  <p className={`text-xs tabular-nums ${worker.owedMoney > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
+                    {worker.owedMoney.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                   </p>
 
                   <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{worker.cleansCountMonth}</p>

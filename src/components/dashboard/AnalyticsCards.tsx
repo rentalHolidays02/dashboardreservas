@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { HelpCircle, TrendingUp, CalendarRange, X } from 'lucide-react';
-import { CheckInOut, Worker } from '../../services/mockData';
+import { CheckInOut, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
 import { useTheme } from '../../context/ThemeContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -8,6 +8,7 @@ import {
 } from 'recharts';
 import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
 import { formatName } from '../../utils/formatters';
+import { aggregateDailyData } from '../../utils/analytics';
 
 interface AnalyticsCardsProps {
   checkIns: CheckInOut[];
@@ -17,6 +18,9 @@ interface AnalyticsCardsProps {
   period: Period;
   customDesde: string;
   customHasta: string;
+  normalCleans?: NormalCleanRecord[];
+  initialCleans?: InitialCleanRecord[];
+  handymanRecords?: HandymanRecord[];
 }
 
 export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
@@ -67,70 +71,6 @@ const PulseDot: React.FC<{
 
 type ChartPoint = { label: string; valor: number };
 
-const BASELINE_MONTHLY = 1250;
-
-const generateBaseData = (period: Exclude<Period, 'personalizado'>): ChartPoint[] => {
-  const today = new Date('2026-03-31');
-
-  if (period === 'semanal') {
-    const labels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const vals   = [820, 940, 1010, 1090, 1180, 980, 1050];
-    return labels.map((label, i) => ({ label, valor: vals[i] }));
-  }
-
-  if (period === 'mensual') {
-    const base = [780, 810, 830, 870, 850, 900, 920, 880, 940, 960,
-                  930, 970, 1000, 990, 1020, 1050, 1030, 1080, 1100, 1070,
-                  1110, 1090, 1140, 1160, 1130, 1180, 1210, 1190, 1230, 1250];
-    const result: ChartPoint[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d   = new Date(today);
-      d.setDate(today.getDate() - i);
-      const day = d.getDate();
-      const mon = d.toLocaleString('es-ES', { month: 'short' });
-      result.push({ label: `${day} ${mon}`, valor: base[29 - i] });
-    }
-    return result;
-  }
-
-  const vals = [640, 700, 720, 780, 760, 820, 850, 900, 880, 950, 980, 1040, 1090];
-  const result: ChartPoint[] = [];
-  for (let i = 12; i >= 0; i--) {
-    const d   = new Date(today);
-    d.setDate(today.getDate() - i * 7);
-    const day = d.getDate();
-    const mon = d.toLocaleString('es-ES', { month: 'short' });
-    result.push({ label: `${day} ${mon}`, valor: vals[12 - i] });
-  }
-  return result;
-};
-
-const generateCustomData = (desde: string, hasta: string): ChartPoint[] => {
-  if (!desde || !hasta || desde > hasta) return [];
-  const start = new Date(desde + 'T00:00:00');
-  const end   = new Date(hasta + 'T00:00:00');
-  const days  = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-  if (days <= 0) return [];
-
-  const result: ChartPoint[] = [];
-  const seed = start.getDate() + start.getMonth() * 31;
-  for (let i = 0; i < Math.min(days, 90); i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const valor = Math.round(800 + 250 * Math.sin(i * 0.4 + seed) + 150 * Math.sin(i * 0.9 + seed * 0.5));
-    const day = d.getDate();
-    const mon = d.toLocaleString('es-ES', { month: 'short' });
-    result.push({ label: `${day} ${mon}`, valor: Math.abs(valor) });
-  }
-  return result;
-};
-
-const BASE_DATA: Record<Exclude<Period, 'personalizado'>, ChartPoint[]> = {
-  semanal:    generateBaseData('semanal'),
-  mensual:    generateBaseData('mensual'),
-  trimestral: generateBaseData('trimestral'),
-};
-
 const PERIOD_OPTIONS: { id: Period; label: string }[] = [
   { id: 'semanal',       label: 'Semanal' },
   { id: 'mensual',       label: 'Mensual' },
@@ -154,7 +94,8 @@ const CustomTooltip: React.FC<{
 
 
 const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ 
-  checkIns, selectedWorker, onWorkerSelect, workers, period, customDesde, customHasta 
+  checkIns, selectedWorker, onWorkerSelect, workers = [], period, customDesde, customHasta,
+  normalCleans = [], initialCleans = [], handymanRecords = []
 }) => {
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -186,16 +127,21 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
     }
   }, [selectedWorker?.id]);
 
-  const chartData = useMemo<ChartPoint[]>(() => {
-    const base: ChartPoint[] =
-      period === 'personalizado'
-        ? generateCustomData(customDesde, customHasta)
-        : BASE_DATA[period];
+  const chartData = useMemo(() => {
+    const dailyData = aggregateDailyData(
+      workers,
+      normalCleans,
+      initialCleans,
+      handymanRecords,
+      period,
+      customDesde,
+      customHasta,
+      selectedWorker?.id
+    );
 
-    if (!selectedWorker) return base;
-    const scale = selectedWorker.netMoneyMonth / BASELINE_MONTHLY;
-    return base.map(d => ({ ...d, valor: Math.round(d.valor * scale) }));
-  }, [period, customDesde, customHasta, selectedWorker]);
+    // Mapear al formato esperado por el gráfico de AnalyticsCards (valor)
+    return dailyData.map(d => ({ label: d.label, valor: d.dinero }));
+  }, [period, customDesde, customHasta, selectedWorker, workers, normalCleans, initialCleans, handymanRecords]);
 
   const prevCustom = useRef('');
   useEffect(() => {
