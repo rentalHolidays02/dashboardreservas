@@ -7,6 +7,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
+import { formatName } from '../../utils/formatters';
 
 interface AnalyticsCardsProps {
   checkIns: CheckInOut[];
@@ -232,7 +233,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
                 onClick={() => onWorkerSelect && onWorkerSelect(null)}
                 className="inline-flex items-center gap-1.5 text-[11px] bg-orange-50/50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200/50 dark:border-orange-800/50 rounded-lg px-2 py-1 transition-all hover:bg-orange-100/50 dark:hover:bg-orange-900/50 group"
               >
-                <span className="font-medium">{selectedWorker.fullName}</span>
+                <span className="font-medium">{formatName(selectedWorker.fullName)}</span>
                 <X size={12} className="text-orange-400 group-hover:text-orange-600" />
               </button>
             )}
@@ -299,6 +300,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         ) : (
           checkIns.slice(0, 4).map(entry => {
             const isFinished = entry.type === 'check-out';
+            const formattedCleanerName = formatName(entry.cleanerName);
             return (
               <div
                 key={entry.id}
@@ -309,15 +311,15 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
                   {photoMap[entry.cleanerName] ? (
-                    <img src={photoMap[entry.cleanerName]} alt={entry.cleanerName} className="w-full h-full object-cover" />
+                    <img src={photoMap[entry.cleanerName]} alt={formattedCleanerName} className="w-full h-full object-cover" />
                   ) : (
                     <span className="w-full h-full flex items-center justify-center text-xs text-slate-500 dark:text-stone-400 font-medium">
-                      {entry.cleanerName.charAt(0)}
+                      {formattedCleanerName.charAt(0)}
                     </span>
                   )}
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{entry.cleanerName}</p>
+                  <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{formattedCleanerName}</p>
                   <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{entry.accommodation}</p>
                 </div>
               </div>

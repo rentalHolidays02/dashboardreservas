@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Pencil, Search, SlidersHorizontal, Info, X } from 'lucide-react';
 import { Worker } from '../../services/mockData';
+import { formatName } from '../../utils/formatters';
 
 interface WorkersTableProps {
   workers: Worker[];
@@ -13,6 +14,13 @@ const COL_WORKERS = 'grid-cols-[1.8fr_1.2fr_1fr_1fr_0.8fr_140px]';
 type SortKey = 'none' | 'net_asc' | 'net_desc' | 'cleans_desc' | 'kms_desc';
 
 const AccommodationTags: React.FC<{ items: string[] }> = ({ items }) => {
+  if (!items || items.length === 0) {
+    return (
+      <span className="text-[11px] text-slate-400 dark:text-stone-500 italic">
+        Ninguno
+      </span>
+    );
+  }
   const visible = items.slice(0, 1);
   const extra = items.length - 1;
   return (
@@ -73,7 +81,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
           <h3 className="text-base font-normal font-display tracking-tight text-slate-800 dark:text-stone-200">Listado de Trabajadores</h3>
           {selectedWorker && (
             <span className="inline-flex items-center gap-1.5 text-xs bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-100 dark:border-orange-800/50 rounded-md px-2 py-0.5">
-              {selectedWorker.fullName}
+              {formatName(selectedWorker.fullName)}
               <button onClick={() => onWorkerSelect?.(null)} className="hover:text-orange-800 dark:hover:text-orange-300 transition-colors">
                 <X size={10} />
               </button>
@@ -151,6 +159,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
             </li>
           ) : filtered.map((worker) => {
             const isSelected = selectedWorker?.id === worker.id;
+            const formattedName = formatName(worker.fullName);
 
             return (
               <React.Fragment key={worker.id}>
@@ -165,15 +174,15 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden transition-colors soft-shadow bg-white dark:bg-stone-800">
                       {worker.photo ? (
-                        <img src={worker.photo} alt={worker.fullName} className="w-full h-full object-cover" />
+                        <img src={worker.photo} alt={formattedName} className="w-full h-full object-cover" />
                       ) : (
                         <span className="w-full h-full flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
-                          {worker.fullName.charAt(0)}
+                          {formattedName.charAt(0)}
                         </span>
                       )}
                     </div>
                     <p className={`text-sm truncate transition-colors ${isSelected ? 'text-orange-500' : 'text-slate-800 dark:text-stone-200'}`}>
-                      {worker.fullName}
+                      {formattedName}
                     </p>
                   </div>
 
@@ -189,20 +198,20 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
                     {worker.kmsMonth} <span className="text-slate-400 dark:text-stone-500">km</span>
                   </p>
 
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-3 pr-2">
                     <button
                       onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-stone-300 hover:text-orange-600 bg-white dark:bg-stone-800 backdrop-blur-sm px-2.5 py-1.5 rounded-lg soft-shadow"
+                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 p-1 rounded-md"
+                      title="Información"
                     >
-                      <Info size={12} />
-                      Info
+                      <Info size={16} />
                     </button>
                     <button
                       onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-stone-300 hover:text-slate-900 dark:hover:text-stone-100 bg-white dark:bg-stone-800 backdrop-blur-sm px-2.5 py-1.5 rounded-lg soft-shadow"
+                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-slate-400 dark:text-stone-500 hover:text-slate-900 dark:hover:text-stone-100 p-1 rounded-md"
+                      title="Editar"
                     >
-                      <Pencil size={12} />
-                      Editar
+                      <Pencil size={16} />
                     </button>
                   </div>
                 </li>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckInOut } from '../../services/mockData';
 import { LogIn, LogOut } from 'lucide-react';
+import { formatName } from '../../utils/formatters';
 
 interface Props {
   entries: CheckInOut[];
@@ -32,7 +33,7 @@ const CheckInsModule: React.FC<Props> = ({ entries }) => {
           <tbody className="divide-y divide-slate-100 dark:divide-stone-800">
             {entries.map((entry) => (
               <tr key={entry.id} className="hover:bg-slate-50 dark:hover:bg-stone-800/50 transition-colors">
-                <td className="px-5 py-3 font-medium text-slate-800 dark:text-stone-200">{entry.cleanerName}</td>
+                <td className="px-5 py-3 font-medium text-slate-800 dark:text-stone-200">{formatName(entry.cleanerName)}</td>
                 <td className="px-5 py-3 text-slate-500 dark:text-stone-400 hidden sm:table-cell">{entry.accommodation}</td>
                 <td className="px-5 py-3 text-slate-500 dark:text-stone-400 tabular-nums">{formatTime(entry.timestamp)}</td>
                 <td className="px-5 py-3">
