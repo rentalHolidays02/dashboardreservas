@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HelpCircle, TrendingUp, CalendarRange, X } from 'lucide-react';
 import { CheckInOut, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
 import { useTheme } from '../../context/ThemeContext';
@@ -21,6 +22,9 @@ interface AnalyticsCardsProps {
   normalCleans?: NormalCleanRecord[];
   initialCleans?: InitialCleanRecord[];
   handymanRecords?: HandymanRecord[];
+  activeNormalCheckins?: NormalCleanRecord[];
+  activeInitialCheckins?: InitialCleanRecord[];
+  activeHandymanCheckins?: HandymanRecord[];
 }
 
 export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
@@ -95,11 +99,15 @@ const CustomTooltip: React.FC<{
 
 const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ 
   checkIns, selectedWorker, onWorkerSelect, workers = [], period, customDesde, customHasta,
-  normalCleans = [], initialCleans = [], handymanRecords = []
+  normalCleans = [], initialCleans = [], handymanRecords = [],
+  activeNormalCheckins = [], activeInitialCheckins = [], activeHandymanCheckins = []
 }) => {
+  const navigate = useNavigate();
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
-    workers?.forEach(w => { if (w.photo) map[w.fullName] = w.photo; });
+    workers?.forEach(w => { 
+      if (w.photo) map[formatName(w.fullName)] = w.photo; 
+    });
     return map;
   }, [workers]);
   
@@ -152,6 +160,86 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
       setChartKey(k => k + 1);
     }
   }, [customDesde, customHasta, period]);
+
+  const combinedActivity = useMemo(() => {
+    const activity: any[] = [];
+
+    // 1. Trabajando (Checkins activos)
+    activeNormalCheckins.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkinFecha,
+        isFinished: false,
+        type: 'Limpieza Normal'
+      });
+    });
+
+    activeInitialCheckins.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkinFecha,
+        isFinished: false,
+        type: 'Limpieza Inicial'
+      });
+    });
+
+    activeHandymanCheckins.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.alojamiento,
+        timestamp: r.fechaLlegada,
+        isFinished: false,
+        type: 'Manitas'
+      });
+    });
+
+    // 2. Finalizado (Checkouts)
+    normalCleans.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkoutFecha || r.checkinFecha,
+        isFinished: true,
+        type: 'Limpieza Normal'
+      });
+    });
+
+    initialCleans.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.apartamento,
+        timestamp: r.checkoutFecha || r.checkinFecha,
+        isFinished: true,
+        type: 'Limpieza Inicial'
+      });
+    });
+
+    handymanRecords.forEach(r => {
+      activity.push({
+        id: r.id,
+        cleanerName: `${r.nombre} ${r.apellidos}`,
+        accommodation: r.alojamiento,
+        timestamp: r.fechaFin || r.fechaLlegada,
+        isFinished: true,
+        type: 'Manitas'
+      });
+    });
+
+    // Ordenar por timestamp descendente
+    return activity.sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        if (isNaN(timeA) || isNaN(timeB)) return 0;
+        return timeB - timeA;
+    });
+  }, [normalCleans, initialCleans, handymanRecords, activeNormalCheckins, activeInitialCheckins, activeHandymanCheckins]);
 
   const xInterval = period === 'mensual' ? 4 : period === 'trimestral' ? 1 : period === 'personalizado' && chartData.length > 30 ? Math.floor(chartData.length / 10) : 0;
   const total          = chartData.reduce((acc, d) => acc + d.valor, 0);
@@ -237,44 +325,57 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         </div>
       </div>
 
-      {/* Módulo 2: Actividad de limpiadores */}
+      {/* Módulo 2: Actividad (Limpieza normal, inicial y manitas) */}
       <div className="flex flex-col gap-2 min-h-0">
-        {checkIns.length === 0 ? (
+        <div className="px-1 mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-wider">Actividad Reciente</span>
+        </div>
+        
+        {combinedActivity.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <span className="text-xs text-slate-400 dark:text-stone-500">Sin actividad registrada</span>
           </div>
         ) : (
-          checkIns.slice(0, 4).map(entry => {
-            const isFinished = entry.type === 'check-out';
+          combinedActivity.slice(0, 4).map(entry => {
             const formattedCleanerName = formatName(entry.cleanerName);
             return (
               <div
                 key={entry.id}
                 className={`bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-white/60 dark:border-stone-700/50 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white dark:hover:bg-stone-900/80 ${
-                  isFinished ? 'opacity-30' : 'opacity-100'
+                  entry.isFinished ? 'opacity-50' : 'opacity-100'
                 }`}
               >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 flex-shrink-0 overflow-hidden soft-shadow">
-                  {photoMap[entry.cleanerName] ? (
-                    <img src={photoMap[entry.cleanerName]} alt={formattedCleanerName} className="w-full h-full object-cover" />
+                  {photoMap[formattedCleanerName] ? (
+                    <img src={photoMap[formattedCleanerName]} alt={formattedCleanerName} className="w-full h-full object-cover" />
                   ) : (
                     <span className="w-full h-full flex items-center justify-center text-xs text-slate-500 dark:text-stone-400 font-medium">
                       {formattedCleanerName.charAt(0)}
                     </span>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-700 dark:text-stone-300 truncate">{formattedCleanerName}</p>
-                  <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{entry.accommodation}</p>
+                <div className="min-w-0 pr-2">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-stone-300 truncate">{formattedCleanerName}</p>
+                  <a 
+                    href={entry.checkinUbicacion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.checkinUbicacion)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.accommodation)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors block truncate max-w-[140px]"
+                    title={entry.accommodation}
+                  >
+                    {entry.accommodation}
+                  </a>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-0.5 flex-shrink-0 pl-2">
-                <span className="text-[11px] text-slate-400 dark:text-stone-500 tabular-nums">{fmtTime(entry.timestamp)}</span>
+                <span className="text-[10px] text-slate-400 dark:text-stone-500 tabular-nums">
+                  {new Date(entry.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                </span>
                 <span className="text-xs">
-                  {entry.type === 'check-in'
+                  {!entry.isFinished
                     ? <WorkingBadge />
-                    : <span className="text-[11px] text-slate-400 dark:text-stone-500">Finalizado</span>
+                    : <span className="text-[10px] text-slate-400 dark:text-stone-500 font-medium">Finalizado</span>
                   }
                 </span>
                 </div>
@@ -283,7 +384,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
           })
         )}
 
-        <button className="text-xs text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors text-center py-1 cursor-not-allowed select-none">
+        <button 
+          onClick={() => navigate('/cleans')}
+          className="text-xs text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300 transition-colors text-center py-2"
+        >
           Mostrar más
         </button>
       </div>

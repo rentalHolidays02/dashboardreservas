@@ -135,6 +135,83 @@ export const geocodeAddress = async (address: string): Promise<{ lat: number, ln
   return null;
 };
 
+// Geocodificación inversa con caché local
+export const reverseGeocode = async (coords: string | undefined): Promise<string | null> => {
+  if (!coords) return null;
+  const cache = JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || '{}');
+  if (cache[coords]) return cache[coords];
+
+  try {
+    const parts = coords.split(',').map(s => s.trim());
+    if (parts.length < 2) return null;
+    const [lat, lon] = parts;
+
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`;
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'BaseDatosPagosRH/1.0' }
+    });
+    const data = await response.json();
+
+    if (data && data.display_name) {
+      // Extraer una dirección más corta (Calle, Número...)
+      const addressParts = data.display_name.split(',');
+      const street = addressParts[0] || '';
+      const number = addressParts[1] || '';
+      const shortAddress = `${street}${number ? ',' + number : ''}`.trim();
+      
+      cache[coords] = shortAddress;
+      localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
+      return shortAddress;
+    }
+  } catch (error) {
+    console.warn('Reverse geocoding error for:', coords, error);
+  }
+  return null;
+};
+
+// Utilidad global para parsear fechas y horas de Excel/Sheets
+export const parseDateTime = (dateVal: any, timeVal?: any): string => {
+  if (!dateVal && !timeVal) return '';
+  
+  let datePart = String(dateVal || '').trim();
+  let timePart = String(timeVal || '12:00').trim();
+
+  // Si datePart trae fecha y hora (ej: "20/04/2026 13:05")
+  if (datePart.includes(' ') || datePart.includes(',')) {
+    const sep = datePart.includes(',') ? ',' : ' ';
+    const parts = datePart.split(sep);
+    datePart = parts[0].trim();
+    if (!timeVal) {
+      const timeMatch = parts[1]?.match(/\d{1,2}:\d{2}/);
+      if (timeMatch) timePart = timeMatch[0];
+    }
+  }
+
+  // Normalizar fecha a YYYY-MM-DD
+  let ymd = datePart;
+  if (datePart.includes('/')) {
+    const p = datePart.split('/');
+    if (p.length === 3) {
+      // Asumimos DD/MM/YYYY o YYYY/MM/DD
+      if (p[0].length === 4) ymd = `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`;
+      else ymd = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+    }
+  } else if (datePart.includes('-')) {
+    const p = datePart.split('-');
+    if (p.length === 3 && p[0].length <= 2) {
+      ymd = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+    }
+  }
+
+  // Normalizar hora a HH:mm
+  const timeMatch = timePart.match(/(\d{1,2}):(\d{2})/);
+  const h = timeMatch ? timeMatch[1].padStart(2, '0') : '12';
+  const m = timeMatch ? timeMatch[2].padStart(2, '0') : '00';
+
+  if (!ymd || ymd.length < 10) return '';
+  return `${ymd}T${h}:${m}`;
+};
+
 const parseBool = (val: any): boolean => {
   if (val === true || val === 'TRUE' || val === 'true' || val === '1') return true;
   if (typeof val === 'string') {
@@ -541,39 +618,6 @@ export const appsScriptApi = {
         const rawTel = String(getVal('TELEFONO') || '').replace(/\D/g, '');
         const cleanTel = (rawTel.startsWith('34') && rawTel.length >= 11) ? rawTel.slice(-9) : rawTel;
 
-        const parseDateInput = (val: any) => {
-          if (!val) return '';
-          let raw = String(val).trim();
-          let dateValue = raw;
-          let timeValue = "12:00"; // Hora por defecto si no trae
-
-          if (raw.includes(',')) {
-            const parts = raw.split(',');
-            dateValue = parts[0].trim();
-            const timeMatch = parts[1].match(/\d{1,2}:\d{2}/);
-            if (timeMatch) timeValue = timeMatch[0];
-          } else if (raw.includes(' ')) {
-            const parts = raw.split(' ');
-            dateValue = parts[0].trim();
-            const timeMatch = parts[1]?.match(/\d{1,2}:\d{2}/);
-            if (timeMatch) timeValue = timeMatch[0];
-          }
-
-          let ymd = dateValue;
-          if (dateValue.includes('/')) {
-            const p = dateValue.split('/');
-            if (p.length === 3) ymd = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-          } else if (dateValue.includes('-')) {
-             const p = dateValue.split('-');
-             if (p[0].length <= 2 && p.length === 3) {
-                ymd = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-             }
-          }
-
-          const [h, m] = timeValue.split(':');
-          return `${ymd}T${h.padStart(2, '0')}:${m}`;
-        };
-
         const parsePaymentMethod = (val: any) => {
           const s = String(val || '').trim().toLowerCase();
           if (s.includes('bizum')) return 'Bizum';
@@ -589,8 +633,8 @@ export const appsScriptApi = {
           fechaUbicacionEntrega: String(getVal('FECHA Y UBICACION DE LLAVES ENTREGADAS') || ''),
           apartamento: String(getVal('APARTAMENTO') || ''),
           nombreCliente: String(getVal('NOMBRE CLIENTE') || ''),
-          fechaEntradaReserva: parseDateInput(getVal('FECHA ENTRADA RESERVA')),
-          fechaSalidaReserva: parseDateInput(getVal('FECHA SALIDA RE') || getVal('FECHA SALIDA RESERVA')),
+          fechaEntradaReserva: parseDateTime(getVal('FECHA ENTRADA RESERVA')),
+          fechaSalidaReserva: parseDateTime(getVal('FECHA SALIDA RE') || getVal('FECHA SALIDA RESERVA')),
           entregaLlaves: String(getVal('ENTREGA LLAVES')).toUpperCase() === 'SÍ',
           sabanasToallas: String(getVal('SÁBANAS Y TOALLAS') || ''),
           km: parseExcelNumber(getVal('KM')),
@@ -868,15 +912,15 @@ export const appsScriptApi = {
             telefono: String(getVal('Telefono') || ''),
             nombre,
             apellidos,
-            checkinFecha: String(getVal('Checkin Fecha Trabajador') || ''),
+            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Limpieza Entrada')),
             checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            checkoutFecha: String(getVal('Checkout Fecha Trabajador') || ''),
+            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador'), getVal('Hora Limpieza Salida')),
             checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
             apartamento: String(getVal('Apartamento') || ''),
             horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
             horaSalida: String(getVal('Hora Limpieza Salida') || ''),
             sigueHuesped: parseBool(getVal('Sigue Huesped')),
-            fechaSalidaReserva: String(getVal('Fecha Salida Reserva') || ''),
+            fechaSalidaReserva: parseDateTime(getVal('Fecha Salida Reserva')),
             recogeLlaves: parseBool(getVal('Recoge Llaves')),
             km: parseExcelNumber(getVal('Km')),
             observaciones: String(getVal('Observaciones') || ''),
@@ -962,9 +1006,9 @@ export const appsScriptApi = {
             telefono: String(getVal('Telefono') || ''),
             nombre,
             apellidos,
-            checkinFecha: String(getVal('Checkin Fecha Trabajador') || ''),
+            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Limpieza Entrada')),
             checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            checkoutFecha: String(getVal('Checkout Fecha Trabajador') || ''),
+            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador'), getVal('Hora Limpieza Salida')),
             checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
             apartamento: String(getVal('Apartamento') || ''),
             horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
@@ -1022,9 +1066,9 @@ export const appsScriptApi = {
             telefono: String(getVal('Telefono') || ''),
             nombre,
             apellidos,
-            fechaLlegada: String(getVal('Checkin Fecha Trabajador') || ''),
+            fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reparacion Entrada')),
             ubicacionInicio: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            fechaFin: String(getVal('Checkout Fecha Trabajador') || ''),
+            fechaFin: parseDateTime(getVal('Checkout Fecha Trabajador'), getVal('Hora Reparacion Salida')),
             ubicacionFin: String(getVal('Checkout Ubicacion Trabajador') || ''),
             alojamiento: String(getVal('Apartamento') || ''),
             horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
@@ -1040,6 +1084,123 @@ export const appsScriptApi = {
     } catch (error) {
       console.error('Error fetching handyman records from Sheets:', error);
       return MOCK_HANDYMAN_RECORDS;
+    }
+  },
+
+  getNormalCheckins: async (): Promise<NormalCleanRecord[]> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Error fetching normal checkins: ${response.statusText}`);
+      const data = await response.json();
+      if (!data.values || data.values.length <= 1) return [];
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      return Promise.all(rows.map(async (row: any[], index: number): Promise<NormalCleanRecord> => {
+        const getVal = (headerName: string) => {
+          const norm = normalizeHeader(headerName);
+          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+          return idx !== -1 ? row[idx] : undefined;
+        };
+
+        const apartamento = String(getVal('Apartamento') || '');
+        const coords = String(getVal('Checkin Ubicacion Trabajador') || '');
+        const realStreet = (!apartamento && coords) ? await reverseGeocode(coords) : null;
+
+        return {
+          id: `check_norm_${index + 2}`,
+          telefono: String(getVal('Telefono') || ''),
+          nombre: String(getVal('Nombre') || ''),
+          apellidos: String(getVal('Apellidos') || ''),
+          checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reserva Entrada')),
+          checkinUbicacion: coords,
+          apartamento: apartamento || realStreet || 'Ubicación Desconocida',
+          horaEntrada: String(getVal('Hora Reserva Entrada') || ''),
+          checked: false
+        } as NormalCleanRecord;
+      }));
+    } catch (error) {
+      console.error('Error getNormalCheckins:', error);
+      return [];
+    }
+  },
+
+  getInitialCheckins: async (): Promise<InitialCleanRecord[]> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Inicial!A:P?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Error fetching initial checkins: ${response.statusText}`);
+      const data = await response.json();
+      if (!data.values || data.values.length <= 1) return [];
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      return Promise.all(rows.map(async (row: any[], index: number): Promise<InitialCleanRecord> => {
+        const getVal = (headerName: string) => {
+          const norm = normalizeHeader(headerName);
+          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+          return idx !== -1 ? row[idx] : undefined;
+        };
+
+        const apartamento = String(getVal('Apartamento') || '');
+        const coords = String(getVal('Checkin Ubicacion Trabajador') || '');
+        const realStreet = (!apartamento && coords) ? await reverseGeocode(coords) : null;
+
+        return {
+          id: `check_init_${index + 2}`,
+          telefono: String(getVal('Telefono') || ''),
+          nombre: String(getVal('Nombre') || ''),
+          apellidos: String(getVal('Apellidos') || ''),
+          checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reserva Entrada')),
+          checkinUbicacion: coords,
+          apartamento: apartamento || realStreet || 'Ubicación Desconocida',
+          horaEntrada: String(getVal('Hora Reserva Entrada') || ''),
+          checked: false
+        } as InitialCleanRecord;
+      }));
+    } catch (error) {
+      console.error('Error getInitialCheckins:', error);
+      return [];
+    }
+  },
+
+  getHandymanCheckins: async (): Promise<HandymanRecord[]> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Manitas!A:M?key=${GOOGLE_API_KEY}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Error fetching handyman checkins: ${response.statusText}`);
+      const data = await response.json();
+      if (!data.values || data.values.length <= 1) return [];
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1);
+
+      return Promise.all(rows.map(async (row: any[], index: number): Promise<HandymanRecord> => {
+        const getVal = (headerName: string) => {
+          const norm = normalizeHeader(headerName);
+          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+          return idx !== -1 ? row[idx] : undefined;
+        };
+
+        const apartamento = String(getVal('Apartamento') || '');
+        const coords = String(getVal('Checkin Ubicacion Trabajador') || '');
+        const realStreet = (!apartamento && coords) ? await reverseGeocode(coords) : null;
+
+        return {
+          id: `check_hm_${index + 2}`,
+          telefono: String(getVal('Telefono') || ''),
+          nombre: String(getVal('Nombre') || ''),
+          apellidos: String(getVal('Apellidos') || ''),
+          fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reparacion Entrada')),
+          ubicacionInicio: coords,
+          alojamiento: apartamento || realStreet || 'Ubicación Desconocida',
+          horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
+          estadoCompletado: 'Trabajando...',
+        } as HandymanRecord;
+      }));
+    } catch (error) {
+      console.error('Error getHandymanCheckins:', error);
+      return [];
     }
   },
 

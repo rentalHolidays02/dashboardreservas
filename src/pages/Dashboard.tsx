@@ -13,6 +13,9 @@ const Dashboard: React.FC = () => {
   const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
   const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
+  const [activeNormalCheckins, setActiveNormalCheckins] = useState<NormalCleanRecord[]>([]);
+  const [activeInitialCheckins, setActiveInitialCheckins] = useState<InitialCleanRecord[]>([]);
+  const [activeHandymanCheckins, setActiveHandymanCheckins] = useState<HandymanRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,18 +29,27 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [workersData, checkInsData, normalData, initialData, handymanData] = await Promise.all([
+        const [
+          workersData, checkInsData, normalData, initialData, handymanData,
+          activeNormalData, activeInitialData, activeHandymanData
+        ] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getRecentCheckIns(),
           appsScriptApi.getNormalCleans(),
           appsScriptApi.getInitialCleans(),
           appsScriptApi.getHandymanRecords(),
+          appsScriptApi.getNormalCheckins(),
+          appsScriptApi.getInitialCheckins(),
+          appsScriptApi.getHandymanCheckins(),
         ]);
         setWorkers(workersData);
         setCheckIns(checkInsData);
         setNormalCleans(normalData);
         setInitialCleans(initialData);
         setHandymanRecords(handymanData);
+        setActiveNormalCheckins(activeNormalData);
+        setActiveInitialCheckins(activeInitialData);
+        setActiveHandymanCheckins(activeHandymanData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -130,6 +142,9 @@ const Dashboard: React.FC = () => {
         normalCleans={normalCleans}
         initialCleans={initialCleans}
         handymanRecords={handymanRecords}
+        activeNormalCheckins={activeNormalCheckins}
+        activeInitialCheckins={activeInitialCheckins}
+        activeHandymanCheckins={activeHandymanCheckins}
       />
 
       {/* Bloque B: Tabla de Trabajadores */}
