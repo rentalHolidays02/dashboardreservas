@@ -333,6 +333,12 @@ const getCleanSheetName = (type: CleanSheetType): string => {
   return 'Checkout_Manitas';
 };
 
+const getCheckinSheetName = (type: string): string => {
+  if (type === 'normal') return 'Checkin_Limpieza_Normal';
+  if (type === 'initial') return 'Checkin_Limpieza_Inicial';
+  return 'Checkin_Manitas';
+};
+
 const parseRowIndexFromId = (id: string): number => {
   const rowIndex = parseInt(String(id || '').split('_')[1], 10);
   if (!Number.isFinite(rowIndex) || rowIndex <= 1) {
@@ -1477,6 +1483,27 @@ export const appsScriptApi = {
       initial: initial.filter(r => matchesWorkerByPhone(r.telefono, workerPhone)),
       handyman: handyman.filter(r => matchesWorkerByPhone(r.telefono, workerPhone)),
     };
+  },
+
+  deleteCheckinRecord: async (type: string, id: string): Promise<boolean> => {
+    try {
+      const sheetName = getCheckinSheetName(type);
+      const rowIndex = parseRowIndexFromId(id);
+      await fetch(CLEANS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'deleteCheckout', // The script uses this action for generic row deletion
+          sheetName,
+          rowIndex
+        })
+      });
+      return true;
+    } catch (error) {
+      console.error('Error deleteCheckinRecord:', error);
+      throw error;
+    }
   }
 };
 

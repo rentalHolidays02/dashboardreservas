@@ -20,7 +20,10 @@ function getAllowedSheets() {
   return {
     'Checkout_Limpieza_Normal': true,
     'Checkout_Limpieza_Inicial': true,
-    'Checkout_Manitas': true
+    'Checkout_Manitas': true,
+    'Checkin_Limpieza_Normal': true,
+    'Checkin_Limpieza_Inicial': true,
+    'Checkin_Manitas': true
   };
 }
 

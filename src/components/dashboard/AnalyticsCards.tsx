@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HelpCircle, TrendingUp, CalendarRange, X } from 'lucide-react';
+import { HelpCircle, TrendingUp, CalendarRange, X, Pencil } from 'lucide-react';
 import { CheckInOut, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
 import { useTheme } from '../../context/ThemeContext';
 import {
@@ -25,6 +25,7 @@ interface AnalyticsCardsProps {
   activeNormalCheckins?: NormalCleanRecord[];
   activeInitialCheckins?: InitialCleanRecord[];
   activeHandymanCheckins?: HandymanRecord[];
+  onCheckoutRequested?: (type: 'normal' | 'initial' | 'handyman', record: NormalCleanRecord | InitialCleanRecord | HandymanRecord) => void;
 }
 
 export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
@@ -100,7 +101,8 @@ const CustomTooltip: React.FC<{
 const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({ 
   checkIns, selectedWorker, onWorkerSelect, workers = [], period, customDesde, customHasta,
   normalCleans = [], initialCleans = [], handymanRecords = [],
-  activeNormalCheckins = [], activeInitialCheckins = [], activeHandymanCheckins = []
+  activeNormalCheckins = [], activeInitialCheckins = [], activeHandymanCheckins = [],
+  onCheckoutRequested
 }) => {
   const navigate = useNavigate();
   const photoMap = useMemo(() => {
@@ -172,10 +174,11 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         accommodation: r.apartamento,
         timestamp: r.checkinFecha,
         isFinished: false,
-        type: 'Limpieza Normal'
+        type: 'Limpieza Normal',
+        tabType: 'normal',
+        originalRecord: r
       });
     });
-
     activeInitialCheckins.forEach(r => {
       activity.push({
         id: r.id,
@@ -183,10 +186,11 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         accommodation: r.apartamento,
         timestamp: r.checkinFecha,
         isFinished: false,
-        type: 'Limpieza Inicial'
+        type: 'Limpieza Inicial',
+        tabType: 'initial',
+        originalRecord: r
       });
     });
-
     activeHandymanCheckins.forEach(r => {
       activity.push({
         id: r.id,
@@ -194,7 +198,9 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         accommodation: r.alojamiento,
         timestamp: r.fechaLlegada,
         isFinished: false,
-        type: 'Manitas'
+        type: 'Manitas',
+        tabType: 'handyman',
+        originalRecord: r
       });
     });
 
@@ -341,7 +347,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
             return (
               <div
                 key={entry.id}
-                className={`bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-white/60 dark:border-stone-700/50 rounded-xl px-4 py-3 flex items-center justify-between transition-colors hover:bg-white dark:hover:bg-stone-900/80 ${
+                className={`group bg-white/80 dark:bg-stone-900 backdrop-blur-sm border border-white/60 dark:border-stone-700/50 rounded-xl px-4 py-3 flex items-center justify-between transition-all duration-300 hover:bg-white dark:hover:bg-stone-900/80 hover:shadow-lg hover:shadow-orange-500/5 ${
                   entry.isFinished ? 'opacity-50' : 'opacity-100'
                 }`}
               >
@@ -368,16 +374,34 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
                   </a>
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-0.5 flex-shrink-0 pl-2">
-                <span className="text-[10px] text-slate-400 dark:text-stone-500 tabular-nums">
-                  {new Date(entry.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                <span className="text-xs">
-                  {!entry.isFinished
-                    ? <WorkingBadge />
-                    : <span className="text-[10px] text-slate-400 dark:text-stone-500 font-medium">Finalizado</span>
-                  }
-                </span>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0 pl-2">
+                  <span className="text-[10px] text-slate-400 dark:text-stone-500 tabular-nums">
+                    {new Date(entry.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <div className="flex items-center h-5">
+                    {!entry.isFinished
+                      ? (
+                        <div className="flex items-center transition-all duration-300">
+                          <div className="transform transition-transform duration-300 group-hover:-translate-x-1">
+                            <WorkingBadge />
+                          </div>
+                          <div className="max-w-0 opacity-0 group-hover:max-w-[40px] group-hover:opacity-100 transition-all duration-500 ease-out overflow-hidden flex items-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onCheckoutRequested?.(entry.tabType, entry.originalRecord);
+                              }}
+                              className="p-1 ml-1 rounded-lg text-orange-500 hover:bg-orange-500/10 dark:hover:bg-orange-500/20 transition-colors"
+                              title="Gestionar"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                      : <span className="text-[10px] text-slate-400 dark:text-stone-500 font-medium">Finalizado</span>
+                    }
+                  </div>
                 </div>
               </div>
             );

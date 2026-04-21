@@ -7,6 +7,10 @@ import { Loader2, Search, Filter } from 'lucide-react';
 import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { computeWorkerEarningsInRange } from '../utils/payments';
+import CleanCheckoutFormModal, { CheckoutTabType } from '../components/cleans/CleanCheckoutFormModal';
+import { CheckoutContextModal } from '../components/dashboard/CheckoutContextModal';
+
+type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
 
 const Dashboard: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -27,6 +31,29 @@ const Dashboard: React.FC = () => {
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
+  // Checkout Context Modal
+  const [contextModal, setContextModal] = useState<{
+    open: boolean;
+    type: CheckoutTabType;
+    record: CheckoutRecord | null;
+  }>({
+    open: false,
+    type: 'normal',
+    record: null
+  });
+
+  // Checkout Form Modal state
+  const [checkoutForm, setCheckoutForm] = useState<{
+    open: boolean;
+    type: CheckoutTabType;
+    record: CheckoutRecord;
+  }>({
+    open: false,
+    type: 'normal',
+    record: {} as NormalCleanRecord,
+  });
+  const [isSavingCheckout, setIsSavingCheckout] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -62,6 +89,102 @@ const Dashboard: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  const refreshDashboard = async () => {
+    try {
+      const [
+        workersData, checkInsData, normalData, initialData, handymanData,
+        activeNormalData, activeInitialData, activeHandymanData
+      ] = await Promise.all([
+        appsScriptApi.getWorkers(),
+        appsScriptApi.getRecentCheckIns(),
+        appsScriptApi.getNormalCleans(),
+        appsScriptApi.getInitialCleans(),
+        appsScriptApi.getHandymanRecords(),
+        appsScriptApi.getNormalCheckins(),
+        appsScriptApi.getInitialCheckins(),
+        appsScriptApi.getHandymanCheckins(),
+      ]);
+      setWorkers(workersData);
+      setCheckIns(checkInsData);
+      setNormalCleans(normalData);
+      setInitialCleans(initialData);
+      setHandymanRecords(handymanData);
+      setActiveNormalCheckins(activeNormalData);
+      setActiveInitialCheckins(activeInitialData);
+      setActiveHandymanCheckins(activeHandymanData);
+    } catch (error) {
+      console.error('Error refreshing dashboard:', error);
+    }
+  };
+
+  const handleCheckoutRequested = (type: CheckoutTabType, record: CheckoutRecord) => {
+    setContextModal({ open: true, type, record });
+  };
+
+  const handleContextFinish = (type: CheckoutTabType, record: CheckoutRecord) => {
+    setContextModal(prev => ({ ...prev, open: false }));
+    // Prepare pre-filled record with current date/time for checkout
+    const now = new Date().toISOString().split('.')[0].replace('T', ' ');
+    const nowTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    
+    let preFilled: CheckoutRecord;
+
+    if (type === 'handyman') {
+      const r = record as HandymanRecord;
+      preFilled = {
+        ...r,
+        fechaFin: now,
+        horaFinTarea: nowTime,
+        estadoCompletado: 'Completado'
+      } as HandymanRecord;
+    } else {
+      const r = record as NormalCleanRecord | InitialCleanRecord;
+      preFilled = {
+        ...r,
+        checkoutFecha: now,
+        horaSalida: nowTime,
+        checked: false
+      } as NormalCleanRecord | InitialCleanRecord;
+    }
+
+    setCheckoutForm({
+      open: true,
+      type,
+      record: preFilled
+    });
+  };
+
+  const handleContextDelete = async (type: CheckoutTabType, record: CheckoutRecord) => {
+    try {
+      setIsSavingCheckout(true);
+      const ok = await appsScriptApi.deleteCheckinRecord(type, record.id);
+      if (!ok) throw new Error('No se pudo borrar el check-in');
+      setContextModal(prev => ({ ...prev, open: false }));
+      await refreshDashboard();
+    } catch (error) {
+      console.error(error);
+      window.alert('Error al borrar el check-in.');
+    } finally {
+      setIsSavingCheckout(false);
+    }
+  };
+
+  const handleCheckoutSubmit = async (record: CheckoutRecord) => {
+    try {
+      setIsSavingCheckout(true);
+      const ok = await appsScriptApi.createCheckoutRecord(checkoutForm.type, record);
+      if (!ok) throw new Error('No se pudo guardar el checkout');
+      
+      setCheckoutForm(prev => ({ ...prev, open: false }));
+      await refreshDashboard();
+    } catch (error) {
+      console.error(error);
+      window.alert('Error al guardar el checkout.');
+    } finally {
+      setIsSavingCheckout(false);
+    }
+  };
 
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
@@ -165,6 +288,7 @@ const Dashboard: React.FC = () => {
         activeNormalCheckins={activeNormalCheckins}
         activeInitialCheckins={activeInitialCheckins}
         activeHandymanCheckins={activeHandymanCheckins}
+        onCheckoutRequested={handleCheckoutRequested}
       />
 
       {/* Bloque B: Tabla de Trabajadores */}
@@ -175,6 +299,26 @@ const Dashboard: React.FC = () => {
           onWorkerSelect={setSelectedWorker}
         />
       </section>
+
+      <CleanCheckoutFormModal
+        isOpen={checkoutForm.open}
+        mode="create"
+        type={checkoutForm.type}
+        initialValues={checkoutForm.record}
+        loading={isSavingCheckout}
+        onClose={() => setCheckoutForm(prev => ({ ...prev, open: false }))}
+        onSubmit={handleCheckoutSubmit}
+      />
+
+      <CheckoutContextModal
+        isOpen={contextModal.open}
+        type={contextModal.type}
+        record={contextModal.record}
+        onClose={() => setContextModal(prev => ({ ...prev, open: false }))}
+        onFinish={handleContextFinish}
+        onDelete={handleContextDelete}
+        isProcessing={isSavingCheckout}
+      />
     </div>
   );
 };
