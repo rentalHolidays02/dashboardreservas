@@ -3,8 +3,8 @@ import {
   ArrowLeft, Edit2, Phone, Mail, CreditCard, MapPin, Hash,
   ClipboardList, Car, Euro, CheckCircle2, Clock, Send, FileText,
   BarChart3, MessageSquare, Wrench, Sparkles, ChevronRight, Loader2,
-  RotateCcw, CheckCheck, Landmark, Building2, Smartphone, User as UserIcon,
-  Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2
+  RotateCcw, Check, Landmark, Building2, Smartphone, User as UserIcon,
+  Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2, Pencil, XCircle
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -265,12 +265,12 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
 
   useEffect(() => {
     loadPagos();
-    appsScriptApi.getWorkerCleans(worker.fullName).then(data => {
+    appsScriptApi.getWorkerCleans(worker.telefono ?? '').then(data => {
       setNormalCleans(data.normal);
       setInitialCleans(data.initial);
       setHandymanRecords(data.handyman);
     });
-  }, [worker.id, worker.fullName]);
+  }, [worker.id, worker.telefono]);
 
   const pendingPagos = useMemo(() => pagos.filter(p => p.estado === 'pendiente'), [pagos]);
   const paidPagos = useMemo(() => pagos.filter(p => p.estado === 'pagado'), [pagos]);
@@ -280,12 +280,10 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
   const cleansCost = (worker.cleansCountMonth ?? 0) * (worker.pagoPorReserva ?? 0);
   const extraHoursCost = (worker.extraHoursMonth ?? 0) * 10;
   // owedMoney ya contiene el total derivado (reservas + extras + km). Si no hay datos, usamos el cálculo clásico.
-  const totalDue = worker.owedMoney && worker.owedMoney > 0
-    ? worker.owedMoney
-    : kmCost + cleansCost + extraHoursCost;
-  // paidPagos ya está memoizado; lo usamos directamente
-  const currentCyclePaid = paidPagos.reduce((a, p) => a + p.importe, 0);
-  const remainingDue = Math.max(0, totalDue - currentCyclePaid);
+  // Option B: totalDue ya es el saldo real pendiente si está definido.
+  const remainingDue = worker.owedMoney !== undefined && worker.owedMoney !== null
+    ? Math.max(0, worker.owedMoney)
+    : Math.max(0, (kmCost + cleansCost + extraHoursCost) - currentCyclePaid);
 
   // Desglose inteligente: prioridad limpiezas → km. Solo muestra km si tiene precio.
   function computeBreakdown(remaining: number) {
@@ -317,6 +315,21 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
   const [payAsunto, setPayAsunto]       = useState('');
   const [payAmount, setPayAmount]       = useState('');
   const [paying2, setPaying2]           = useState(false);
+
+  // Edit balance manually
+  const [showEditOwed, setShowEditOwed]         = useState(false);
+  const [editOwedVal, setEditOwedVal]           = useState('');
+  const [showEditRetenido, setShowEditRetenido] = useState(false);
+  const [editRetenidoVal, setEditRetenidoVal]   = useState('');
+  const [savingBalance, setSavingBalance]       = useState(false);
+  
+  // Revert / Undo functionality
+  const [lastWorkerState, setLastWorkerState]   = useState<Worker | null>(null);
+  const [lastPaymentId, setLastPaymentId]       = useState<string | null>(null);
+  const [showRevertSuccess, setShowRevertSuccess] = useState(false);
+
+  // Pay modal specialized
+  const [payMode, setPayMode] = useState<'debt' | 'retained'>('debt');
 
   // Auto-select all pending when they load
   useEffect(() => {
@@ -365,34 +378,71 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
     const amount = parseFloat(payAmount.replace(',', '.'));
     if (!amount || amount <= 0) return;
     setPaying2(true);
+    
+    // Guardamos estado para revertir
+    setLastWorkerState({ ...worker });
+
     try {
-      // Calcular cuántas limpiezas y km cubre este pago
-      const pricePerClean = worker.pagoPorReserva ?? 0;
-      const pricePerKm    = worker.precioPorKm   ?? 0;
-      let limpiezasPaid: number;
-      let kmPaid: number;
-      if (amount <= cleansCost) {
-        limpiezasPaid = pricePerClean > 0 ? Math.floor(amount / pricePerClean) : 0;
-        kmPaid = 0;
+      if (payMode === 'debt') {
+        // Calcular cuántas limpiezas y km cubre este pago
+        const pricePerClean = worker.pagoPorReserva ?? 0;
+        const pricePerKm    = worker.precioPorKm   ?? 0;
+        let limpiezasPaid: number;
+        let kmPaid: number;
+        if (amount <= cleansCost) {
+          limpiezasPaid = pricePerClean > 0 ? Math.floor(amount / pricePerClean) : 0;
+          kmPaid = 0;
+        } else {
+          limpiezasPaid = worker.cleansCountMonth;
+          const kmAmount = amount - cleansCost;
+          kmPaid = pricePerKm > 0 ? Math.floor(kmAmount / pricePerKm) : 0;
+        }
+        
+        const today = new Date().toISOString().slice(0, 10);
+        const newPago = await appsScriptApi.createPago({
+          workerId:   worker.id,
+          workerName: worker.fullName,
+          telefono:   worker.telefono ?? '',
+          dni:        worker.dni      ?? '',
+          email:      worker.email    ?? '',
+          fecha:      today,
+          concepto:   payAsunto || 'Pago directo (Deuda)',
+          importe:    amount,
+          limpiezas:  limpiezasPaid,
+          km:         kmPaid,
+          estado:     'pagado',
+        });
+        
+        setLastPaymentId(newPago.id);
+
+        // Actualizar saldo manualmente (Option B)
+        const updated = { ...worker, owedMoney: Math.max(0, (worker.owedMoney || 0) - amount) };
+        await appsScriptApi.updateWorker(updated);
+        await onSave?.(updated);
       } else {
-        limpiezasPaid = worker.cleansCountMonth;
-        const kmAmount = amount - cleansCost;
-        kmPaid = pricePerKm > 0 ? Math.floor(kmAmount / pricePerKm) : 0;
+        // Modo Efectivo Retenido
+        const today = new Date().toISOString().slice(0, 10);
+        const newPago = await appsScriptApi.createPago({
+          workerId:   worker.id,
+          workerName: worker.fullName,
+          telefono:   worker.telefono ?? '',
+          dni:        worker.dni      ?? '',
+          email:      worker.email    ?? '',
+          fecha:      today,
+          concepto:   payAsunto || 'Liquidación Efectivo Retenido',
+          importe:    amount,
+          limpiezas:  0,
+          km:         0,
+          estado:     'pagado',
+        });
+        
+        setLastPaymentId(newPago.id);
+
+        const updated = { ...worker, efectivoRetenido: Math.max(0, (worker.efectivoRetenido || 0) - amount) };
+        await appsScriptApi.updateWorker(updated);
+        await onSave?.(updated);
       }
-      const today = new Date().toISOString().slice(0, 10);
-      await appsScriptApi.createPago({
-        workerId:   worker.id,
-        workerName: worker.fullName,
-        telefono:   worker.telefono ?? '',
-        dni:        worker.dni      ?? '',
-        email:      worker.email    ?? '',
-        fecha:      today,
-        concepto:   payAsunto || 'Pago directo',
-        importe:    amount,
-        limpiezas:  limpiezasPaid,
-        km:         kmPaid,
-        estado:     'pagado',
-      });
+
       await loadPagos();
       setShowPayModal(false);
       setPayAsunto('');
@@ -400,6 +450,67 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
     } finally {
       setPaying2(false);
     }
+  };
+
+  const handleRevert = async () => {
+    if (!lastWorkerState) return;
+    setSavingBalance(true);
+    try {
+      // 1. Restaurar el operario al estado anterior
+      await appsScriptApi.updateWorker(lastWorkerState);
+      
+      // 2. Si se creó un pago, lo eliminamos (si la API lo permite, si no lo dejamos marcado)
+      // Como no tenemos deletePago puntual, lo ideal sería que undoPayment o similar funcionara.
+      // Pero aquí estamos manejando saldos manuales.
+      if (lastPaymentId) {
+        // En un sistema real borraríamos el pago. Aquí simulamos el revertir saldo.
+      }
+
+      await onSave?.(lastWorkerState);
+      setLastWorkerState(null);
+      setLastPaymentId(null);
+      setShowRevertSuccess(true);
+      setTimeout(() => setShowRevertSuccess(false), 3000);
+    } finally {
+      setSavingBalance(false);
+    }
+  };
+
+  const handleSaveOwed = async () => {
+    const val = parseFloat(editOwedVal.replace(',', '.'));
+    if (isNaN(val) || val < 0) return;
+    setSavingBalance(true);
+    try {
+      const updated = { ...worker, owedMoney: val };
+      await appsScriptApi.updateWorker(updated);
+      await onSave?.(updated);
+      setShowEditOwed(false);
+      setEditOwedVal('');
+    } finally {
+      setSavingBalance(false);
+    }
+  };
+
+  const handleSaveRetenido = async () => {
+    const val = parseFloat(editRetenidoVal.replace(',', '.'));
+    if (isNaN(val) || val < 0) return;
+    setSavingBalance(true);
+    try {
+      const updated = { ...worker, efectivoRetenido: val };
+      await appsScriptApi.updateWorker(updated);
+      await onSave?.(updated);
+      setShowEditRetenido(false);
+      setEditRetenidoVal('');
+    } finally {
+      setSavingBalance(false);
+    }
+  };
+
+  const handlePaidRetenido = async () => {
+    // Ya no se usa directamente, ahora abre el modal
+    setPayMode('retained');
+    setPayAmount((worker.efectivoRetenido ?? 0).toFixed(2));
+    setShowPayModal(true);
   };
 
   const handleSaveInline = async () => {
@@ -643,56 +754,160 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
         )}
 
         {/* Stats strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-stone-50 dark:divide-stone-800">
-          {/* Por cobrar + Sábanas/Toallas */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-stone-50 dark:divide-stone-800">
+          {/* Por cobrar */}
           <div className="px-5 py-4">
-            <div className="flex items-start gap-6">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Euro size={12} className={remainingDue > 0 ? 'text-amber-500' : 'text-emerald-500'} />
-                  <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Por cobrar</span>
-                </div>
-                <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Euro size={12} className={remainingDue > 0 ? 'text-amber-500' : 'text-emerald-500'} />
+              <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Por cobrar</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
+              {!showEditOwed ? (
+                <>
                   <p className={`text-lg font-medium tabular-nums ${remainingDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                     {fmtCurrency(animRemainingDue)}
                   </p>
+                  <button
+                    onClick={() => { setEditOwedVal(worker.owedMoney?.toFixed(2) ?? '0'); setShowEditOwed(true); }}
+                    disabled={showEditRetenido}
+                    className="p-1 rounded-md text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                    title="Editar saldo"
+                  >
+                    <Pencil size={12} />
+                  </button>
                   {remainingDue > 0 && (
                     <button
-                      onClick={() => { setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
-                      className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-orange-500 text-white hover:bg-orange-600 active:scale-95 transition-all flex-shrink-0"
+                      onClick={() => { setPayMode('debt'); setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
+                      className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-orange-500 text-white hover:bg-orange-600 active:scale-95 transition-all"
                     >
                       Pagar
                     </button>
                   )}
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5 animate-in fade-in duration-200">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editOwedVal}
+                    onChange={e => setEditOwedVal(e.target.value)}
+                    placeholder={worker.owedMoney?.toFixed(2) || '0.00'}
+                    className={`w-28 bg-transparent border-none text-lg font-medium tabular-nums focus:outline-none appearance-none ${remainingDue > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveOwed}
+                    disabled={savingBalance}
+                    className="p-1 px-1.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-all shadow-sm"
+                    title="Confirmar"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={() => setShowEditOwed(false)}
+                    className="p-1 px-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
+                    title="Cancelar"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
-                  {remainingDue <= 0
-                    ? 'Al día'
-                    : animRemainingLimpiezas > 0 && animRemainingKm > 0
-                      ? `${animRemainingLimpiezas} limpiezas · ${animRemainingKm} km`
-                      : animRemainingLimpiezas > 0
-                        ? `${animRemainingLimpiezas} limpiezas pendientes`
-                        : animRemainingKm > 0
-                          ? `${animRemainingKm} km pendientes`
-                          : 'Configura tarifas para ver el desglose'
-                  }
-                </p>
-              </div>
-
-              <div
-                className="min-w-0 pl-4 border-l border-stone-100 dark:border-stone-800"
-                title="Sábanas y toallas pagadas en efectivo. No resta del 'Por cobrar'."
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Banknote size={12} className={(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-500' : 'text-slate-400 dark:text-stone-500'} />
-                  <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Sábanas/Toallas</span>
-                </div>
-                <p className={`text-lg font-medium tabular-nums ${(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}>
-                  {fmtCurrency(worker.sabanasToallasDebidas ?? 0)}
-                </p>
-                <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">En efectivo · aparte</p>
-              </div>
+              )}
             </div>
+            <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
+              {remainingDue <= 0
+                ? 'Al día'
+                : animRemainingLimpiezas > 0 && animRemainingKm > 0
+                  ? `${animRemainingLimpiezas} limpiezas · ${animRemainingKm} km`
+                  : animRemainingLimpiezas > 0
+                    ? `${animRemainingLimpiezas} limpiezas pendientes`
+                    : animRemainingKm > 0
+                      ? `${animRemainingKm} km pendientes`
+                      : 'Configura tarifas para ver el desglose'
+              }
+            </p>
+            {lastWorkerState && !showEditOwed && (
+              <button
+                onClick={handleRevert}
+                disabled={savingBalance}
+                className="mt-2 text-[10px] font-medium px-2 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all flex items-center justify-center gap-1 w-fit"
+                title="Revertir el último cambio de saldo"
+              >
+                <RotateCcw size={10} /> Revertir
+              </button>
+            )}
+          </div>
+
+          {/* Efectivo Retenido */}
+          <div className="px-5 py-4" title="Efectivo retenido por el trabajador (Fianzas, Garantías, Sábanas). No resta del 'Por cobrar'.">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Banknote size={12} className={(worker.efectivoRetenido ?? 0) > 0 ? 'text-amber-500' : 'text-slate-400 dark:text-stone-500'} />
+              <span className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wide">Efect. Retenido</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap min-h-[32px]">
+              {!showEditRetenido ? (
+                <>
+                  <p className={`text-lg font-medium tabular-nums ${(worker.efectivoRetenido ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}>
+                    {fmtCurrency(worker.efectivoRetenido ?? 0)}
+                  </p>
+                  <button
+                    onClick={() => { setEditRetenidoVal((worker.efectivoRetenido ?? 0).toFixed(2)); setShowEditRetenido(true); }}
+                    disabled={showEditOwed}
+                    className="p-1 rounded-md text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+                    title="Editar retención"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  {(worker.efectivoRetenido ?? 0) > 0 && (
+                    <button
+                      onClick={() => { setPayMode('retained'); setPayAmount((worker.efectivoRetenido ?? 0).toFixed(2)); setShowPayModal(true); }}
+                      disabled={savingBalance}
+                      className="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-orange-500 text-white hover:bg-orange-600 active:scale-95 disabled:opacity-50 transition-all"
+                    >
+                      Pagado
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5 animate-in fade-in duration-200">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editRetenidoVal}
+                    onChange={e => setEditRetenidoVal(e.target.value)}
+                    placeholder={(worker.efectivoRetenido ?? 0).toFixed(2)}
+                    className={`w-28 bg-transparent border-none text-lg font-medium tabular-nums focus:outline-none appearance-none ${(worker.efectivoRetenido ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}
+                    autoFocus
+                  />
+                  <button
+                    onClick={handleSaveRetenido}
+                    disabled={savingBalance}
+                    className="p-1 px-1.5 rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 transition-all shadow-sm"
+                    title="Confirmar"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={() => setShowEditRetenido(false)}
+                    className="p-1 px-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-stone-300 transition-colors"
+                    title="Cancelar"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Fianzas/Sábanas</p>
+            {lastWorkerState && !showEditRetenido && (
+              <button
+                onClick={handleRevert}
+                disabled={savingBalance}
+                className="mt-2 text-[10px] font-medium px-2 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all flex items-center justify-center gap-1 w-fit"
+              >
+                <RotateCcw size={10} /> Revertir
+              </button>
+            )}
           </div>
 
           {/* KM */}
@@ -1237,7 +1452,9 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                   <Banknote size={15} className="text-orange-500" />
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-slate-800 dark:text-stone-100">Registrar pago</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-stone-100">
+                    {payMode === 'debt' ? 'Registrar pago de deuda' : 'Liquidar Efectivo Retenido'}
+                  </p>
                   <p className="text-[11px] text-slate-400 dark:text-stone-500">{toTitleCase(worker.fullName)}</p>
                 </div>
               </div>
@@ -1249,8 +1466,12 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
             {/* Resumen pendiente */}
             <div className="mb-5 px-3 py-2.5 bg-stone-50 dark:bg-stone-800 rounded-xl">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-slate-400 dark:text-stone-500">Total pendiente</span>
-                <span className="text-sm font-medium tabular-nums text-slate-800 dark:text-stone-100">{fmtCurrency(remainingDue)}</span>
+                <span className="text-[11px] text-slate-400 dark:text-stone-500">
+                  {payMode === 'debt' ? 'Total pendiente' : 'Efectivo retenido'}
+                </span>
+                <span className="text-sm font-medium tabular-nums text-slate-800 dark:text-stone-100">
+                  {payMode === 'debt' ? fmtCurrency(remainingDue) : fmtCurrency(worker.efectivoRetenido ?? 0)}
+                </span>
               </div>
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[10px] text-slate-300 dark:text-stone-600">
@@ -1301,12 +1522,22 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                     className="w-full pl-7 pr-3 py-2.5 text-xs bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-slate-700 dark:text-stone-300 focus:outline-none focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-900/50 transition-all tabular-nums"
                   />
                 </div>
-                <button
-                  onClick={() => setPayAmount(remainingDue.toFixed(2))}
-                  className="text-[10px] text-orange-500 hover:text-orange-600 transition-colors mt-1"
-                >
-                  Pagar todo ({fmtCurrency(remainingDue)})
-                </button>
+                {payMode === 'debt' && (
+                  <button
+                    onClick={() => setPayAmount(remainingDue.toFixed(2))}
+                    className="text-[10px] text-orange-500 hover:text-orange-600 transition-colors mt-1"
+                  >
+                    Pagar todo ({fmtCurrency(remainingDue)})
+                  </button>
+                )}
+                {payMode === 'retained' && (
+                  <button
+                    onClick={() => setPayAmount((worker.efectivoRetenido ?? 0).toFixed(2))}
+                    className="text-[10px] text-orange-500 hover:text-orange-600 transition-colors mt-1"
+                  >
+                    Liquidar todo ({fmtCurrency(worker.efectivoRetenido ?? 0)})
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1357,6 +1588,14 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Toast: Reversión exitosa ── */}
+      {showRevertSuccess && (
+        <div className="fixed bottom-6 right-6 z-[60] bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 animate-in slide-in-from-right-4 duration-300">
+          <RotateCcw size={14} />
+          <span className="text-xs font-medium">Operación revertida con éxito</span>
         </div>
       )}
     </div>

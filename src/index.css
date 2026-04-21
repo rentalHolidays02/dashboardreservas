@@ -109,6 +109,16 @@
   vertical-align: middle;
 }
 
+/* Hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* When collapsed=true: text starts fading immediately (before width moves) */
 .sidebar-panel[data-collapsed="true"] .sidebar-fade {
   max-width: 0;

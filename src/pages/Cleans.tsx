@@ -19,9 +19,12 @@ import {
   User,
   MessageSquare,
   Check,
+  RotateCcw,
 } from 'lucide-react';
 import { appsScriptApi, getDistanceMeters, parseCoords, geocodeAddress } from '../services/api';
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker, Accommodation } from '../services/mockData';
+import { matchesWorkerByPhone } from '../utils/payments';
+import { formatName } from '../utils/formatters';
 import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
@@ -74,6 +77,12 @@ const Cleans: React.FC = () => {
     status: 'all'
   });
 
+  const [lastAction, setLastAction] = useState<{ 
+    id: string; 
+    type: TabType; 
+    wasChecked: boolean;
+  } | null>(null);
+
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
     workers.forEach(w => { if (w.photo) map[w.fullName] = w.photo; });
@@ -124,6 +133,34 @@ const Cleans: React.FC = () => {
     };
     fetchAllData();
   }, []);
+
+  const handleUndo = async () => {
+    if (!lastAction) return;
+    const { id, type, wasChecked } = lastAction;
+    
+    try {
+      if (type === 'normal') {
+        setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked: wasChecked } : r));
+      } else if (type === 'initial') {
+        setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked: wasChecked } : r));
+      } else if (type === 'handyman') {
+        setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: wasChecked ? 'Completado' : 'Pendiente' } : r));
+      }
+      
+      await appsScriptApi.updateCleanStatus(type, id, wasChecked);
+      setLastAction(null);
+    } catch (error) {
+      console.error('Error undoing status:', error);
+    }
+  };
+
+  // Timer to clear last action after 8 seconds
+  useEffect(() => {
+    if (lastAction) {
+      const timer = setTimeout(() => setLastAction(null), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastAction]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -233,39 +270,36 @@ const Cleans: React.FC = () => {
       </header>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-8 border-b border-stone-100/20 dark:border-stone-700/30 w-full animate-in fade-in slide-in-from-left-4 duration-700">
+      <div className="flex items-center gap-6 border-b border-stone-200 dark:border-stone-800 w-full animate-in fade-in slide-in-from-left-4 duration-700 mb-6">
         {tabs.map((tab) => {
           const active = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
-              className={`relative flex items-center gap-2 pb-3.5 px-0.5 text-xs font-normal transition-all duration-300 group
-                ${active ? 'text-slate-800 dark:text-stone-200' : 'text-slate-400 dark:text-stone-600 hover:text-slate-600 dark:hover:text-stone-400'}`}
+              className={`flex items-center gap-2 py-3 px-1 text-xs transition-colors border-b-2 -mb-px font-medium ${
+                active 
+                  ? 'border-orange-500 text-orange-600 dark:text-orange-500' 
+                  : 'border-transparent text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
+              }`}
             >
-              <span className={`transition-transform duration-300 ${active ? 'scale-110' : 'group-hover:scale-105'}`}>
-                {React.cloneElement(tab.icon as React.ReactElement, {
-                  size: 16,
-                  className: active ? 'text-orange-500' : 'text-slate-400 dark:text-stone-600'
-                })}
-              </span>
-              <span>{tab.label}</span>
-              {active && (
-                <div className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-orange-500 rounded-full animate-in fade-in slide-in-from-left-2 duration-300" />
-              )}
+              {tab.label}
             </button>
           );
         })}
       </div>
 
       {/* Content Area */}
-      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-x-auto">
+      <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-x-auto relative">
         {activeTab === 'normal' && (
           <TableNormalCleans 
             data={filteredNormal} 
             photoMap={photoMap} 
             geoData={geoData}
+            workers={workers}
             onUpdate={(id, checked) => {
+              const old = normalCleans.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'normal', wasChecked: old.checked });
               setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
               appsScriptApi.updateCleanStatus('normal', id, checked);
             }} 
@@ -276,7 +310,10 @@ const Cleans: React.FC = () => {
             data={filteredInitial} 
             photoMap={photoMap} 
             geoData={geoData}
+            workers={workers}
             onUpdate={(id, checked) => {
+              const old = initialCleans.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'initial', wasChecked: old.checked });
               setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
               appsScriptApi.updateCleanStatus('initial', id, checked);
             }} 
@@ -287,13 +324,29 @@ const Cleans: React.FC = () => {
             data={filteredHandyman} 
             photoMap={photoMap} 
             geoData={geoData}
+            workers={workers}
             onUpdate={(id, checked) => {
+              const old = handymanRecords.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'handyman', wasChecked: old.estadoCompletado === 'Completado' });
               setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
               appsScriptApi.updateCleanStatus('handyman', id, checked);
             }} 
           />
         )}
       </div>
+
+      {/* Undo Notification */}
+      {lastAction && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-4 duration-300">
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 dark:bg-stone-800 text-white rounded-full shadow-2xl border border-white/10 hover:bg-slate-800 dark:hover:bg-stone-700 transition-all group"
+          >
+            <RotateCcw size={14} className="group-hover:rotate-[-45deg] transition-transform" />
+            <span className="text-xs font-medium">Revertir cambio de estado</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -657,10 +710,11 @@ const TableNormalCleans: React.FC<{
   data: NormalCleanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
-  onUpdate: (id: string, checked: boolean) => void
-}> = ({ data, geoData, onUpdate }) => {
-  const [locationModal, setLocationModal] = useState<{
-    open: boolean;
+  workers: Worker[];
+  onUpdate: (id: string, checked: boolean) => void 
+}> = ({ data, geoData, workers, onUpdate }) => {
+  const [locationModal, setLocationModal] = useState<{ 
+    open: boolean; 
     anchor: HTMLElement | null;
     targetCoords?: [number, number];
     userCoords?: [number, number][];
@@ -701,7 +755,17 @@ const TableNormalCleans: React.FC<{
                   <div className="flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${expandedId === r.id ? 'bg-orange-500 scale-125' : 'bg-transparent'}`} />
                     <div className="flex flex-col">
-                      <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                      <div className="font-normal text-slate-800 dark:text-stone-200 flex items-center gap-1.5">
+                        {(() => {
+                          const w = workers.find(w => matchesWorkerByPhone(w.telefono, r.telefono));
+                          return (
+                            <>
+                              <span>{formatName(w?.fullName || `${r.nombre} ${r.apellidos}`)}</span>
+                              {!w && <div className="w-1.5 h-1.5 rounded-full bg-red-500/80 shrink-0" title="Trabajador no registrado en el sistema" />}
+                            </>
+                          );
+                        })()}
+                      </div>
                       <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                     </div>
                     <div className="flex items-center gap-1 ml-1">
@@ -855,10 +919,11 @@ const TableInitialCleans: React.FC<{
   data: InitialCleanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
-  onUpdate: (id: string, checked: boolean) => void
-}> = ({ data, geoData, onUpdate }) => {
-  const [locationModal, setLocationModal] = useState<{
-    open: boolean;
+  workers: Worker[];
+  onUpdate: (id: string, checked: boolean) => void 
+}> = ({ data, geoData, workers, onUpdate }) => {
+  const [locationModal, setLocationModal] = useState<{ 
+    open: boolean; 
     anchor: HTMLElement | null;
     targetCoords?: [number, number];
     userCoords?: [number, number][];
@@ -898,7 +963,17 @@ const TableInitialCleans: React.FC<{
               >
                 <td className={tdClass}>
                   <div className="flex flex-col">
-                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="font-normal text-slate-800 dark:text-stone-200 flex items-center gap-1.5">
+                      {(() => {
+                        const w = workers.find(w => matchesWorkerByPhone(w.telefono, r.telefono));
+                        return (
+                          <>
+                            <span>{formatName(w?.fullName || `${r.nombre} ${r.apellidos}`)}</span>
+                            {!w && <div className="w-1.5 h-1.5 rounded-full bg-red-500/80 shrink-0" title="Trabajador no registrado en el sistema" />}
+                          </>
+                        );
+                      })()}
+                    </div>
                     <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                   </div>
                 </td>
@@ -1005,10 +1080,11 @@ const TableHandyman: React.FC<{
   data: HandymanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
-  onUpdate: (id: string, checked: boolean) => void
-}> = ({ data, geoData, onUpdate }) => {
-  const [locationModal, setLocationModal] = useState<{
-    open: boolean;
+  workers: Worker[];
+  onUpdate: (id: string, checked: boolean) => void 
+}> = ({ data, geoData, workers, onUpdate }) => {
+  const [locationModal, setLocationModal] = useState<{ 
+    open: boolean; 
     anchor: HTMLElement | null;
     targetCoords?: [number, number];
     userCoords?: [number, number][];
@@ -1048,7 +1124,17 @@ const TableHandyman: React.FC<{
               >
                 <td className={tdClass}>
                   <div className="flex flex-col">
-                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="font-normal text-slate-800 dark:text-stone-200 flex items-center gap-1.5">
+                      {(() => {
+                        const w = workers.find(w => matchesWorkerByPhone(w.telefono, r.telefono));
+                        return (
+                          <>
+                            <span>{formatName(w?.fullName || `${r.nombre} ${r.apellidos}`)}</span>
+                            {!w && <div className="w-1.5 h-1.5 rounded-full bg-red-500/80 shrink-0" title="Trabajador no registrado en el sistema" />}
+                          </>
+                        );
+                      })()}
+                    </div>
                     <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                   </div>
                 </td>
