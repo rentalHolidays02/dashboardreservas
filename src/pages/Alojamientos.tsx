@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Search, Plus, Filter, Loader2, Home } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
+import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
+import WorkerSelectionModal from '../components/accommodations/WorkerSelectionModal';
 import AccommodationFilterModal, { AccommodationFilters } from '../components/accommodations/AccommodationFilterModal';
 import { appsScriptApi } from '../services/api';
 import { Accommodation, Worker } from '../services/mockData';
@@ -16,7 +18,10 @@ const Alojamientos: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const [editingAccommodation, setEditingAccommodation] = useState<Accommodation | null>(null);
+  const [viewingAccommodation, setViewingAccommodation] = useState<Accommodation | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
 
   // Filter Modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -47,6 +52,50 @@ const Alojamientos: React.FC = () => {
   const handleEditClick = (accommodation: Accommodation) => {
     setEditingAccommodation(accommodation);
     setIsModalOpen(true);
+  };
+
+  const handleViewClick = (accommodation: Accommodation) => {
+    setViewingAccommodation(accommodation);
+    setIsViewModalOpen(true);
+  };
+
+  const handleSaveWorkersForAccommodation = async (selectedWorkerNames: string[]) => {
+    if (!viewingAccommodation) return;
+    
+    try {
+      const accName = viewingAccommodation.name;
+      const workersToUpdate = workers.map(worker => {
+        const isCurrentlyAssigned = worker.accommodations?.includes(accName);
+        const shouldBeAssigned = selectedWorkerNames.includes(worker.fullName);
+
+        if (isCurrentlyAssigned && !shouldBeAssigned) {
+          // Eliminar asignación
+          return { 
+            ...worker, 
+            accommodations: worker.accommodations?.filter(name => name !== accName) 
+          };
+        } else if (!isCurrentlyAssigned && shouldBeAssigned) {
+          // Añadir asignación
+          return { 
+            ...worker, 
+            accommodations: [...(worker.accommodations || []), accName] 
+          };
+        }
+        return null;
+      }).filter(w => w !== null) as Worker[];
+
+      // Actualizar en el API
+      await Promise.all(workersToUpdate.map(w => appsScriptApi.updateWorker(w)));
+      
+      // Actualizar estado local
+      const updatedWorkers = workers.map(w => {
+        const update = workersToUpdate.find(up => up.id === w.id);
+        return update || w;
+      });
+      setWorkers(updatedWorkers);
+    } catch (error) {
+      console.error('Error saving workers for accommodation:', error);
+    }
   };
 
   const handleAddClick = () => {
@@ -175,15 +224,15 @@ const Alojamientos: React.FC = () => {
         </p>
       )}
 
-      {/* Accommodations grid */}
+      {/* Accommodations grid (Airbnb Style) */}
       {filteredAccommodations.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10 p-1">
           {filteredAccommodations.map(acc => {
             const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
             return (
               <div
                 key={acc.id}
-                onClick={() => handleEditClick(acc)}
+                onClick={() => handleViewClick(acc)}
                 className="cursor-pointer"
               >
                 <AccommodationCard
@@ -213,7 +262,6 @@ const Alojamientos: React.FC = () => {
         </div>
       )}
 
-      {/* Modal (edición / creación) */}
       <AccommodationModal
         accommodation={editingAccommodation}
         isOpen={isModalOpen}
@@ -241,6 +289,28 @@ const Alojamientos: React.FC = () => {
             );
           }
         }}
+      />
+
+      {/* Modal de visualización (Airbnb Style) */}
+      <AccommodationDetailModal
+        accommodation={viewingAccommodation}
+        isOpen={isViewModalOpen}
+        onClose={() => setIsViewModalOpen(false)}
+        assignedWorkers={workers.filter(w => viewingAccommodation && w.accommodations?.includes(viewingAccommodation.name))}
+        onManageWorkers={() => setIsWorkerModalOpen(true)}
+      />
+
+      {/* Modal de selección de trabajadores (Asignación Inversa) */}
+      <WorkerSelectionModal
+        isOpen={isWorkerModalOpen}
+        onClose={() => setIsWorkerModalOpen(false)}
+        allWorkers={workers}
+        currentWorkerNames={workers
+          .filter(w => viewingAccommodation && w.accommodations?.includes(viewingAccommodation.name))
+          .map(w => w.fullName)
+        }
+        onSave={handleSaveWorkersForAccommodation}
+        accommodationName={viewingAccommodation?.name || ''}
       />
     </div>
   );

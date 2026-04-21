@@ -1,6 +1,7 @@
 import React from 'react';
-import { MapPin, Edit2, Building2, Users } from 'lucide-react';
+import { MapPin, Pencil, Building2, Users } from 'lucide-react';
 import { Accommodation } from '../../services/mockData';
+import defaultAccImage from '../../assets/default_accommodation.png';
 
 interface AccommodationCardProps {
   accommodation: Accommodation;
@@ -13,75 +14,52 @@ const toTitleCase = (str: string) =>
 
 const AccommodationCard: React.FC<AccommodationCardProps> = ({ accommodation, assignedWorkersCount, onEdit }) => {
   return (
-    <div className={`group bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 hover:scale-[0.98] hover:opacity-80 transition-all duration-300 overflow-hidden ${!accommodation.active ? 'opacity-40 grayscale-[0.5]' : ''}`}>
-
-      {/* Header */}
-      <div className="p-5 flex items-start justify-between">
-        <div className="flex items-center gap-3.5">
-          {/* Icon/Avatar — solo si hay imagen */}
-          {accommodation.image && (
-            <div className="w-11 h-11 rounded-xl flex-shrink-0 overflow-hidden">
-              <img
-                src={accommodation.image}
-                alt={accommodation.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          )}
-
-          <div>
-            <h3 className="text-sm font-normal text-slate-900 dark:text-stone-100 leading-tight transition-colors">
-              {toTitleCase(accommodation.name)}
-            </h3>
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500">
-                <MapPin size={10} className="flex-shrink-0 text-orange-500" />
-                {toTitleCase(accommodation.city)}
-              </span>
-              {accommodation.ref && (
-                <span className="text-[10px] font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-500 dark:text-orange-400 px-1.5 py-0.5 rounded-md">
-                  Ref: {accommodation.ref}
-                </span>
-              )}
-            </div>
+    <div className={`group flex flex-col gap-3 transition-opacity duration-300 ${!accommodation.active ? 'opacity-40 grayscale-[0.5]' : ''}`}>
+      {/* Image Container (Airbnb Style) */}
+      <div className="aspect-square w-full rounded-2xl overflow-hidden relative bg-stone-100 dark:bg-stone-800 border border-stone-100 dark:border-stone-800/50 shadow-sm">
+        <img 
+          src={accommodation.image || defaultAccImage} 
+          alt={accommodation.name} 
+          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110" 
+        />
+        
+        {/* Top Badges */}
+        <div className="absolute top-3 left-3 right-3 flex items-start justify-between">
+          {/* Reference Badge */}
+          <div className="px-2 py-1 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md rounded-lg text-[9px] font-medium text-slate-700 dark:text-stone-300 shadow-sm border border-stone-100 dark:border-stone-800">
+            {accommodation.ref || 'S/R'}
           </div>
+
+          {/* Edit Button (Pencil) */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(accommodation); }}
+            className="p-2 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md rounded-full text-slate-500 dark:text-stone-400 hover:text-orange-500 hover:scale-110 transition-all border border-stone-100 dark:border-stone-800 shadow-sm"
+          >
+            <Pencil size={12} />
+          </button>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(accommodation); }}
-          className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all active:scale-90"
-          title="Editar alojamiento"
-        >
-          <Edit2 size={15} />
-        </button>
-      </div>
 
-      {/* Info strip */}
-      <div className="mx-5 mb-4 grid grid-cols-2 divide-x divide-stone-100 dark:divide-stone-800 bg-stone-50 dark:bg-stone-800/50 rounded-xl overflow-hidden">
-        <div className="px-4 py-2.5 flex flex-col justify-center">
-          <div className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-widest">
-            Trabajadores
-          </div>
-          <div className="text-xs font-normal mt-0.5 flex items-center gap-1.5 text-slate-700 dark:text-stone-200">
-            <Users size={12} className="text-orange-500" />
-            {assignedWorkersCount} {assignedWorkersCount === 1 ? 'asignado' : 'asignados'}
-          </div>
-        </div>
-        <div className="px-4 py-2.5 text-center flex flex-col justify-center">
-          <div className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-wider">
-            CP
-          </div>
-          <div className="text-sm font-normal text-slate-700 dark:text-stone-200 tabular-nums">
-            {accommodation.zipCode}
-          </div>
+        {/* Workers Count Badge (Bottom Left) */}
+        <div className="absolute bottom-3 left-3 px-2.5 py-1.5 bg-slate-900/80 dark:bg-black/80 backdrop-blur-md rounded-xl text-[10px] font-normal text-white flex items-center gap-1.5 shadow-lg">
+          <Users size={10} className="text-orange-400" />
+          <span>{assignedWorkersCount} {assignedWorkersCount === 1 ? 'Operario' : 'Operarios'}</span>
         </div>
       </div>
-
-      {/* Address */}
-      <div className="px-5 pb-5 flex items-start gap-1 min-w-0">
-        <Building2 size={10} className="text-orange-500 mt-0.5 flex-shrink-0" />
-        <span className="text-[11px] text-slate-400 dark:text-stone-500 line-clamp-1">
-          {toTitleCase(accommodation.address)}
-        </span>
+      
+      {/* Details */}
+      <div className="flex flex-col gap-0.5 px-0.5">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-sm font-normal text-slate-800 dark:text-stone-200 truncate group-hover:text-orange-600 transition-colors">
+            {toTitleCase(accommodation.name)}
+          </h4>
+          <div className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-stone-500 whitespace-nowrap">
+            <Building2 size={10} />
+            {accommodation.zipCode || '-'}
+          </div>
+        </div>
+        <p className="text-[11px] text-slate-500 dark:text-stone-400 font-light truncate">
+          {toTitleCase(accommodation.city)} • <span className="text-[10px] opacity-70">{toTitleCase(accommodation.address)}</span>
+        </p>
       </div>
     </div>
   );
