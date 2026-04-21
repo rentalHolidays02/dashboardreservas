@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  MapPin,
   Filter,
   Info,
   Key,
@@ -24,8 +25,65 @@ import { appsScriptApi, getDistanceMeters, parseCoords, geocodeAddress } from '.
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker, Accommodation } from '../services/mockData';
 import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { getExpectedHours, computeHoursWorked } from '../utils/payments';
+import CleanCheckoutFormModal from '../components/cleans/CleanCheckoutFormModal';
 
 type TabType = 'normal' | 'initial' | 'handyman';
+type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
+
+const emptyNormalRecord = (): NormalCleanRecord => ({
+  id: '',
+  telefono: '',
+  nombre: '',
+  apellidos: '',
+  checkinFecha: '',
+  checkinUbicacion: '',
+  checkoutFecha: '',
+  checkoutUbicacion: '',
+  apartamento: '',
+  horaEntrada: '',
+  horaSalida: '',
+  sigueHuesped: false,
+  fechaSalidaReserva: '',
+  recogeLlaves: false,
+  km: 0,
+  observaciones: '',
+  checked: false,
+});
+
+const emptyInitialRecord = (): InitialCleanRecord => ({
+  id: '',
+  telefono: '',
+  nombre: '',
+  apellidos: '',
+  checkinFecha: '',
+  checkinUbicacion: '',
+  checkoutFecha: '',
+  checkoutUbicacion: '',
+  apartamento: '',
+  horaEntrada: '',
+  horaSalida: '',
+  km: 0,
+  observaciones: '',
+  checked: false,
+});
+
+const emptyHandymanRecord = (): HandymanRecord => ({
+  id: '',
+  telefono: '',
+  nombre: '',
+  apellidos: '',
+  fechaLlegada: '',
+  ubicacionInicio: '',
+  fechaFin: '',
+  ubicacionFin: '',
+  alojamiento: '',
+  horaInicioTarea: '',
+  horaFinTarea: '',
+  cantidadMinutos: 0,
+  observacionesTarea: '',
+  estadoCompletado: 'Pendiente',
+});
 
 // Helper to normalize strings for comparison keys
 const normalizeKey = (s: string) => s.trim().toLowerCase();
@@ -54,6 +112,25 @@ const cleanAddressForSearch = (addr: string) => {
     .trim();
 };
 
+const formatDisplayDate = (value: unknown): string => {
+  if (!value) return '';
+  const raw = String(value);
+  const datePart = raw.includes('T') ? raw.split('T')[0] : raw.split(' ')[0];
+  const parts = datePart.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    if (y.length === 4) return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+  if (datePart.includes('/')) {
+    const slash = datePart.split('/');
+    if (slash.length === 3) {
+      if (slash[0].length === 4) return `${slash[2].padStart(2, '0')}/${slash[1].padStart(2, '0')}/${slash[0]}`;
+      return `${slash[0].padStart(2, '0')}/${slash[1].padStart(2, '0')}/${slash[2]}`;
+    }
+  }
+  return datePart;
+};
+
 const Cleans: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('normal');
   const [loading, setLoading] = useState(true);
@@ -64,6 +141,18 @@ const Cleans: React.FC = () => {
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [geoData, setGeoData] = useState<Record<string, { lat: number, lng: number }>>({});
   const [searchTerm, setSearchTerm] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [checkoutForm, setCheckoutForm] = useState<{
+    open: boolean;
+    mode: 'create' | 'edit';
+    type: TabType;
+    record: CheckoutRecord;
+  }>({
+    open: false,
+    mode: 'create',
+    type: 'normal',
+    record: emptyNormalRecord(),
+  });
 
   // Filter Modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -71,7 +160,10 @@ const Cleans: React.FC = () => {
     startDate: '',
     endDate: '',
     apartment: '',
-    status: 'all'
+    timeStatus: 'all',
+    extraHours: 'all',
+    keysStatus: 'all',
+    guestTiming: 'all'
   });
 
   const photoMap = useMemo(() => {
@@ -80,6 +172,15 @@ const Cleans: React.FC = () => {
     return map;
   }, [workers]);
 
+  const addressMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    accommodations.forEach((a) => {
+      const key = normalizeKey(a.name);
+      const full = [a.address, a.zipCode, a.city, a.provincia].filter(Boolean).join(', ').trim();
+      map[key] = full || 'Direccion no encontrada';
+    });
+    return map;
+  }, [accommodations]);
 
   useEffect(() => {
     appsScriptApi.getWorkers().then(setWorkers);
@@ -125,13 +226,84 @@ const Cleans: React.FC = () => {
     fetchAllData();
   }, []);
 
+  const refreshCleans = async () => {
+    const [nc, ic, hm] = await Promise.all([
+      appsScriptApi.getNormalCleans(),
+      appsScriptApi.getInitialCleans(),
+      appsScriptApi.getHandymanRecords()
+    ]);
+    setNormalCleans(nc);
+    setInitialCleans(ic);
+    setHandymanRecords(hm);
+  };
+
+  const handleCreateCheckout = (type: TabType) => {
+    const record =
+      type === 'normal'
+        ? emptyNormalRecord()
+        : type === 'initial'
+          ? emptyInitialRecord()
+          : emptyHandymanRecord();
+    setCheckoutForm({ open: true, mode: 'create', type, record });
+  };
+
+  const handleEditCheckout = (type: TabType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord) => {
+    setCheckoutForm({ open: true, mode: 'edit', type, record });
+  };
+
+  const handleCheckoutSubmit = async (record: CheckoutRecord) => {
+    try {
+      const type = checkoutForm.type;
+      setActionLoading(true);
+      const requiredName = String((record as any).nombre || '').trim();
+      const requiredLastName = String((record as any).apellidos || '').trim();
+      const requiredApartment = type === 'handyman'
+        ? String((record as HandymanRecord).alojamiento || '').trim()
+        : String((record as NormalCleanRecord | InitialCleanRecord).apartamento || '').trim();
+      if (!requiredName || !requiredLastName || !requiredApartment) {
+        window.alert('Nombre, apellidos y apartamento/alojamiento son obligatorios.');
+        return;
+      }
+
+      const ok = checkoutForm.mode === 'create'
+        ? await appsScriptApi.createCheckoutRecord(type, record)
+        : await appsScriptApi.updateCheckoutRecord(type, String((checkoutForm.record as any).id), record);
+      if (!ok) throw new Error('No se pudo guardar el checkout');
+      setCheckoutForm(prev => ({ ...prev, open: false }));
+      await refreshCleans();
+    } catch (error) {
+      console.error(error);
+      window.alert('Error al guardar checkout.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteCheckout = async (type: TabType, id: string) => {
+    const confirmed = window.confirm('¿Seguro que deseas borrar este checkout? Esta acción no se puede deshacer.');
+    if (!confirmed) return;
+    try {
+      setActionLoading(true);
+      const ok = await appsScriptApi.deleteCheckoutRecord(type, id);
+      if (!ok) throw new Error('No se pudo borrar el checkout');
+      await refreshCleans();
+    } catch (error) {
+      console.error(error);
+      window.alert('Error al borrar checkout.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (filters.startDate || filters.endDate) count++;
-    if (filters.apartment) count++;
-    if (filters.status !== 'all') count++;
+    if (filters.timeStatus !== 'all') count++;
+    if (activeTab === 'normal' && filters.extraHours !== 'all') count++;
+    if (activeTab === 'normal' && filters.keysStatus !== 'all') count++;
+    if (activeTab === 'normal' && filters.guestTiming !== 'all') count++;
     return count;
-  }, [filters]);
+  }, [filters, activeTab]);
 
   const applyFilters = (record: NormalCleanRecord | InitialCleanRecord | HandymanRecord) => {
     const s = searchTerm.toLowerCase();
@@ -141,14 +313,31 @@ const Cleans: React.FC = () => {
     let telefono = '';
     let apt = '';
     let fecha = '';
-    let checked = false;
+    let timeVerified = false;
+    let hasExtraHours = false;
+    let keysDelivered = false;
+    let guestLate = false;
+    const isNormalRecord = 'recogeLlaves' in record && 'sigueHuesped' in record;
 
     if ('nombre' in record) {
       fullName = `${record.nombre || ''} ${record.apellidos || ''}`.toLowerCase();
       telefono = String(record.telefono || '').toLowerCase();
       apt = String(('apartamento' in record ? record.apartamento : (record as any).alojamiento) || '').toLowerCase();
       fecha = 'checkinFecha' in record ? record.checkinFecha : (record as HandymanRecord).fechaLlegada;
-      checked = 'checked' in record ? record.checked : (record as HandymanRecord).estadoCompletado === 'Completado';
+      if ('horaEntrada' in record && 'horaSalida' in record) {
+        const normalOrInitial = record as NormalCleanRecord | InitialCleanRecord;
+        timeVerified = isTimeVerified(normalOrInitial.checkinFecha, normalOrInitial.checkoutFecha, normalOrInitial.horaEntrada, normalOrInitial.horaSalida);
+        if (isNormalRecord) {
+          const expected = getExpectedHours(normalOrInitial.apartamento || '');
+          const worked = computeHoursWorked(normalOrInitial.horaEntrada, normalOrInitial.horaSalida);
+          hasExtraHours = worked > expected;
+          keysDelivered = !!(record as NormalCleanRecord).recogeLlaves;
+          guestLate = !!(record as NormalCleanRecord).sigueHuesped;
+        }
+      } else {
+        const hm = record as HandymanRecord;
+        timeVerified = isTimeVerified(hm.fechaLlegada, hm.fechaFin, hm.horaInicioTarea, hm.horaFinTarea);
+      }
     }
 
     const matchSearch = 
@@ -159,13 +348,21 @@ const Cleans: React.FC = () => {
     if (!matchSearch) return false;
 
     // Filter matching
-    if (filters.apartment && !apt.includes(filters.apartment.toLowerCase())) return false;
-    
-    if (filters.status === 'verified' && !checked) return false;
-    if (filters.status === 'unverified' && checked) return false;
+    if (filters.timeStatus === 'verified' && !timeVerified) return false;
+    if (filters.timeStatus === 'unverified' && timeVerified) return false;
 
-    if (filters.startDate && fecha < filters.startDate) return false;
-    if (filters.endDate && fecha > filters.endDate) return false;
+    if (isNormalRecord) {
+      if (filters.extraHours === 'with_extra' && !hasExtraHours) return false;
+      if (filters.extraHours === 'without_extra' && hasExtraHours) return false;
+      if (filters.keysStatus === 'delivered' && !keysDelivered) return false;
+      if (filters.keysStatus === 'not_delivered' && keysDelivered) return false;
+      if (filters.guestTiming === 'on_time' && guestLate) return false;
+      if (filters.guestTiming === 'late' && !guestLate) return false;
+    }
+
+    const fechaDate = (fecha || '').split('T')[0].split(' ')[0];
+    if (filters.startDate && fechaDate < filters.startDate) return false;
+    if (filters.endDate && fechaDate > filters.endDate) return false;
 
     return true;
   };
@@ -193,6 +390,13 @@ const Cleans: React.FC = () => {
         </h1>
 
         <div className="flex flex-col md:flex-row gap-3 justify-end items-center flex-1">
+          <button
+            onClick={() => handleCreateCheckout(activeTab)}
+            disabled={actionLoading}
+            className="px-4 py-2.5 rounded-xl text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition"
+          >
+            {actionLoading ? 'Procesando...' : 'Nuevo Checkout'}
+          </button>
           <div className="relative w-full md:w-72">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none" size={14} />
             <input
@@ -203,7 +407,7 @@ const Cleans: React.FC = () => {
               className="w-full pl-9 pr-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs font-normal placeholder:text-slate-400 dark:placeholder:text-stone-500 focus:outline-none transition-all hover:bg-white/80 dark:hover:bg-stone-800/60 focus:bg-white dark:focus:bg-stone-900"
             />
           </div>
-          
+
           <div className="relative">
             <button 
               onClick={() => setIsFilterModalOpen(true)}
@@ -224,6 +428,7 @@ const Cleans: React.FC = () => {
               isOpen={isFilterModalOpen}
               onClose={() => setIsFilterModalOpen(false)}
               filters={filters}
+              activeTab={activeTab}
               onApply={(newFilters) => {
                 setFilters(newFilters);
               }}
@@ -231,7 +436,6 @@ const Cleans: React.FC = () => {
           </div>
         </div>
       </header>
-
       {/* Tab Navigation */}
       <div className="flex items-center gap-8 border-b border-stone-100/20 dark:border-stone-700/30 w-full animate-in fade-in slide-in-from-left-4 duration-700">
         {tabs.map((tab) => {
@@ -265,10 +469,13 @@ const Cleans: React.FC = () => {
             data={filteredNormal} 
             photoMap={photoMap} 
             geoData={geoData}
+            addressMap={addressMap}
             onUpdate={(id, checked) => {
               setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
               appsScriptApi.updateCleanStatus('normal', id, checked);
-            }} 
+            }}
+            onEdit={(record) => handleEditCheckout('normal', record)}
+            onDelete={(id) => handleDeleteCheckout('normal', id)}
           />
         )}
         {activeTab === 'initial' && (
@@ -276,10 +483,13 @@ const Cleans: React.FC = () => {
             data={filteredInitial} 
             photoMap={photoMap} 
             geoData={geoData}
+            addressMap={addressMap}
             onUpdate={(id, checked) => {
               setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
               appsScriptApi.updateCleanStatus('initial', id, checked);
-            }} 
+            }}
+            onEdit={(record) => handleEditCheckout('initial', record)}
+            onDelete={(id) => handleDeleteCheckout('initial', id)}
           />
         )}
         {activeTab === 'handyman' && (
@@ -287,13 +497,25 @@ const Cleans: React.FC = () => {
             data={filteredHandyman} 
             photoMap={photoMap} 
             geoData={geoData}
+            addressMap={addressMap}
             onUpdate={(id, checked) => {
               setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
               appsScriptApi.updateCleanStatus('handyman', id, checked);
-            }} 
+            }}
+            onEdit={(record) => handleEditCheckout('handyman', record)}
+            onDelete={(id) => handleDeleteCheckout('handyman', id)}
           />
         )}
       </div>
+      <CleanCheckoutFormModal
+        isOpen={checkoutForm.open}
+        mode={checkoutForm.mode}
+        type={checkoutForm.type}
+        initialValues={checkoutForm.record}
+        loading={actionLoading}
+        onClose={() => setCheckoutForm(prev => ({ ...prev, open: false }))}
+        onSubmit={handleCheckoutSubmit}
+      />
     </div>
   );
 };
@@ -315,6 +537,27 @@ const VerificationCell = React.forwardRef<HTMLElement, { verified: boolean; onCl
     </button>
   )
 );
+
+const StatusIconButton = React.forwardRef<HTMLElement, {
+  verified: boolean;
+  onClick: (ev: React.MouseEvent<HTMLElement>) => void;
+  icon: 'clock' | 'map';
+}>(({ verified, onClick, icon }, ref) => (
+  <button
+    ref={ref as any}
+    type="button"
+    onClick={onClick}
+    className={`inline-flex items-center justify-center w-8 h-8 rounded-lg transition ${
+      icon === 'map'
+        ? 'text-slate-500 hover:text-orange-500 dark:text-stone-400 dark:hover:text-orange-400'
+        : (verified
+          ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300'
+          : 'text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300')
+    }`}
+  >
+    {icon === 'clock' ? <Clock size={14} /> : <MapPin size={14} />}
+  </button>
+));
 
 // Radio de verificación en metros
 const VERIFICATION_RADIUS_METERS = 80;
@@ -345,13 +588,24 @@ const MiniMap: React.FC<{ target?: [number, number]; markers?: [number, number][
 
     // Marcadores del trabajador (checkin/checkout)
     markers?.forEach((m, i) => {
-      const userIcon = L.divIcon({
-        className: '',
-        html: `<div style="width:14px;height:14px;border-radius:50%;background:${i === 0 ? '#10b981' : '#3b82f6'};border:2.5px solid white;box-shadow:0 0 0 1px rgba(0,0,0,0.1);"></div>`,
-        iconSize: [14, 14],
-        iconAnchor: [7, 7],
+      const marker = L.circleMarker(m, {
+        radius: 7,
+        color: 'white',
+        fillColor: i === 0 ? '#10b981' : '#3b82f6',
+        fillOpacity: 1,
+        weight: 2.5,
+      }).addTo(map).bindPopup(i === 0 ? 'Entrada' : 'Salida');
+
+      marker.on('mouseover', () => {
+        marker.setStyle({ radius: 9, weight: 3 });
+        const el = marker.getElement() as HTMLElement | null;
+        if (el) el.style.cursor = 'pointer';
       });
-      L.marker(m, { icon: userIcon }).addTo(map).bindPopup(i === 0 ? 'Entrada' : 'Salida');
+      marker.on('mouseout', () => marker.setStyle({ radius: 7, weight: 2.5 }));
+      marker.on('click', () => {
+        const [lat, lng] = m;
+        window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank', 'noopener,noreferrer');
+      });
     });
 
     // Ajustar el zoom para mostrar todos los puntos
@@ -387,20 +641,17 @@ const LocationVerificationModal: React.FC<{
     if (isOpen && anchorRef) {
       const rect = anchorRef.getBoundingClientRect();
       const popupW = 280;
-      const left = Math.min(rect.left, window.innerWidth - popupW - 8);
-      setPos({ top: rect.bottom + 6, left });
+      const popupH = targetCoords ? 240 : 170;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
+      const openAbove = rect.bottom + 6 + popupH > window.innerHeight - 8;
+      const top = openAbove ? Math.max(8, rect.top - popupH - 6) : rect.bottom + 6;
+      setPos({ top, left });
       setTimeout(() => setShow(true), 100);
     } else {
       setShow(false);
       setPos(null);
     }
-  }, [isOpen, anchorRef]);
-
-  // Calcular distancias si hay coordenadas
-  const distances = targetCoords && userCoords ? userCoords.map(userCoord => {
-    if (!userCoord) return null;
-    return getDistanceMeters(userCoord[0], userCoord[1], targetCoords[0], targetCoords[1]);
-  }) : [];
+  }, [isOpen, anchorRef, targetCoords]);
 
   return createPortal(
     <>
@@ -419,28 +670,6 @@ const LocationVerificationModal: React.FC<{
         {show && targetCoords && (
           <div className="w-full h-full relative">
             <MiniMap target={targetCoords} markers={userCoords} />
-            <div className="absolute top-2 right-2 flex flex-col gap-1.5 z-[1000]">
-               {distances[0] !== null && distances[0] !== undefined && (
-                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-medium shadow-sm ${
-                   distances[0] <= VERIFICATION_RADIUS_METERS
-                     ? 'bg-emerald-50/90 dark:bg-emerald-900/90 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                     : 'bg-red-50/90 dark:bg-red-900/90 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-                 }`}>
-                    <div className="w-2 h-2 rounded-full bg-[#10b981]" />
-                    <span>{Math.round(distances[0])}m</span>
-                 </div>
-               )}
-               {distances[1] !== null && distances[1] !== undefined && (
-                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-medium shadow-sm ${
-                   distances[1] <= VERIFICATION_RADIUS_METERS
-                     ? 'bg-emerald-50/90 dark:bg-emerald-900/90 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                     : 'bg-red-50/90 dark:bg-red-900/90 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-                 }`}>
-                    <div className="w-2 h-2 rounded-full bg-[#3b82f6]" />
-                    <span>{Math.round(distances[1])}m</span>
-                 </div>
-               )}
-            </div>
           </div>
         )}
         {!targetCoords && isOpen && (
@@ -463,16 +692,28 @@ const LocationVerificationModal: React.FC<{
   );
 };
 
-// Parses "HH:MM" or "YYYY-MM-DD HH:MM" and returns total minutes from midnight
-const toMinutes = (time: string): number => {
-  const part = time.includes(' ') ? time.split(' ')[1] : time;
-  const [h, m] = part.split(':').map(Number);
+// Extracts a time token like "HH:mm" or "HH:mm:ss" from mixed datetime strings.
+const extractTimeToken = (value: string): string | null => {
+  if (!value) return null;
+  const match = String(value).trim().match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  return match ? match[0] : null;
+};
+
+// Parses time strings and returns minutes from midnight, or null if invalid.
+const toMinutes = (time: string): number | null => {
+  const token = extractTimeToken(time);
+  if (!token) return null;
+  const [hRaw, mRaw] = token.split(':');
+  const h = Number(hRaw);
+  const m = Number(mRaw);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
   return h * 60 + m;
 };
 
 const formatTime = (time: string): string => {
   if (!time) return '';
-  const part = time.includes(' ') ? time.split(' ')[1] : time;
+  const part = extractTimeToken(time);
+  if (!part) return '';
   const parts = part.split(':');
   if (parts.length >= 2) {
     return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
@@ -480,12 +721,17 @@ const formatTime = (time: string): string => {
   return part;
 };
 
-const diffMinutes = (a: string, b: string): number =>
-  Math.abs(toMinutes(a) - toMinutes(b));
+const diffMinutes = (a: string, b: string): number | null => {
+  const aMinutes = toMinutes(a);
+  const bMinutes = toMinutes(b);
+  if (aMinutes === null || bMinutes === null) return null;
+  return Math.abs(aMinutes - bMinutes);
+};
 
 const isTimeVerified = (appEntry: string, appExit: string, userEntry: string, userExit: string): boolean => {
   const entryDiff = diffMinutes(appEntry, userEntry);
   const exitDiff = diffMinutes(appExit, userExit);
+  if (entryDiff === null || exitDiff === null) return false;
   return entryDiff <= 30 && exitDiff <= 30;
 };
 
@@ -498,11 +744,10 @@ interface DateVerificationModalProps {
   appExit: string;    // from checkoutFecha
   userEntry: string;  // horaEntrada
   userExit: string;   // horaSalida
-  onVerify?: () => void;
 }
 
 const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
-  isOpen, onClose, anchorRef, appEntry, appExit, userEntry, userExit, onVerify
+  isOpen, onClose, anchorRef, appEntry, appExit, userEntry, userExit
 }) => {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -510,8 +755,11 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
     if (isOpen && anchorRef) {
       const rect = anchorRef.getBoundingClientRect();
       const popupW = 240;
-      const left = Math.min(rect.left, window.innerWidth - popupW - 8);
-      setPos({ top: rect.bottom + 6, left });
+      const popupH = 220;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
+      const openAbove = rect.bottom + 6 + popupH > window.innerHeight - 8;
+      const top = openAbove ? Math.max(8, rect.top - popupH - 6) : rect.bottom + 6;
+      setPos({ top, left });
     } else {
       setPos(null);
     }
@@ -519,12 +767,11 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
 
   const entryDiff = diffMinutes(appEntry, userEntry);
   const exitDiff = diffMinutes(appExit, userExit);
-  const entryOk = entryDiff <= 30;
-  const exitOk = exitDiff <= 30;
+  const entryOk = entryDiff !== null && entryDiff <= 30;
+  const exitOk = exitDiff !== null && exitDiff <= 30;
   const allOk = entryOk && exitOk;
 
-  const Row: React.FC<{ label: string; app: string; user: string; ok: boolean; diff: number }> = ({ label, app, user, ok, diff }) => {
-    const appTime = app.includes(' ') ? app.split(' ')[1] : app;
+  const Row: React.FC<{ label: string; app: string; user: string; ok: boolean; diff: number | null }> = ({ label, app, user, ok, diff }) => {
     return (
       <div className="space-y-1.5">
         <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-medium">{label}</p>
@@ -532,17 +779,17 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
           {/* App value */}
           <div className="flex-1 bg-slate-50 dark:bg-stone-800 rounded-lg px-2.5 py-1.5">
             <p className="text-[9px] text-slate-400 dark:text-stone-500 mb-0.5">App</p>
-            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{formatTime(appTime)}</p>
+            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{formatTime(app) || '—'}</p>
           </div>
           {/* Diff badge */}
           <div className={`flex flex-col items-center px-1.5 py-1 rounded-lg text-[9px] font-bold tabular-nums ${ok ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400'}`}>
             <span>{ok ? '✓' : '✗'}</span>
-            <span>{diff}m</span>
+            <span>{diff === null ? '—' : `${diff}m`}</span>
           </div>
           {/* User value */}
           <div className="flex-1 bg-slate-50 dark:bg-stone-800 rounded-lg px-2.5 py-1.5">
             <p className="text-[9px] text-slate-400 dark:text-stone-500 mb-0.5">Usuario</p>
-            <p className={`text-xs font-semibold tabular-nums ${ok ? 'text-slate-700 dark:text-stone-200' : 'text-red-500 dark:text-red-400'}`}>{formatTime(user)}</p>
+            <p className={`text-xs font-semibold tabular-nums ${ok ? 'text-slate-700 dark:text-stone-200' : 'text-red-500 dark:text-red-400'}`}>{formatTime(user) || '—'}</p>
           </div>
         </div>
       </div>
@@ -571,17 +818,6 @@ const DateVerificationModal: React.FC<DateVerificationModalProps> = ({
           <Row label="Entrada" app={appEntry} user={userEntry} ok={entryOk} diff={entryDiff} />
           <Row label="Salida" app={appExit} user={userExit} ok={exitOk} diff={exitDiff} />
         </div>
-        {/* Actions */}
-        {!allOk && onVerify && (
-          <div className="px-3 pb-3">
-            <button
-              onClick={(e) => { e.stopPropagation(); onVerify(); }}
-              className="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-xl transition-colors shadow-lg shadow-orange-500/20"
-            >
-              Cambiar a verificado
-            </button>
-          </div>
-        )}
       </div>
     </>,
     document.body
@@ -592,15 +828,18 @@ const thClass = "px-6 py-5 sm:px-8 sm:py-6 text-xs font-normal text-slate-400 da
 const tdClass = "px-6 py-5 sm:px-8 sm:py-7";
 
 // Observation popup modal
-const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<HTMLElement | null>; text: string }> = ({ isOpen, anchorRef, text }) => {
+const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<HTMLElement | null>; text: string; title?: string }> = ({ isOpen, anchorRef, text, title = 'Observaciones' }) => {
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
     if (isOpen && anchorRef.current) {
       const rect = anchorRef.current.getBoundingClientRect();
       const popupW = 240;
-      const left = Math.min(rect.left, window.innerWidth - popupW - 8);
-      setPos({ top: rect.bottom + 6, left });
+      const popupH = 130;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
+      const openAbove = rect.bottom + 6 + popupH > window.innerHeight - 8;
+      const top = openAbove ? Math.max(8, rect.top - popupH - 6) : rect.bottom + 6;
+      setPos({ top, left });
     }
   }, [isOpen]);
 
@@ -610,10 +849,12 @@ const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<H
         className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 pointer-events-none ${isOpen ? 'opacity-100' : 'opacity-0'}`}
         style={{ top: pos.top, left: pos.left, width: 240 }}
       >
-        <div className="px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 bg-orange-50 dark:bg-orange-900/20">
-          <Info size={13} className="text-orange-500" />
-          <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-400">Observaciones</span>
-        </div>
+        {title && (
+          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 bg-orange-50 dark:bg-orange-900/20">
+            <Info size={13} className="text-orange-500" />
+            <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-400">{title}</span>
+          </div>
+        )}
         <div className="p-3">
           <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed">{text}</p>
         </div>
@@ -625,7 +866,7 @@ const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<H
 
 
 // Observation button component
-const ObservationButton: React.FC<{ text?: string }> = ({ text }) => {
+const ObservationButton: React.FC<{ text?: string; modalTitle?: string }> = ({ text, modalTitle = 'Observaciones' }) => {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const hasObs = !!text && text.trim() !== '';
@@ -646,8 +887,67 @@ const ObservationButton: React.FC<{ text?: string }> = ({ text }) => {
         {hasObs ? '1' : '0'}
       </button>
       {hasObs && (
-        <ObservationModal isOpen={open} anchorRef={btnRef} text={text!} />
+        <ObservationModal isOpen={open} anchorRef={btnRef} text={text!} title={modalTitle} />
       )}
+    </>
+  );
+};
+
+const ApartmentAddressModal: React.FC<{
+  isOpen: boolean;
+  anchorRef: React.RefObject<HTMLElement | null>;
+  apartmentName: string;
+  address?: string;
+}> = ({ isOpen, anchorRef, apartmentName, address }) => {
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (isOpen && anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      const popupW = 260;
+      const popupH = 120;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
+      const openAbove = rect.bottom + 6 + popupH > window.innerHeight - 8;
+      const top = openAbove ? Math.max(8, rect.top - popupH - 6) : rect.bottom + 6;
+      setPos({ top, left });
+    }
+  }, [isOpen, anchorRef]);
+
+  return createPortal(
+    <div
+      className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 pointer-events-none ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+      style={{ top: pos.top, left: pos.left, width: 260 }}
+    >
+      <div className="px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 bg-orange-50 dark:bg-orange-900/20">
+        <MapPin size={13} className="text-orange-500" />
+        <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-400">Direccion</span>
+      </div>
+      <div className="p-3 space-y-1.5">
+        <p className="text-[10px] text-slate-400 dark:text-stone-500">{apartmentName}</p>
+        <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed">{address || 'Direccion no encontrada'}</p>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+const ApartmentAddressButton: React.FC<{ apartmentName: string; address?: string }> = ({ apartmentName, address }) => {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen(prev => !prev); }}
+        onMouseEnter={(e) => { e.stopPropagation(); setOpen(true); }}
+        onMouseLeave={() => setOpen(false)}
+        className="inline-block bg-white dark:bg-stone-800 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal text-slate-500 dark:text-stone-400 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
+      >
+        {apartmentName}
+      </button>
+      <ApartmentAddressModal isOpen={open} anchorRef={btnRef} apartmentName={apartmentName} address={address} />
     </>
   );
 };
@@ -657,8 +957,11 @@ const TableNormalCleans: React.FC<{
   data: NormalCleanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
-  onUpdate: (id: string, checked: boolean) => void
-}> = ({ data, geoData, onUpdate }) => {
+  addressMap: Record<string, string>;
+  onUpdate: (id: string, checked: boolean) => void;
+  onEdit: (record: NormalCleanRecord) => void;
+  onDelete: (id: string) => void;
+}> = ({ data, geoData, addressMap, onUpdate, onEdit, onDelete }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -679,11 +982,11 @@ const TableNormalCleans: React.FC<{
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Hora</th>
-            <th className={thClass}>Ubicación</th>
             <th className={thClass}>Apartamento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
+            <th className={thClass}>Hora</th>
+            <th className={thClass}>GPS</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
@@ -714,9 +1017,18 @@ const TableNormalCleans: React.FC<{
                     </div>
                   </div>
                 </td>
+                <td className={tdClass}>
+                  <ApartmentAddressButton apartmentName={r.apartamento} address={addressMap[normalizeKey(r.apartamento)]} />
+                </td>
+                <td className={`${tdClass}`}>
+                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{formatDisplayDate(r.checkinFecha)}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaEntrada)} - {formatTime(r.horaSalida)}</div>
+                </td>
+                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
                 <td className={tdClass} onClick={(e) => e.stopPropagation()}>
-                  <VerificationCell
+                  <StatusIconButton
                     verified={isTimeVerified(r.checkinFecha, r.checkoutFecha, r.horaEntrada, r.horaSalida)}
+                    icon="clock"
                     onClick={(ev) => setDateModal({ open: true, record: r, anchor: ev.currentTarget })}
                   />
                 </td>
@@ -730,8 +1042,9 @@ const TableNormalCleans: React.FC<{
                       getDistanceMeters(checkout[0], checkout[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS;
 
                     return (
-                      <VerificationCell
+                      <StatusIconButton
                         verified={!!isVerified}
+                        icon="map"
                         onClick={(ev) => setLocationModal({
                           open: true,
                           anchor: ev.currentTarget,
@@ -743,16 +1056,6 @@ const TableNormalCleans: React.FC<{
                     );
                   })()}
                 </td>
-                <td className={tdClass}>
-                  <span className="inline-block bg-white dark:bg-stone-800 text-black dark:text-stone-100 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-                    {r.apartamento}
-                  </span>
-                </td>
-                <td className={`${tdClass}`}>
-                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
-                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaEntrada)} - {formatTime(r.horaSalida)}</div>
-                </td>
-                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
               </tr>
               {expandedId === r.id && (
                 <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -777,6 +1080,15 @@ const TableNormalCleans: React.FC<{
                           <span>Estado Verificado (Checked)</span>
                         </div>
                         <VerificationCell verified={r.checked} onClick={() => onUpdate(r.id, !r.checked)} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <span>Acciones</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
+                          <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
+                        </div>
                       </div>
 
                       {/* Llaves */}
@@ -841,10 +1153,6 @@ const TableNormalCleans: React.FC<{
           appExit={dateModal.record.checkoutFecha}
           userEntry={dateModal.record.horaEntrada}
           userExit={dateModal.record.horaSalida}
-          onVerify={() => {
-            onUpdate(dateModal.record!.id, true);
-            setDateModal(prev => ({ ...prev, open: false }));
-          }}
         />
       )}
     </>
@@ -855,8 +1163,11 @@ const TableInitialCleans: React.FC<{
   data: InitialCleanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
-  onUpdate: (id: string, checked: boolean) => void
-}> = ({ data, geoData, onUpdate }) => {
+  addressMap: Record<string, string>;
+  onUpdate: (id: string, checked: boolean) => void;
+  onEdit: (record: InitialCleanRecord) => void;
+  onDelete: (id: string) => void;
+}> = ({ data, geoData, addressMap, onUpdate, onEdit, onDelete }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -877,11 +1188,11 @@ const TableInitialCleans: React.FC<{
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Hora</th>
-            <th className={thClass}>Ubicación</th>
             <th className={thClass}>Apartamento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
+            <th className={thClass}>Hora</th>
+            <th className={thClass}>GPS</th>
             <th className={thClass}>Observaciones</th>
           </tr>
         </thead>
@@ -902,9 +1213,18 @@ const TableInitialCleans: React.FC<{
                     <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                   </div>
                 </td>
+                <td className={tdClass}>
+                  <ApartmentAddressButton apartmentName={r.apartamento} address={addressMap[normalizeKey(r.apartamento)]} />
+                </td>
+                <td className={`${tdClass}`}>
+                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{formatDisplayDate(r.checkinFecha)}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaEntrada)} - {formatTime(r.horaSalida)}</div>
+                </td>
+                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
                 <td className={tdClass} onClick={(e) => e.stopPropagation()}>
-                  <VerificationCell
+                  <StatusIconButton
                     verified={isTimeVerified(r.checkinFecha, r.checkoutFecha, r.horaEntrada, r.horaSalida)}
+                    icon="clock"
                     onClick={(ev) => setDateModal({ open: true, record: r, anchor: ev.currentTarget })}
                   />
                 </td>
@@ -918,8 +1238,9 @@ const TableInitialCleans: React.FC<{
                       getDistanceMeters(checkout[0], checkout[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS;
 
                     return (
-                      <VerificationCell
+                      <StatusIconButton
                         verified={!!isVerified}
+                        icon="map"
                         onClick={(ev) => setLocationModal({
                           open: true,
                           anchor: ev.currentTarget,
@@ -931,16 +1252,6 @@ const TableInitialCleans: React.FC<{
                     );
                   })()}
                 </td>
-                <td className={tdClass}>
-                  <span className="inline-block bg-white dark:bg-stone-800 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal text-slate-500 dark:text-stone-400">
-                    {r.apartamento}
-                  </span>
-                </td>
-                <td className={`${tdClass}`}>
-                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.checkinFecha.split(' ')[0]}</div>
-                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaEntrada)} - {formatTime(r.horaSalida)}</div>
-                </td>
-                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.km} km</td>
                 <td className={`${tdClass} text-center`}>
                   <ObservationButton text={r.observaciones} />
                 </td>
@@ -968,6 +1279,15 @@ const TableInitialCleans: React.FC<{
                         </div>
                         <VerificationCell verified={r.checked} onClick={() => onUpdate(r.id, !r.checked)} />
                       </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <span>Acciones</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
+                          <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
+                        </div>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -991,10 +1311,6 @@ const TableInitialCleans: React.FC<{
           appExit={dateModal.record.checkoutFecha}
           userEntry={dateModal.record.horaEntrada}
           userExit={dateModal.record.horaSalida}
-          onVerify={() => {
-            onUpdate(dateModal.record!.id, true);
-            setDateModal(prev => ({ ...prev, open: false }));
-          }}
         />
       )}
     </>
@@ -1005,8 +1321,11 @@ const TableHandyman: React.FC<{
   data: HandymanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
-  onUpdate: (id: string, checked: boolean) => void
-}> = ({ data, geoData, onUpdate }) => {
+  addressMap: Record<string, string>;
+  onUpdate: (id: string, checked: boolean) => void;
+  onEdit: (record: HandymanRecord) => void;
+  onDelete: (id: string) => void;
+}> = ({ data, geoData, addressMap, onUpdate, onEdit, onDelete }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1027,12 +1346,12 @@ const TableHandyman: React.FC<{
         <thead>
           <tr className="border-b border-stone-100 dark:border-stone-800">
             <th className={thClass}>Nombres y Apellidos</th>
-            <th className={thClass}>Hora</th>
-            <th className={thClass}>Ubicación</th>
+            <th className={thClass}>Detalles del Trabajo</th>
             <th className={thClass}>Alojamiento</th>
             <th className={thClass}>Fecha</th>
             <th className={thClass}>Km</th>
-            <th className={thClass}>Detalles del Trabajo</th>
+            <th className={thClass}>Hora</th>
+            <th className={thClass}>GPS</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
@@ -1052,9 +1371,21 @@ const TableHandyman: React.FC<{
                     <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                   </div>
                 </td>
+                <td className={`${tdClass} text-center`}>
+                  <ObservationButton text={r.observacionesTarea} modalTitle="" />
+                </td>
+                <td className={tdClass}>
+                  <ApartmentAddressButton apartmentName={r.alojamiento} address={addressMap[normalizeKey(r.alojamiento)]} />
+                </td>
+                <td className={`${tdClass}`}>
+                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{formatDisplayDate(r.fechaLlegada)}</div>
+                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaInicioTarea)} - {formatTime(r.horaFinTarea)}</div>
+                </td>
+                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} min</td>
                 <td className={tdClass} onClick={(e) => e.stopPropagation()}>
-                  <VerificationCell
+                  <StatusIconButton
                     verified={isTimeVerified(r.fechaLlegada, r.fechaFin, r.horaInicioTarea, r.horaFinTarea)}
+                    icon="clock"
                     onClick={(ev) => setDateModal({ open: true, record: r, anchor: ev.currentTarget })}
                   />
                 </td>
@@ -1068,8 +1399,9 @@ const TableHandyman: React.FC<{
                       getDistanceMeters(checkout[0], checkout[1], target.lat, target.lng) <= VERIFICATION_RADIUS_METERS;
 
                     return (
-                      <VerificationCell
+                      <StatusIconButton
                         verified={!!isVerified}
+                        icon="map"
                         onClick={(ev) => setLocationModal({
                           open: true,
                           anchor: ev.currentTarget,
@@ -1081,19 +1413,6 @@ const TableHandyman: React.FC<{
                     );
                   })()}
                 </td>
-                <td className={tdClass}>
-                  <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2 py-0.5 rounded-md soft-shadow font-normal">
-                    {r.alojamiento}
-                  </span>
-                </td>
-                <td className={`${tdClass}`}>
-                  <div className="text-[11px] text-slate-400 dark:text-stone-500 mb-0.5">{r.fechaLlegada.split(' ')[0]}</div>
-                  <div className="text-slate-600 dark:text-stone-400 text-sm tabular-nums">{formatTime(r.horaInicioTarea)} - {formatTime(r.horaFinTarea)}</div>
-                </td>
-                <td className={`${tdClass} text-slate-600 dark:text-stone-400 tabular-nums`}>{r.cantidadMinutos} min</td>
-                <td className={`${tdClass} text-center`}>
-                  <ObservationButton text={r.observacionesTarea} />
-                </td>
               </tr>
               {expandedId === r.id && (
                 <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -1102,7 +1421,7 @@ const TableHandyman: React.FC<{
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
                           <MessageSquare size={12} className="text-orange-500" />
-                          <span>Observaciones del Trabajo</span>
+                          <span>Detalles del Trabajo</span>
                         </div>
                         <div className="bg-white/50 dark:bg-stone-800/50 rounded-xl p-3 border border-stone-100 dark:border-stone-700/50 min-h-[60px]">
                           <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed italic">
@@ -1117,6 +1436,15 @@ const TableHandyman: React.FC<{
                           <span>Estado Verificado (Checked)</span>
                         </div>
                         <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => onUpdate(r.id, r.estadoCompletado !== 'Completado')} />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                          <span>Acciones</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
+                          <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -1141,10 +1469,6 @@ const TableHandyman: React.FC<{
           appExit={dateModal.record.fechaFin}
           userEntry={dateModal.record.horaInicioTarea}
           userExit={dateModal.record.horaFinTarea}
-          onVerify={() => {
-            onUpdate(dateModal.record!.id, true);
-            setDateModal(prev => ({ ...prev, open: false }));
-          }}
         />
       )}
     </>
