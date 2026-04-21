@@ -12,7 +12,7 @@ export interface Worker {
   dni?: string;
   netMoneyMonth: number;
   owedMoney: number;
-  sabanasToallasDebidas?: number;
+  efectivoRetenido?: number;
   cleansCountMonth: number;
   kmsMonth: number;
   extraHoursMonth?: number;

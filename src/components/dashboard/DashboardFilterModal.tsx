@@ -23,7 +23,7 @@ const DashboardFilterModal: React.FC<DashboardFilterModalProps> = ({
   ];
 
   const clearFilters = () => {
-    onApply({ period: 'semanal', customDesde: '', customHasta: '' });
+    onApply({ period: 'mensual', customDesde: '', customHasta: '' });
   };
 
   return (

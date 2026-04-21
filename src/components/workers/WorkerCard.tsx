@@ -90,11 +90,11 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
           </div>
           <div className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Por cobrar</div>
         </div>
-        <div className="px-3 py-2.5 text-center flex flex-col justify-center" title="Sábanas y toallas pagadas en efectivo (no resta del 'Por cobrar')">
-          <div className={`text-sm font-bold tabular-nums ${(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}>
-            {(worker.sabanasToallasDebidas ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+        <div className="px-3 py-2.5 text-center flex flex-col justify-center" title="Efectivo retenido por fianzas, garantías o sábanas (no resta a lo que le debes)">
+          <div className={`text-sm font-bold tabular-nums ${(worker.efectivoRetenido ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-stone-500'}`}>
+            {(worker.efectivoRetenido ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
           </div>
-          <div className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Sábanas/Toallas</div>
+          <div className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">Efectivo Ret.</div>
         </div>
       </div>
 

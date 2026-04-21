@@ -20,9 +20,12 @@ import {
   User,
   MessageSquare,
   Check,
+  RotateCcw,
 } from 'lucide-react';
 import { appsScriptApi, getDistanceMeters, parseCoords, geocodeAddress } from '../services/api';
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, Worker, Accommodation } from '../services/mockData';
+import { matchesWorkerByPhone } from '../utils/payments';
+import { formatName } from '../utils/formatters';
 import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { getExpectedHours, computeHoursWorked } from '../utils/payments';
@@ -165,6 +168,11 @@ const Cleans: React.FC = () => {
     keysStatus: 'all',
     guestTiming: 'all'
   });
+  const [lastAction, setLastAction] = useState<{
+    id: string;
+    type: TabType;
+    wasChecked: boolean;
+  } | null>(null);
 
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -294,6 +302,30 @@ const Cleans: React.FC = () => {
       setActionLoading(false);
     }
   };
+
+  const handleUndo = async () => {
+    if (!lastAction) return;
+    const { id, type, wasChecked } = lastAction;
+    try {
+      if (type === 'normal') {
+        setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked: wasChecked } : r));
+      } else if (type === 'initial') {
+        setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked: wasChecked } : r));
+      } else {
+        setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: wasChecked ? 'Completado' : 'Pendiente' } : r));
+      }
+      await appsScriptApi.updateCleanStatus(type, id, wasChecked);
+      setLastAction(null);
+    } catch (error) {
+      console.error('Error undoing status:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!lastAction) return;
+    const timer = setTimeout(() => setLastAction(null), 8000);
+    return () => clearTimeout(timer);
+  }, [lastAction]);
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -469,8 +501,11 @@ const Cleans: React.FC = () => {
             data={filteredNormal} 
             photoMap={photoMap} 
             geoData={geoData}
+            workers={workers}
             addressMap={addressMap}
             onUpdate={(id, checked) => {
+              const old = normalCleans.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'normal', wasChecked: old.checked });
               setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
               appsScriptApi.updateCleanStatus('normal', id, checked);
             }}
@@ -483,8 +518,11 @@ const Cleans: React.FC = () => {
             data={filteredInitial} 
             photoMap={photoMap} 
             geoData={geoData}
+            workers={workers}
             addressMap={addressMap}
             onUpdate={(id, checked) => {
+              const old = initialCleans.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'initial', wasChecked: old.checked });
               setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
               appsScriptApi.updateCleanStatus('initial', id, checked);
             }}
@@ -497,8 +535,11 @@ const Cleans: React.FC = () => {
             data={filteredHandyman} 
             photoMap={photoMap} 
             geoData={geoData}
+            workers={workers}
             addressMap={addressMap}
             onUpdate={(id, checked) => {
+              const old = handymanRecords.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'handyman', wasChecked: old.estadoCompletado === 'Completado' });
               setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
               appsScriptApi.updateCleanStatus('handyman', id, checked);
             }}
@@ -516,6 +557,17 @@ const Cleans: React.FC = () => {
         onClose={() => setCheckoutForm(prev => ({ ...prev, open: false }))}
         onSubmit={handleCheckoutSubmit}
       />
+      {lastAction && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-4 duration-300">
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 dark:bg-stone-800 text-white rounded-full shadow-2xl border border-white/10 hover:bg-slate-800 dark:hover:bg-stone-700 transition-all group"
+          >
+            <RotateCcw size={14} className="group-hover:rotate-[-45deg] transition-transform" />
+            <span className="text-xs font-medium">Revertir cambio de estado</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -957,11 +1009,12 @@ const TableNormalCleans: React.FC<{
   data: NormalCleanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
+  workers: Worker[];
   addressMap: Record<string, string>;
   onUpdate: (id: string, checked: boolean) => void;
   onEdit: (record: NormalCleanRecord) => void;
   onDelete: (id: string) => void;
-}> = ({ data, geoData, addressMap, onUpdate, onEdit, onDelete }) => {
+}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1004,7 +1057,17 @@ const TableNormalCleans: React.FC<{
                   <div className="flex items-center gap-2">
                     <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${expandedId === r.id ? 'bg-orange-500 scale-125' : 'bg-transparent'}`} />
                     <div className="flex flex-col">
-                      <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                      <div className="font-normal text-slate-800 dark:text-stone-200 flex items-center gap-1.5">
+                        {(() => {
+                          const w = workers.find(worker => matchesWorkerByPhone(worker.telefono, r.telefono));
+                          return (
+                            <>
+                              <span>{formatName(w?.fullName || `${r.nombre} ${r.apellidos}`)}</span>
+                              {!w && <div className="w-1.5 h-1.5 rounded-full bg-red-500/80 shrink-0" title="Trabajador no registrado en el sistema" />}
+                            </>
+                          );
+                        })()}
+                      </div>
                       <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                     </div>
                     <div className="flex items-center gap-1 ml-1">
@@ -1163,11 +1226,12 @@ const TableInitialCleans: React.FC<{
   data: InitialCleanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
+  workers: Worker[];
   addressMap: Record<string, string>;
   onUpdate: (id: string, checked: boolean) => void;
   onEdit: (record: InitialCleanRecord) => void;
   onDelete: (id: string) => void;
-}> = ({ data, geoData, addressMap, onUpdate, onEdit, onDelete }) => {
+}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1209,7 +1273,17 @@ const TableInitialCleans: React.FC<{
               >
                 <td className={tdClass}>
                   <div className="flex flex-col">
-                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="font-normal text-slate-800 dark:text-stone-200 flex items-center gap-1.5">
+                      {(() => {
+                        const w = workers.find(worker => matchesWorkerByPhone(worker.telefono, r.telefono));
+                        return (
+                          <>
+                            <span>{formatName(w?.fullName || `${r.nombre} ${r.apellidos}`)}</span>
+                            {!w && <div className="w-1.5 h-1.5 rounded-full bg-red-500/80 shrink-0" title="Trabajador no registrado en el sistema" />}
+                          </>
+                        );
+                      })()}
+                    </div>
                     <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                   </div>
                 </td>
@@ -1321,11 +1395,12 @@ const TableHandyman: React.FC<{
   data: HandymanRecord[];
   photoMap: Record<string, string>;
   geoData: Record<string, { lat: number, lng: number }>;
+  workers: Worker[];
   addressMap: Record<string, string>;
   onUpdate: (id: string, checked: boolean) => void;
   onEdit: (record: HandymanRecord) => void;
   onDelete: (id: string) => void;
-}> = ({ data, geoData, addressMap, onUpdate, onEdit, onDelete }) => {
+}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1367,7 +1442,17 @@ const TableHandyman: React.FC<{
               >
                 <td className={tdClass}>
                   <div className="flex flex-col">
-                    <div className="font-normal text-slate-800 dark:text-stone-200">{r.nombre} {r.apellidos}</div>
+                    <div className="font-normal text-slate-800 dark:text-stone-200 flex items-center gap-1.5">
+                      {(() => {
+                        const w = workers.find(worker => matchesWorkerByPhone(worker.telefono, r.telefono));
+                        return (
+                          <>
+                            <span>{formatName(w?.fullName || `${r.nombre} ${r.apellidos}`)}</span>
+                            {!w && <div className="w-1.5 h-1.5 rounded-full bg-red-500/80 shrink-0" title="Trabajador no registrado en el sistema" />}
+                          </>
+                        );
+                      })()}
+                    </div>
                     <div className="text-[10px] text-slate-400 dark:text-stone-500">{r.telefono}</div>
                   </div>
                 </td>
