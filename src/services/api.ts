@@ -29,6 +29,7 @@ const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; //
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
+const CLEANS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7jVfemlvNXvKNKv_Bxy5Iold2-mLQjgqVtoJ2KOe27zTzWJ4XM_7Icp_QvkrX9dVjhQ/exec';
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
 const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
@@ -225,6 +226,21 @@ const parseBool = (val: any): boolean => {
   return false;
 };
 
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const fetchWithRetry = async (url: string, options?: RequestInit, retries = 3): Promise<Response> => {
+  let lastResponse: Response | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(url, options);
+    lastResponse = response;
+    const shouldRetry = response.status === 429 || response.status >= 500;
+    if (!shouldRetry || attempt === retries) return response;
+    const backoff = 600 * Math.pow(2, attempt) + Math.floor(Math.random() * 300);
+    await sleep(backoff);
+  }
+  return lastResponse as Response;
+};
+
 // Simulación de persistencia en localStorage para el MVP
 const getStoredWorkers = (): Worker[] => {
   try {
@@ -309,6 +325,80 @@ const saveUndoStack = (stack: PaymentAction[]) => {
 // Simulación de delay para llamadas a "Apps Script"
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+type CleanSheetType = 'normal' | 'initial' | 'handyman';
+
+const getCleanSheetName = (type: CleanSheetType): string => {
+  if (type === 'normal') return 'Checkout_Limpieza_Normal';
+  if (type === 'initial') return 'Checkout_Limpieza_Inicial';
+  return 'Checkout_Manitas';
+};
+
+const parseRowIndexFromId = (id: string): number => {
+  const rowIndex = parseInt(String(id || '').split('_')[1], 10);
+  if (!Number.isFinite(rowIndex) || rowIndex <= 1) {
+    throw new Error(`Invalid clean record id: ${id}`);
+  }
+  return rowIndex;
+};
+
+const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Record<string, any> => {
+  if (type === 'normal') {
+    const data = record as NormalCleanRecord;
+    return {
+      Telefono: data.telefono,
+      Nombre: data.nombre,
+      Apellidos: data.apellidos,
+      'Checkin Fecha Trabajador': data.checkinFecha,
+      'Checkin Ubicacion Trabajador': data.checkinUbicacion,
+      'Checkout Fecha Trabajador': data.checkoutFecha,
+      'Checkout Ubicacion Trabajador': data.checkoutUbicacion,
+      Apartamento: data.apartamento,
+      'Hora Limpieza Entrada': data.horaEntrada,
+      'Hora Limpieza Salida': data.horaSalida,
+      'Sigue Huesped': data.sigueHuesped,
+      'Fecha Salida Reserva': data.fechaSalidaReserva,
+      'Recoge Llaves': data.recogeLlaves,
+      Km: data.km,
+      Observaciones: data.observaciones,
+      Checked: data.checked,
+    };
+  }
+  if (type === 'initial') {
+    const data = record as InitialCleanRecord;
+    return {
+      Telefono: data.telefono,
+      Nombre: data.nombre,
+      Apellidos: data.apellidos,
+      'Checkin Fecha Trabajador': data.checkinFecha,
+      'Checkin Ubicacion Trabajador': data.checkinUbicacion,
+      'Checkout Fecha Trabajador': data.checkoutFecha,
+      'Checkout Ubicacion Trabajador': data.checkoutUbicacion,
+      Apartamento: data.apartamento,
+      'Hora Limpieza Entrada': data.horaEntrada,
+      'Hora Limpieza Salida': data.horaSalida,
+      Km: data.km,
+      Observaciones: data.observaciones,
+      Checked: data.checked,
+    };
+  }
+  const data = record as HandymanRecord;
+  return {
+    Telefono: data.telefono,
+    Nombre: data.nombre,
+    Apellidos: data.apellidos,
+    'Checkin Fecha Trabajador': data.fechaLlegada,
+    'Checkin Ubicacion Trabajador': data.ubicacionInicio,
+    'Checkout Fecha Trabajador': data.fechaFin,
+    'Checkout Ubicacion Trabajador': data.ubicacionFin,
+    Apartamento: data.alojamiento,
+    'Hora Reparacion Entrada': data.horaInicioTarea,
+    'Hora Reparacion Salida': data.horaFinTarea,
+    Km: data.cantidadMinutos,
+    Observaciones: data.observacionesTarea,
+    Checked: data.estadoCompletado === 'Completado',
+  };
+};
+
 export const appsScriptApi = {
   login: async (email: string, pass: string): Promise<User | null> => {
     await delay(800);
@@ -323,7 +413,7 @@ export const appsScriptApi = {
   getWorkers: async (): Promise<Worker[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
 
       if (!response.ok) {
         throw new Error(`Error en la API de Google Sheets (Operarios): ${response.statusText}`);
@@ -920,7 +1010,7 @@ export const appsScriptApi = {
   getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
 
       if (!response.ok) {
         throw new Error(`Error fetching normal cleans: ${response.statusText}`);
@@ -951,9 +1041,9 @@ export const appsScriptApi = {
             telefono: String(getVal('Telefono') || ''),
             nombre,
             apellidos,
-            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Limpieza Entrada')),
+            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador')),
             checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador'), getVal('Hora Limpieza Salida')),
+            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador')),
             checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
             apartamento: String(getVal('Apartamento') || ''),
             horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
@@ -975,13 +1065,10 @@ export const appsScriptApi = {
     }
   },
 
-  updateCleanStatus: async (type: 'normal' | 'initial' | 'handyman', id: string, checked: boolean): Promise<boolean> => {
+  updateCleanStatus: async (type: CleanSheetType, id: string, checked: boolean): Promise<boolean> => {
     try {
-      const rowIndex = parseInt(id.split('_')[1]);
-      let sheetName = '';
-      if (type === 'normal') sheetName = 'Checkout_Limpieza_Normal';
-      else if (type === 'initial') sheetName = 'Checkout_Limpieza_Inicial';
-      else if (type === 'handyman') sheetName = 'Checkout_Manitas';
+      const rowIndex = parseRowIndexFromId(id);
+      const sheetName = getCleanSheetName(type);
 
       const payload = {
         action: 'updateCleanStatus',
@@ -990,7 +1077,7 @@ export const appsScriptApi = {
         checked
       };
 
-      await fetch(APPS_SCRIPT_URL, {
+      await fetch(CLEANS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: {
@@ -1006,10 +1093,77 @@ export const appsScriptApi = {
     }
   },
 
+  createCheckoutRecord: async (type: CleanSheetType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Promise<boolean> => {
+    try {
+      const payload = {
+        action: 'createCheckout',
+        sheetName: getCleanSheetName(type),
+        record: cleanRecordToPayload(type, record)
+      };
+      await fetch(CLEANS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    } catch (error) {
+      console.error('Error creating checkout record:', error);
+      return false;
+    }
+  },
+
+  updateCheckoutRecord: async (type: CleanSheetType, id: string, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Promise<boolean> => {
+    try {
+      const payload = {
+        action: 'updateCheckout',
+        sheetName: getCleanSheetName(type),
+        rowIndex: parseRowIndexFromId(id),
+        record: cleanRecordToPayload(type, record)
+      };
+      await fetch(CLEANS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    } catch (error) {
+      console.error('Error updating checkout record:', error);
+      return false;
+    }
+  },
+
+  deleteCheckoutRecord: async (type: CleanSheetType, id: string): Promise<boolean> => {
+    try {
+      const payload = {
+        action: 'deleteCheckout',
+        sheetName: getCleanSheetName(type),
+        rowIndex: parseRowIndexFromId(id)
+      };
+      await fetch(CLEANS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify(payload)
+      });
+      return true;
+    } catch (error) {
+      console.error('Error deleting checkout record:', error);
+      return false;
+    }
+  },
+
   getInitialCleans: async (): Promise<InitialCleanRecord[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Inicial!A:M?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
 
       if (!response.ok) {
         throw new Error(`Error fetching initial cleans: ${response.statusText}`);
@@ -1045,9 +1199,9 @@ export const appsScriptApi = {
             telefono: String(getVal('Telefono') || ''),
             nombre,
             apellidos,
-            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Limpieza Entrada')),
+            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador')),
             checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador'), getVal('Hora Limpieza Salida')),
+            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador')),
             checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
             apartamento: String(getVal('Apartamento') || ''),
             horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
@@ -1069,7 +1223,7 @@ export const appsScriptApi = {
   getHandymanRecords: async (): Promise<HandymanRecord[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Manitas!A:M?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
 
       if (!response.ok) {
         throw new Error(`Error fetching handyman records: ${response.statusText}`);
@@ -1105,9 +1259,9 @@ export const appsScriptApi = {
             telefono: String(getVal('Telefono') || ''),
             nombre,
             apellidos,
-            fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reparacion Entrada')),
+            fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador')),
             ubicacionInicio: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            fechaFin: parseDateTime(getVal('Checkout Fecha Trabajador'), getVal('Hora Reparacion Salida')),
+            fechaFin: parseDateTime(getVal('Checkout Fecha Trabajador')),
             ubicacionFin: String(getVal('Checkout Ubicacion Trabajador') || ''),
             alojamiento: String(getVal('Apartamento') || ''),
             horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
