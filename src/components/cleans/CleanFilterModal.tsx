@@ -136,14 +136,12 @@ const CleanFilterModal: React.FC<CleanFilterModalProps> = ({ isOpen, onClose, fi
                   <button
                     key={s}
                     onClick={() => updateFilters({ status: s })}
-                    className={`px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-2 active:scale-[0.98] border ${
+                    className={`px-4 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] border ${
                       isActive
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {s === 'verified' && <CheckCircle2 size={12} />}
-                    {s === 'unverified' && <XCircle size={12} />}
                     {s === 'all' ? 'Cualquiera' : s === 'verified' ? 'Verificada' : 'Sin Verificar'}
                   </button>
                 );

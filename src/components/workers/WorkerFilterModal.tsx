@@ -77,10 +77,6 @@ const WorkerFilterModal: React.FC<WorkerFilterModalProps> = ({ isOpen, onClose, 
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {type === 'all' && <CheckCircle2 size={12} />}
-                    {type === 'bizum' && <Smartphone size={12} />}
-                    {type === 'tarjeta' && <CreditCard size={12} />}
-                    {type === 'efectivo' && <Banknote size={12} />}
                     <span className="capitalize">{type === 'all' ? 'Todos' : type}</span>
                   </button>
                 );

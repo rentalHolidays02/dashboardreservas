@@ -130,8 +130,6 @@ const IncidentFilterModal: React.FC<IncidentFilterModalProps> = ({ isOpen, onClo
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {s === 'limpiador' && <UserRound size={12} />}
-                    {s === 'empresa' && <Building2 size={12} />}
                     {s === 'all' ? 'Todos' : s === 'limpiador' ? 'Limpiador' : 'Empresa'}
                   </button>
                 );
