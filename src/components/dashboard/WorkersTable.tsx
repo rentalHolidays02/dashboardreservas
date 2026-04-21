@@ -9,7 +9,7 @@ interface WorkersTableProps {
   onWorkerSelect?: (w: Worker | null) => void;
 }
 
-const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_1fr_80px]';
+const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px]';
 
 type SortKey = 'none' | 'owed_asc' | 'owed_desc' | 'cleans_desc' | 'kms_desc';
 
@@ -146,8 +146,7 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
         <div className={`grid ${COL_WORKERS} gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800`}>
           <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Alojamientos</span>
-          <span className="text-xs text-slate-400 dark:text-stone-500">Dinero Debido</span>
-          <span className="text-xs text-slate-400 dark:text-stone-500" title="Sábanas y toallas pagadas en efectivo (no resta del Dinero Debido)">Sábanas/Toallas</span>
+          <span className="text-xs text-slate-400 dark:text-stone-500">Dinero</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Limpiezas</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Kms</span>
           <span />
@@ -191,13 +190,6 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
 
                   <p className={`text-xs tabular-nums ${worker.owedMoney > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
                     {worker.owedMoney.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                  </p>
-
-                  <p
-                    className={`text-xs tabular-nums ${(worker.sabanasToallasDebidas ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-400 dark:text-stone-500'}`}
-                    title="Sábanas y toallas en efectivo (aparte del dinero debido)"
-                  >
-                    {(worker.sabanasToallasDebidas ?? 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                   </p>
 
                   <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{worker.cleansCountMonth}</p>

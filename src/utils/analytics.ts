@@ -1,6 +1,6 @@
 import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import { Period } from '../components/dashboard/DashboardFilterModal';
-import { computeCleanPay } from './payments';
+import { computeCleanPay, cleanPhone, matchesWorkerByPhone } from './payments';
 
 export interface ChartPoint {
   label: string;
@@ -48,15 +48,13 @@ export const aggregateDailyData = (
 
   const selectedWorker = selectedWorkerId ? workers.find(w => w.id === selectedWorkerId) : null;
 
-  const findWorker = (nombre: string, apellidos: string): Worker | undefined => {
-    const target = `${nombre} ${apellidos}`.toLowerCase().trim();
-    return workers.find(w => (w.fullName || '').toLowerCase().trim() === target);
+  const findWorker = (telefono: string): Worker | undefined => {
+    return workers.find(w => matchesWorkerByPhone(w.telefono, telefono));
   };
 
   const processClean = (
     fecha: string,
-    nombre: string,
-    apellidos: string,
+    telefono: string,
     apartamento: string,
     horaEntrada: string,
     horaSalida: string,
@@ -66,11 +64,10 @@ export const aggregateDailyData = (
     if (!result[datePart]) return;
 
     if (selectedWorker) {
-      const match = `${nombre} ${apellidos}`.toLowerCase().trim() === selectedWorker.fullName.toLowerCase().trim();
-      if (!match) return;
+      if (!matchesWorkerByPhone(telefono, selectedWorker.telefono)) return;
     }
 
-    const worker = findWorker(nombre, apellidos);
+    const worker = findWorker(telefono);
     const pagoPorReserva = worker?.pagoPorReserva ?? 20;
     const precioPorKm = worker?.precioPorKm ?? 0.19;
 
@@ -82,32 +79,30 @@ export const aggregateDailyData = (
 
   const processHandyman = (
     fecha: string,
-    nombre: string,
-    apellidos: string,
+    telefono: string,
     km: number
   ) => {
     const datePart = fecha.split(' ')[0].split('T')[0];
     if (!result[datePart]) return;
 
     if (selectedWorker) {
-      const match = `${nombre} ${apellidos}`.toLowerCase().trim() === selectedWorker.fullName.toLowerCase().trim();
-      if (!match) return;
+      if (!matchesWorkerByPhone(telefono, selectedWorker.telefono)) return;
     }
 
-    const worker = findWorker(nombre, apellidos);
+    const worker = findWorker(telefono);
     const precioPorKm = worker?.precioPorKm ?? 0.19;
     result[datePart].dinero += (km || 0) * precioPorKm;
     result[datePart].km += km || 0;
   };
 
   normalCleans.forEach(r =>
-    processClean(r.checkinFecha, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+    processClean(r.checkinFecha, r.telefono, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
   );
   initialCleans.forEach(r =>
-    processClean(r.checkinFecha, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+    processClean(r.checkinFecha, r.telefono, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
   );
   handymanRecords.forEach(r =>
-    processHandyman(r.fechaLlegada, r.nombre, r.apellidos, r.cantidadMinutos)
+    processHandyman(r.fechaLlegada, r.telefono, r.cantidadMinutos)
   );
 
   return Object.values(result);

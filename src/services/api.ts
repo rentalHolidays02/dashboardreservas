@@ -19,7 +19,7 @@ import {
   Accommodation,
   MOCK_ACCOMMODATIONS
 } from './mockData';
-import { computeWorkerEarnings } from '../utils/payments';
+import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets API Configuration
 const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
@@ -237,7 +237,7 @@ const getStoredWorkers = (): Worker[] => {
       cleansCountMonth: w.cleansCountMonth ?? 0,
       kmsMonth: w.kmsMonth ?? 0,
       extraHoursMonth: w.extraHoursMonth ?? 0,
-      sabanasToallasDebidas: w.sabanasToallasDebidas ?? 0,
+      efectivoRetenido: w.efectivoRetenido ?? 0,
       accommodations: w.accommodations ?? [],
     }));
   } catch (error) {
@@ -358,8 +358,8 @@ export const appsScriptApi = {
             precioPorKm: parseExcelNumber(getVal('KILOMETRAJE')),
             notes: String(getVal('OBSERVACIONES') || ''),
             netMoneyMonth: 0,
-            owedMoney: 0,
-            sabanasToallasDebidas: 0,
+            owedMoney: parseExcelNumber(getVal('SALDO PENDIENTE')),
+            efectivoRetenido: parseExcelNumber(getVal('EFECTIVO RETENIDO')),
             cleansCountMonth: 0,
             kmsMonth: 0,
             extraHoursMonth: 0,
@@ -385,8 +385,7 @@ export const appsScriptApi = {
           kmsMonth: Math.round(earnings.kms * 100) / 100,
           extraHoursMonth: Math.round(earnings.extraHours * 100) / 100,
           netMoneyMonth: Math.round(earnings.totalOwed * 100) / 100,
-          owedMoney: Math.round(earnings.totalOwed * 100) / 100,
-          sabanasToallasDebidas: Math.round(earnings.sabanasToallasDebidas * 100) / 100,
+          // Mantenemos owedMoney y efectivoRetenido que vienen de las columnas estáticas del Excel
         };
       });
 
@@ -1294,15 +1293,11 @@ export const appsScriptApi = {
     return newPago;
   },
 
-  getWorkerCleans: async (fullName: string): Promise<{
+  getWorkerCleans: async (workerPhone: string): Promise<{
     normal: NormalCleanRecord[];
     initial: InitialCleanRecord[];
     handyman: HandymanRecord[];
   }> => {
-    const target = (fullName || '').trim().toLowerCase();
-    const match = (nombre: string, apellidos: string) =>
-      `${nombre || ''} ${apellidos || ''}`.trim().toLowerCase() === target;
-
     const [normal, initial, handyman] = await Promise.all([
       appsScriptApi.getNormalCleans().catch(() => [] as NormalCleanRecord[]),
       appsScriptApi.getInitialCleans().catch(() => [] as InitialCleanRecord[]),
@@ -1310,9 +1305,9 @@ export const appsScriptApi = {
     ]);
 
     return {
-      normal: normal.filter(r => match(r.nombre, r.apellidos)),
-      initial: initial.filter(r => match(r.nombre, r.apellidos)),
-      handyman: handyman.filter(r => match(r.nombre, r.apellidos)),
+      normal: normal.filter(r => matchesWorkerByPhone(r.telefono, workerPhone)),
+      initial: initial.filter(r => matchesWorkerByPhone(r.telefono, workerPhone)),
+      handyman: handyman.filter(r => matchesWorkerByPhone(r.telefono, workerPhone)),
     };
   }
 };

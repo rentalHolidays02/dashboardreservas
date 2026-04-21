@@ -63,12 +63,23 @@ export const computeCleanPay = (
   };
 };
 
-// Coincidencia flexible por nombre completo (nombre + apellidos vs worker.fullName)
-const matchesWorker = (nombre: string, apellidos: string, worker: Worker): boolean => {
-  const candidate = `${nombre || ''} ${apellidos || ''}`.trim().toLowerCase();
-  const target = (worker.fullName || '').trim().toLowerCase();
-  if (!candidate || !target) return false;
-  return candidate === target;
+// Coincidencia flexible por teléfono celular
+export const cleanPhone = (phone?: string): string => {
+  if (!phone) return '';
+  let digits = String(phone).replace(/\D/g, '');
+  if (digits.startsWith('34') && digits.length >= 11) {
+    digits = String(digits).slice(-9);
+  } else if (digits.length > 9) {
+    digits = String(digits).slice(-9);
+  }
+  return digits;
+};
+
+export const matchesWorkerByPhone = (recordPhone?: string, workerPhone?: string): boolean => {
+  const p1 = cleanPhone(recordPhone);
+  const p2 = cleanPhone(workerPhone);
+  if (!p1 || !p2) return false;
+  return p1 === p2;
 };
 
 export interface WorkerEarnings {
@@ -79,11 +90,11 @@ export interface WorkerEarnings {
   kms: number;                 // Km totales
   kmsPay: number;              // Pago por km
   totalOwed: number;           // Total debido por trabajo (reservas + extras + km)
-  sabanasToallasDebidas: number; // Dinero de sábanas/toallas en efectivo (aparte)
+  efectivoRetenido: number; // Dinero en efectivo cobrado y retenido por el trabajador (Sábanas, Fianzas, Garantías)
 }
 
 // Calcula ingresos de un trabajador a partir de todos los registros disponibles.
-// sabanasToallasDebidas: suma 5€ por cada entrega de llaves con sábanas/toallas pagada en efectivo (monto + garantía cuentan).
+// efectivoRetenido: suma cobros en efectivo (fianzas, garantías y los 5€ de sábanas).
 export const computeWorkerEarnings = (
   worker: Worker,
   normalCleans: NormalCleanRecord[],
@@ -110,20 +121,20 @@ export const computeWorkerEarnings = (
   };
 
   normalCleans.forEach(r => {
-    if (matchesWorker(r.nombre, r.apellidos, worker)) {
+    if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
       applyClean(r.apartamento, r.horaEntrada, r.horaSalida, r.km);
     }
   });
 
   initialCleans.forEach(r => {
-    if (matchesWorker(r.nombre, r.apellidos, worker)) {
+    if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
       applyClean(r.apartamento, r.horaEntrada, r.horaSalida, r.km);
     }
   });
 
   // Manitas: aporta km pero no reserva
   handymanRecords.forEach(r => {
-    if (matchesWorker(r.nombre, r.apellidos, worker)) {
+    if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
       kms += r.cantidadMinutos || 0; // el campo "Km" está en cantidadMinutos por historial del parser
     }
   });
@@ -131,18 +142,29 @@ export const computeWorkerEarnings = (
   const kmsPay = kms * precioPorKm;
   const totalOwed = reservasPay + extraPay + kmsPay;
 
-  // Sábanas y toallas: 5€ por cada entrega en efectivo (monto o garantía) con sábanas entregadas
-  let sabanasToallasDebidas = 0;
+  // Efectivo retenido: Cobros en efectivo de fianzas, garantías y recargos por sábanas
+  let efectivoRetenido = 0;
   entregaLlaves.forEach(e => {
-    const name = `${e.nombre || ''} ${e.apellidos || ''}`.trim().toLowerCase();
-    if (!name || name !== (worker.fullName || '').trim().toLowerCase()) return;
+    if (!matchesWorkerByPhone(e.telefono, worker.telefono)) return;
     const entregado = String(e.sabanasToallas || '').toLowerCase();
     const tieneSabanas = entregado.includes('si') || entregado.includes('sí') || entregado === 'true';
-    if (!tieneSabanas) return;
-    const monto = String(e.fianzaMonto || '').toLowerCase() === 'efectivo';
-    const garantia = String(e.fianzaGarantia || '').toLowerCase() === 'efectivo';
-    if (monto) sabanasToallasDebidas += SABANAS_TOALLAS_COST;
-    if (garantia) sabanasToallasDebidas += SABANAS_TOALLAS_COST;
+    
+    const montoEfectivo = String(e.fianzaMonto || '').toLowerCase() === 'efectivo';
+    const garantiaEfectivo = String(e.fianzaGarantia || '').toLowerCase() === 'efectivo';
+    
+    if (tieneSabanas && (montoEfectivo || garantiaEfectivo)) {
+      efectivoRetenido += SABANAS_TOALLAS_COST;
+    }
+    
+    if (montoEfectivo) {
+      const valorMonto = parseFloat(String(e.cantidadPagadaMonto || '0').replace(',', '.')) || 0;
+      efectivoRetenido += valorMonto;
+    }
+    
+    if (garantiaEfectivo) {
+      const valorGarantia = parseFloat(String(e.cantidadPagadaGarantia || '0').replace(',', '.')) || 0;
+      efectivoRetenido += valorGarantia;
+    }
   });
 
   return {
@@ -153,7 +175,7 @@ export const computeWorkerEarnings = (
     kms,
     kmsPay,
     totalOwed,
-    sabanasToallasDebidas,
+    efectivoRetenido,
   };
 };
 
@@ -302,7 +324,7 @@ const aggregateWorkerDaily = (
 ): Record<string, DailyBag> => {
   const pagoPorReserva = worker.pagoPorReserva ?? 0;
   const precioPorKm = worker.precioPorKm ?? 0;
-  const target = (worker.fullName || '').trim().toLowerCase();
+  const targetPhone = cleanPhone(worker.telefono);
   const bags: Record<string, DailyBag> = {};
 
   const ensure = (iso: string): DailyBag => {
@@ -311,8 +333,7 @@ const aggregateWorkerDaily = (
   };
 
   const handleClean = (r: NormalCleanRecord | InitialCleanRecord) => {
-    const full = `${r.nombre || ''} ${r.apellidos || ''}`.trim().toLowerCase();
-    if (full !== target) return;
+    if (!targetPhone || cleanPhone(r.telefono) !== targetPhone) return;
     const iso = extractDate(r.checkinFecha);
     if (!iso) return;
     const bag = ensure(iso);
@@ -330,8 +351,7 @@ const aggregateWorkerDaily = (
   initialCleans.forEach(handleClean);
 
   handymanRecords.forEach(r => {
-    const full = `${r.nombre || ''} ${r.apellidos || ''}`.trim().toLowerCase();
-    if (full !== target) return;
+    if (!targetPhone || cleanPhone(r.telefono) !== targetPhone) return;
     const iso = extractDate(r.fechaLlegada);
     if (!iso) return;
     const bag = ensure(iso);
