@@ -54,7 +54,7 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div 
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300"
+        className="fixed inset-0 bg-white/20 dark:bg-stone-950/40 backdrop-blur-sm animate-in fade-in duration-300"
         onClick={onClose}
       />
       
@@ -68,7 +68,7 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
               <h2 className="text-lg font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
                 Editar Incidencia
               </h2>
-              <p className="text-[10px] text-slate-400 dark:text-stone-500 font-light uppercase tracking-wider">
+              <p className="text-[10px] text-slate-400 dark:text-stone-500 font-light tracking-wider">
                 {incident.accommodationName}
               </p>
             </div>
@@ -111,7 +111,7 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div className="space-y-4">
             <div>
-              <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest mb-2 px-1">
+              <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
                 Estado de Revisión
               </label>
               <div className="flex gap-3">
@@ -142,7 +142,7 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest mb-2 px-1">
+                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
                   Coste Estimado (€)
                 </label>
                 <input
@@ -155,7 +155,7 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest mb-2 px-1">
+                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
                   Kilómetros (KMS)
                 </label>
                 <div className="relative">
@@ -172,7 +172,7 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
             </div>
 
             <div>
-              <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest mb-2 px-1">
+              <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
                 Descripción / Detalles
               </label>
               <textarea

@@ -190,14 +190,12 @@ const FilterModal: React.FC<FilterModalProps> = ({ isOpen, onClose, filters, onA
                   <button
                     key={s}
                     onClick={() => updateFilters({ status: s })}
-                    className={`px-4 py-2 rounded-xl text-xs transition-all flex items-center gap-2 active:scale-[0.98] ${
+                    className={`px-4 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] ${
                       isActive
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50 font-normal'
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {s === 'pagado' && <CheckCircle2 size={12} />}
-                    {s === 'pendiente' && <Clock size={12} />}
                     {s === 'all' ? 'Todos' : s === 'pagado' ? 'Pagado' : 'Pendiente'}
                   </button>
                 );

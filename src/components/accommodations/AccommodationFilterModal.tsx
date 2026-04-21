@@ -72,13 +72,12 @@ const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({
                   <button
                     key={city}
                     onClick={() => updateFilters({ city })}
-                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center gap-2 active:scale-[0.98] border text-left ${
+                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] border text-center ${
                       isActive
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {city === 'all' ? <CheckCircle2 size={12} /> : <MapPin size={12} />}
                     <span className="capitalize whitespace-nowrap overflow-hidden text-ellipsis">
                       {city === 'all' ? 'Todas las ciudades' : city}
                     </span>
@@ -100,13 +99,12 @@ const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({
                   <button
                     key={status}
                     onClick={() => updateFilters({ status })}
-                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center gap-2 active:scale-[0.98] border ${
+                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] border ${
                       isActive
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {status === 'all' ? <CheckCircle2 size={12} /> : <Activity size={12} />}
                     <span className="capitalize">{status === 'all' ? 'Todos los estados' : status === 'active' ? 'Activo' : 'Inactivo'}</span>
                   </button>
                 );

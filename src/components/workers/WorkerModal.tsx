@@ -265,7 +265,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest">Datos personales</p>
 
           <div>
-            <label className={labelClass}><UserIcon size={12} className="text-orange-500" />Nombre completo</label>
+            <label className={labelClass}>Nombre completo</label>
             <input 
               type="text" 
               name="fullName" 
@@ -281,7 +281,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}><Phone size={12} />Teléfono</label>
+              <label className={labelClass}>Teléfono</label>
               <input 
                 type="tel" 
                 name="telefono" 
@@ -295,7 +295,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
               {errors.telefono && <p className="text-[10px] text-red-500 mt-1 ml-1">{errors.telefono}</p>}
             </div>
             <div>
-              <label className={labelClass}><Hash size={12} />DNI / NIE</label>
+              <label className={labelClass}>DNI / NIE</label>
               <input 
                 type="text" 
                 name="dni" 
@@ -311,12 +311,12 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
           </div>
 
           <div>
-            <label className={labelClass}><Mail size={12} />Email</label>
+            <label className={labelClass}>Email</label>
             <input type="email" name="email" value={formData.email ?? ''} onChange={handleChange} placeholder="trabajador@ejemplo.com" className={inputClass} />
           </div>
 
           <div>
-            <label className={labelClass}><UserIcon size={12} />Tipo de Trabajador</label>
+            <label className={labelClass}>Tipo de Trabajador</label>
             <select name="tipoTrabajador" value={formData.tipoTrabajador} onChange={handleChange} className={inputClass}>
               <option value="Limpiador">Limpiador</option>
               <option value="Manitas">Manitas</option>
@@ -327,7 +327,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}><CreditCard size={12} />Tipo de pago</label>
+              <label className={labelClass}>Tipo de pago</label>
               <select name="tipoPago" value={formData.tipoPago} onChange={handleChange} className={inputClass}>
                 <option value="bizum">Bizum</option>
                 <option value="tarjeta">Tarjeta / Transferencia</option>
@@ -348,7 +348,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
           </div>
 
           <div>
-            <label className={labelClass}><Car size={12} />Precio por km (€/km)</label>
+            <label className={labelClass}>Precio por km (€/km)</label>
             <input 
               type="text" 
               name="precioPorKm" 
@@ -361,7 +361,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
 
           {formData.tipoPago === 'bizum' && (
             <div>
-              <label className={labelClass}><Phone size={12} className="text-green-500" />Teléfono Bizum</label>
+              <label className={labelClass}>Teléfono Bizum</label>
               <input 
                 type="tel" 
                 name="telefonoBizum" 
@@ -377,16 +377,16 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
           {formData.tipoPago === 'tarjeta' && (
             <div className="space-y-3">
               <div>
-                <label className={labelClass}><Landmark size={12} className="text-blue-500" />IBAN</label>
+                <label className={labelClass}>IBAN</label>
                 <input type="text" name="iban" value={formData.iban ?? ''} onChange={handleChange} placeholder="ES12 3456 7890 1234 5678 9012" className={`${inputClass} font-mono`} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass}><Building2 size={12} />Banco</label>
+                  <label className={labelClass}>Banco</label>
                   <input type="text" name="banco" value={formData.banco ?? ''} onChange={handleChange} placeholder="Ej. Santander" className={inputClass} />
                 </div>
                 <div>
-                  <label className={labelClass}><UserIcon size={12} />Titular</label>
+                  <label className={labelClass}>Titular</label>
                   <input type="text" name="titularCuenta" value={formData.titularCuenta ?? ''} onChange={handleChange} placeholder="Nombre titular" className={inputClass} />
                 </div>
               </div>
@@ -396,7 +396,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
           <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest pt-1">Alojamientos</p>
 
           <div>
-            <label className={labelClass}><MapPin size={12} />Asignar Alojamientos</label>
+            <label className={labelClass}>Asignar Alojamientos</label>
             <div className="relative">
               <div className="flex gap-2 mb-3">
                 <div className="relative flex-1">

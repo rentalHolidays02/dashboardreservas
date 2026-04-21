@@ -3,6 +3,7 @@ import {
   X, Save, MapPin, Building2, Home, Loader2, Camera, Hash, FileText, Info, Trash2
 } from 'lucide-react';
 import { Accommodation } from '../../services/mockData';
+import defaultAccImage from '../../assets/default_accommodation.png';
 
 interface AccommodationModalProps {
   accommodation?: Accommodation | null;
@@ -11,6 +12,9 @@ interface AccommodationModalProps {
   onSave: (accommodationData: any) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
 }
+
+const toTitleCase = (str: string) =>
+  str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
 const inputClass =
   'w-full px-4 py-2.5 bg-stone-50 dark:bg-stone-800/50 rounded-xl text-slate-700 dark:text-stone-300 text-sm focus:outline-none focus:bg-white dark:focus:bg-stone-800 focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-900/50 transition-all placeholder:text-stone-400 dark:placeholder:text-stone-500';
@@ -79,9 +83,13 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-      <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/70 backdrop-blur-md" onClick={onClose} />
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-white/20 dark:bg-stone-950/40 backdrop-blur-sm" 
+        onClick={onClose} 
+      />
 
-      <div className="relative bg-white dark:bg-stone-900 w-full max-w-lg rounded-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+      <div className="relative bg-white dark:bg-stone-900 w-full max-w-2xl rounded-3xl overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl">
         {/* Header */}
         <div className="px-8 py-6 flex items-center justify-between border-b border-stone-100 dark:border-stone-800">
           <div className="flex items-center space-x-4">
@@ -89,13 +97,13 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
               type="button"
               onClick={() => imageInputRef.current?.click()}
               title="Cambiar imagen"
-              className="relative w-10 h-10 rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-800 flex items-center justify-center text-slate-500 dark:text-stone-400 text-lg font-normal group/avatar focus:outline-none focus:ring-2 focus:ring-orange-400"
+              className="relative w-12 h-12 rounded-2xl overflow-hidden bg-stone-50 dark:bg-stone-800 flex items-center justify-center text-slate-500 dark:text-stone-400 text-lg font-normal group/avatar focus:outline-none focus:ring-2 focus:ring-orange-400"
             >
-              {formData.image ? (
-                <img src={formData.image} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <Home size={20} />
-              )}
+              <img 
+                src={formData.image || defaultAccImage} 
+                alt="" 
+                className="w-full h-full object-cover" 
+              />
               <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition-opacity pointer-events-none">
                 <Camera size={12} className="text-white" />
               </span>
@@ -103,12 +111,9 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
             
             <div>
-              <h2 className="text-lg font-normal font-display tracking-tight text-slate-800 dark:text-stone-200">
-                {isEditMode ? 'Editar Alojamiento' : 'Nuevo Alojamiento'}
+              <h2 className="text-xl font-normal text-slate-800 dark:text-stone-100 tracking-tight leading-tight truncate">
+                {isEditMode ? toTitleCase(formData.name) : 'Nuevo Alojamiento'}
               </h2>
-              <p className="text-[10px] text-slate-400 dark:text-stone-500 font-light mt-0.5">
-                {isEditMode ? formData.name : 'Registro de nueva propiedad'}
-              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-stone-100 dark:hover:bg-stone-700 rounded-lg transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-stone-200">
@@ -119,39 +124,37 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-8 space-y-5 max-h-[70vh] overflow-y-auto">
 
-          {/* ── Datos generales ── */}
-          <p className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest">Información general</p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-[1fr_140px] gap-6">
             <div>
-              <label className={labelClass}><Home size={12} className="text-orange-500" />Nombre del alojamiento</label>
+              <label className={labelClass}>Nombre del alojamiento</label>
               <input type="text" name="name" value={formData.name} onChange={handleChange} placeholder="Ej. Apt. Ramblas 12" required autoFocus={!isEditMode} className={inputClass} />
             </div>
             <div>
-              <label className={labelClass}><Hash size={12} className="text-orange-500" />Referencia (REF)</label>
+              <label className={labelClass}>Referencia (REF)</label>
               <input type="text" name="ref" value={formData.ref ?? ''} onChange={handleChange} placeholder="Ej. 069" className={inputClass} />
             </div>
           </div>
 
           <div>
-            <label className={labelClass}><Building2 size={12} />Dirección completa</label>
+            <label className={labelClass}>Dirección completa</label>
             <input type="text" name="address" value={formData.address} onChange={handleChange} placeholder="Calle, número, piso..." className={inputClass} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-[1fr_140px] gap-6">
             <div>
-              <label className={labelClass}><MapPin size={12} />Ciudad</label>
+              <label className={labelClass}>Ciudad</label>
               <input type="text" name="city" value={formData.city} onChange={handleChange} placeholder="Ej. Barcelona" className={inputClass} />
             </div>
             <div>
-              <label className={labelClass}><Hash size={12} />Código Postal</label>
+              <label className={labelClass}>Código Postal</label>
               <input type="text" name="zipCode" value={formData.zipCode} onChange={handleChange} placeholder="08001" className={inputClass} />
             </div>
           </div>
 
           {/* ── Estado ── */}
           <div className="flex items-center gap-3 py-2 bg-stone-50 dark:bg-stone-800/30 rounded-xl px-4 border border-stone-100 dark:border-stone-800/40">
-            <div className={`p-2 rounded-lg ${formData.active ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>
+            <div className="p-0 text-orange-500">
               <Info size={16} />
             </div>
             <div className="flex-1">
@@ -166,7 +169,7 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
 
           {/* ── Notas ── */}
           <div>
-            <label className={labelClass}><FileText size={12} />Notas adicionales</label>
+            <label className={labelClass}>Notas adicionales</label>
             <textarea
               name="notes"
               value={formData.notes ?? ''}

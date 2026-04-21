@@ -201,14 +201,14 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
                   <div className="flex items-center justify-end gap-3 pr-2">
                     <button
                       onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 p-1 rounded-md"
+                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-orange-500 p-1 rounded-md"
                       title="Información"
                     >
                       <Info size={16} />
                     </button>
                     <button
                       onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-slate-400 dark:text-stone-500 hover:text-slate-900 dark:hover:text-stone-100 p-1 rounded-md"
+                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-orange-500 p-1 rounded-md"
                       title="Editar"
                     >
                       <Pencil size={16} />
