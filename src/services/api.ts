@@ -25,7 +25,7 @@ const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
 const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4'; // Alojamientos
 const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; // Pagos Generales (Operarios)
 const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; // INFORMES_OPERARIOS
-const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:Z";
+const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
@@ -92,46 +92,49 @@ export const parseCoords = (str: string | undefined): [number, number] | null =>
   return null;
 };
 
-// Geocodificación con caché local
+// Coordenadas predefinidas para ciudades comunes (centro aproximado)
+const CITY_COORDS: Record<string, { lat: number, lng: number }> = {
+  'oropesa del mar': { lat: 40.0783, lng: 0.1550 },
+  'oropesa': { lat: 40.0783, lng: 0.1550 },
+  'castellon': { lat: 39.9864, lng: -0.0513 },
+  'castellon de la plana': { lat: 39.9864, lng: -0.0513 },
+  'benicasim': { lat: 40.0520, lng: 0.0670 },
+  'benicassim': { lat: 40.0520, lng: 0.0670 },
+  'peñiscola': { lat: 40.3670, lng: 0.4080 },
+  'peniscola': { lat: 40.3670, lng: 0.4080 },
+  'almazora': { lat: 39.9442, lng: -0.0519 },
+  'torreblanca': { lat: 40.2120, lng: 0.2100 },
+  'vistabella': { lat: 40.1500, lng: -0.3167 },
+  'vistavella': { lat: 40.1500, lng: -0.3167 },
+  'grao de castellon': { lat: 39.9770, lng: -0.0220 },
+  'borriol': { lat: 40.0500, lng: -0.0667 },
+  'santa pola': { lat: 38.1919, lng: -0.5664 },
+  'benidorm': { lat: 38.5386, lng: -0.1312 },
+  'alcala de xivert': { lat: 40.2667, lng: 0.2333 },
+  'grao de moncofar': { lat: 39.8167, lng: -0.2000 },
+  'lucena del cid': { lat: 40.1500, lng: -0.2833 },
+  'alcala de la selva': { lat: 40.3833, lng: -0.6833 }
+};
+
+// Geocodificación con caché local - usa coordenadas de ciudad como fallback
 const GEO_CACHE_KEY = 'rh_geocoding_cache';
+
 export const geocodeAddress = async (address: string): Promise<{ lat: number, lng: number } | null> => {
   const cache = JSON.parse(localStorage.getItem(GEO_CACHE_KEY) || '{}');
   if (cache[address]) return cache[address];
 
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'BaseDatosPagosRH/1.0 (contact: admin@rh.com)'
-      }
-    });
-    const data = await response.json();
-
-    if (data && data.length > 0) {
-      const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      cache[address] = result;
+  // Extraer la ciudad de la dirección
+  const addressLower = address.toLowerCase();
+  for (const [city, coords] of Object.entries(CITY_COORDS)) {
+    if (addressLower.includes(city)) {
+      console.log(`📍 Using city coordinates for: ${city}`);
+      cache[address] = coords;
       localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
-      return result;
+      return coords;
     }
-
-    // Fallback: Try a simplified search if the full one fails
-    // (Remove province if it exists, as it sometimes causes mismatches)
-    const simplified = address.split(',').filter((_, i, arr) => i !== arr.length - 2).join(',');
-    if (simplified !== address) {
-      const resp2 = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(simplified)}&format=json&limit=1`, {
-        headers: { 'User-Agent': 'BaseDatosPagosRH/1.0 (contact: admin@rh.com)' }
-      });
-      const data2 = await resp2.json();
-      if (data2 && data2.length > 0) {
-        const result = { lat: parseFloat(data2[0].lat), lng: parseFloat(data2[0].lon) };
-        cache[address] = result;
-        localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(cache));
-        return result;
-      }
-    }
-  } catch (error) {
-    console.warn('Geocoding error for:', address, error);
   }
+
+  console.warn(`⚠️ No coordinates found for: ${address}`);
   return null;
 };
 
@@ -691,14 +694,25 @@ export const appsScriptApi = {
             return idx !== -1 ? row[idx] : undefined;
           };
 
+          // Priorizar dirección del alojamiento turístico sobre dirección del propietario
+          const touristAddress = String(getVal('DIRECCIÓN ALOJAMIENTO TURÍSTICO') || getVal('DIRECCION ALOJAMIENTO TURISTICO') || '').trim();
+          const ownerAddress = String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim();
+
+          // Las columnas 27-29 corresponden al CP, POBLACIÓN y PROVINCIA del apartamento turístico
+          // (después de la columna 26 "PARKINGS")
+          // Buscamos por posición ya que tienen el mismo nombre que las del propietario
+          const touristZipCode = row[26] ? String(row[26]).trim() : '';
+          const touristCity = row[27] ? String(row[27]).trim() : '';
+          const touristProvincia = row[28] ? String(row[28]).trim() : '';
+
           return {
             id: `real_${index + 2}`,
             name: String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || 'Sin nombre').trim(),
             ref: String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
-            address: String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim(),
-            city: String(getVal('POBLACIÓN') || ''),
-            zipCode: String(getVal('CP') || '').trim(),
-            provincia: String(getVal('PROVINCIA') || ''),
+            address: touristAddress || ownerAddress,
+            city: touristCity || String(getVal('POBLACIÓN') || ''),
+            zipCode: touristZipCode || String(getVal('CP') || '').trim(),
+            provincia: touristProvincia || String(getVal('PROVINCIA') || ''),
             notes: String(getVal('OBSERVACIONES') || '').trim(),
             active: true
           };
