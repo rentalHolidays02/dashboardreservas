@@ -4,18 +4,22 @@ import {
   ClipboardList, Car, Euro, CheckCircle2, Clock, Send, FileText,
   BarChart3, MessageSquare, Wrench, Sparkles, ChevronRight, Loader2,
   RotateCcw, Check, Landmark, Building2, Smartphone, User as UserIcon,
-  Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2, Pencil, XCircle
+  Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2, Pencil, XCircle, Plus, CheckCheck
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   LineChart, Line,
 } from 'recharts';
-import { Worker, PagoRecord, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
+import { Worker, PagoRecord, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Accommodation } from '../../services/mockData';
 import { appsScriptApi, PaymentAction } from '../../services/api';
+import AccommodationAssignmentModal from './AccommodationAssignmentModal';
 import { computeWorkerSeries, WorkerMetric } from '../../utils/payments';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
 import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
+import defaultAccImage from '../../assets/default_accommodation.png';
+
+const DEFAULT_IMAGE = defaultAccImage;
 
 // ─── Analytics types & helpers ───────────────────────────────────────────────
 
@@ -189,6 +193,8 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
   const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
   const [paymentActions, setPaymentActions] = useState<PaymentAction[]>([]);
+  const [allAccommodations, setAllAccommodations] = useState<Accommodation[]>([]);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
   // UI state
   const [recordsTab, setRecordsTab] = useState<RecordsTab>('normal');
@@ -271,6 +277,10 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
       setHandymanRecords(data.handyman);
     });
   }, [worker.id, worker.telefono]);
+
+  useEffect(() => {
+    appsScriptApi.getAccommodations().then(setAllAccommodations);
+  }, []);
 
   const pendingPagos = useMemo(() => pagos.filter(p => p.estado === 'pendiente'), [pagos]);
   const paidPagos = useMemo(() => pagos.filter(p => p.estado === 'pagado'), [pagos]);
@@ -522,6 +532,12 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveAssignments = async (names: string[]) => {
+    const updated = { ...worker, accommodations: names };
+    await appsScriptApi.updateWorker(updated);
+    if (onSave) await onSave(updated);
   };
 
   const handleDelete = async () => {
@@ -1404,8 +1420,19 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
         <div className="animate-in fade-in duration-300">
           <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-100 dark:border-stone-800 overflow-hidden">
             <div className="px-5 py-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
-              <h3 className="text-xs font-medium text-slate-500 dark:text-stone-400 uppercase tracking-wider">Alojamientos asignados</h3>
-              <span className="text-[11px] text-slate-400 dark:text-stone-500">{worker.accommodations.length} total</span>
+              <div className="flex items-center gap-3">
+                <h3 className="text-xs font-medium text-slate-500 dark:text-stone-400 uppercase tracking-wider">Alojamientos asignados</h3>
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-stone-100 dark:bg-stone-800 text-slate-400 dark:text-stone-500">
+                  {worker.accommodations.length}
+                </span>
+              </div>
+              <button
+                onClick={() => setIsAssignModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-medium rounded-lg transition-all active:scale-95 shadow-sm"
+              >
+                <Plus size={12} />
+                Editar Alojamientos
+              </button>
             </div>
             {worker.accommodations.length === 0 ? (
               <div className="px-5 py-12 flex flex-col items-center gap-3">
@@ -1415,24 +1442,39 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                 <p className="text-xs text-slate-400 dark:text-stone-500">Sin alojamientos asignados</p>
               </div>
             ) : (
-              <div className="divide-y divide-stone-50 dark:divide-stone-800">
-                {worker.accommodations.map((acc, i) => (
-                  <div key={acc} className="px-5 py-3.5 flex items-center gap-3 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors">
-                    <div
-                      className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-medium"
-                      style={{
-                        background: ['#fff7ed','#ffedd5','#fed7aa','#fdba74','#fb923c','#f97316'][i % 6],
-                        color: i < 3 ? '#ea580c' : '#c2410c',
-                      }}
+              <div className="p-6 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {worker.accommodations.map((accName, i) => {
+                  const accData = allAccommodations.find(a => a.name === accName);
+                  return (
+                    <div 
+                      key={accName} 
+                      className="group flex flex-col gap-2 transition-all duration-300"
                     >
-                      {i + 1}
+                      {/* Image Container (Airbnb Style) */}
+                      <div className="aspect-square w-full rounded-xl overflow-hidden relative bg-stone-100 dark:bg-stone-800 border border-stone-100 dark:border-stone-800/50 shadow-sm">
+                        <img 
+                          src={accData?.image || defaultAccImage} 
+                          alt={accName} 
+                          className="w-full h-full object-cover" 
+                        />
+                        {/* Reference Badge */}
+                        <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md rounded-md text-[8px] font-medium text-slate-500 dark:text-stone-400 border border-stone-100 dark:border-stone-800">
+                          {accData?.ref || 'S/R'}
+                        </div>
+                      </div>
+                      
+                      {/* Details */}
+                      <div className="flex flex-col gap-0.5 px-0.5">
+                        <h4 className="text-[11px] font-normal text-slate-700 dark:text-stone-200 truncate group-hover:text-orange-600 transition-colors">
+                          {toTitleCase(accName)}
+                        </h4>
+                        <p className="text-[10px] text-slate-400 dark:text-stone-500 font-light truncate">
+                          {toTitleCase(accData?.city || 'Sin especificar')}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-700 dark:text-stone-300 truncate">{acc}</p>
-                    </div>
-                    <MapPin size={13} className="text-slate-300 dark:text-stone-600 flex-shrink-0" />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1598,6 +1640,16 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
           <span className="text-xs font-medium">Operación revertida con éxito</span>
         </div>
       )}
+
+      {/* ── Modal de asignación de alojamientos ── */}
+      <AccommodationAssignmentModal
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        allAccommodations={allAccommodations}
+        selectedAccommodations={worker.accommodations}
+        onSave={handleSaveAssignments}
+        workerName={worker.fullName}
+      />
     </div>
   );
 };
