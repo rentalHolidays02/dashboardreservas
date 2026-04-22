@@ -6,10 +6,14 @@ function doPost(e) {
 
     var payload = JSON.parse(e.postData.contents);
     var action = String(payload.action || '');
+    
+    // Auth simple opcional (si fuera necesaria)
+    
     if (action === 'updateCleanStatus') return updateCleanStatus(payload);
     if (action === 'createCheckout') return createCheckout(payload);
     if (action === 'updateCheckout') return updateCheckout(payload);
     if (action === 'deleteCheckout') return deleteCheckout(payload);
+    
     return jsonResponse({ ok: false, error: 'Unsupported action: ' + action });
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err && err.message ? err.message : err) });
@@ -44,6 +48,9 @@ function getHeaders(sheet) {
   return { headers: headers };
 }
 
+/**
+ * Mapea un objeto record a un array de valores basándose en los encabezados de la hoja.
+ */
 function mapRecordToRow(headers, record) {
   var row = [];
   for (var i = 0; i < headers.length; i++) {
@@ -71,6 +78,9 @@ function normalizeCellValue(value) {
   return value;
 }
 
+/**
+ * Acción: Actualizar solo el checkbox 'Checked'
+ */
 function updateCleanStatus(payload) {
   var sheetName = String(payload.sheetName || '');
   var sheetResult = getValidSheet(sheetName);
@@ -85,8 +95,10 @@ function updateCleanStatus(payload) {
   var checked = !!payload.checked;
   var headersResult = getHeaders(sheet);
   if (headersResult.error) return jsonResponse({ ok: false, error: headersResult.error });
+  
   var headers = headersResult.headers;
   var checkedColIndex = findHeaderIndex(headers, 'checked');
+  
   if (checkedColIndex === -1) {
     return jsonResponse({ ok: false, error: 'Column Checked not found in ' + sheetName });
   }
@@ -105,6 +117,9 @@ function updateCleanStatus(payload) {
   });
 }
 
+/**
+ * Acción: Crear un nuevo registro al final de la hoja
+ */
 function createCheckout(payload) {
   var sheetName = String(payload.sheetName || '');
   var sheetResult = getValidSheet(sheetName);
@@ -127,6 +142,9 @@ function createCheckout(payload) {
   return jsonResponse({ ok: true, sheetName: sheetName, rowIndex: rowIndex });
 }
 
+/**
+ * Acción: Actualizar un registro existente (Optimizado con setValues)
+ */
 function updateCheckout(payload) {
   var sheetName = String(payload.sheetName || '');
   var sheetResult = getValidSheet(sheetName);
@@ -147,16 +165,29 @@ function updateCheckout(payload) {
   if (headersResult.error) return jsonResponse({ ok: false, error: headersResult.error });
   var headers = headersResult.headers;
 
+  // Obtener los valores actuales de la fila para editarlos en memoria
+  var range = sheet.getRange(rowIndex, 1, 1, headers.length);
+  var rowValues = range.getValues()[0];
+
+  var updatedCount = 0;
   for (var i = 0; i < headers.length; i++) {
     var found = getRecordValueByHeader(record, headers[i]);
     if (found.found) {
-      sheet.getRange(rowIndex, i + 1).setValue(found.value);
+      rowValues[i] = found.value;
+      updatedCount++;
     }
   }
 
-  return jsonResponse({ ok: true, sheetName: sheetName, rowIndex: rowIndex });
+  if (updatedCount > 0) {
+    range.setValues([rowValues]);
+  }
+
+  return jsonResponse({ ok: true, sheetName: sheetName, rowIndex: rowIndex, updatedColumns: updatedCount });
 }
 
+/**
+ * Acción: Eliminar una fila
+ */
 function deleteCheckout(payload) {
   var sheetName = String(payload.sheetName || '');
   var sheetResult = getValidSheet(sheetName);
@@ -184,7 +215,7 @@ function normalizeText(value) {
   return String(value || '')
     .trim()
     .toLowerCase()
-    .normalize('NFD')
+    .normalize('NFD') // Quitar acentos
     .replace(/[\u0300-\u036f]/g, '');
 }
 
