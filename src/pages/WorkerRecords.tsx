@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatName } from '../utils/formatters';
+import WorkerRecordsFilterModal, { WorkerRecordsFilters } from '../components/workers/WorkerRecordsFilterModal';
+import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 
 interface WorkerRecordsProps {
   user: User;
@@ -64,9 +66,15 @@ const matchRecord = (
 const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<UnifiedRecord[]>([]);
-  const [filterType, setFilterType] = useState<'all' | RecordType>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filters, setFilters] = useState<WorkerRecordsFilters>({
+    startDate: '',
+    endDate: '',
+    type: 'all'
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -159,13 +167,28 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
 
   const filteredRecords = useMemo(() => {
     return records.filter(r => {
-      const matchesType = filterType === 'all' || r.type === filterType;
+      const matchesType = filters.type === 'all' || r.type === filters.type;
       const matchesSearch =
         r.accommodation.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.observations.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesType && matchesSearch;
+        
+      let matchesDate = true;
+      if (filters.startDate || filters.endDate) {
+        const recordDate = (r.date || '').split('T')[0].split(' ')[0];
+        if (filters.startDate && recordDate < filters.startDate) matchesDate = false;
+        if (filters.endDate && recordDate > filters.endDate) matchesDate = false;
+      }
+      
+      return matchesType && matchesSearch && matchesDate;
     });
-  }, [records, filterType, searchTerm]);
+  }, [records, filters, searchTerm]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.type !== 'all') count++;
+    if (filters.startDate || filters.endDate) count++;
+    return count;
+  }, [filters]);
 
   // Totales del resumen
   const totals = useMemo(() => ({
@@ -173,6 +196,10 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
     hours: filteredRecords.reduce((s, r) => s + r.hoursWorked, 0),
     count: filteredRecords.length,
   }), [filteredRecords]);
+
+  const animCount = useAnimatedNumber(totals.count);
+  const animHours = useAnimatedNumber(totals.hours);
+  const animEarnings = useAnimatedNumber(totals.earnings);
 
   if (loading) {
     return <LoadingSpinner message="Cargando tu historial de registros..." />;
@@ -185,10 +212,12 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-1">
+    <div className="space-y-0 md:pb-20">
+      {/* ── BLOQUE STICKY MÓVIL ── */}
+      <div className="sticky top-0 z-30 pt-2 lg:pt-0 pb-4 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col gap-4 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
+        
+        {/* Header Desktop / Titles */}
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
             Mis Registros
@@ -198,7 +227,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="hidden sm:flex flex-row items-center gap-3">
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4 group-focus-within:text-orange-500 transition-colors" />
             <input
@@ -206,57 +235,82 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
               placeholder="Buscar alojamiento..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2.5 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-full sm:w-56"
+              className="pl-10 pr-4 py-2.5 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-56"
             />
           </div>
           <div className="relative">
-            <select
-              value={filterType}
-              onChange={e => setFilterType(e.target.value as RecordType | 'all')}
-              className={`appearance-none flex items-center justify-center gap-2 pl-9 pr-8 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all outline-none cursor-pointer shadow-sm ${
-                filterType !== 'all' ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90 shadow-md' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
+            <button 
+              onClick={() => setIsFilterModalOpen(true)}
+              className={`flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all active:scale-[0.98] relative shadow-sm ${
+                activeFiltersCount > 0 ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90 shadow-md' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
               }`}
             >
-              <option value="all">Tipo: Todos</option>
-              <option value="Normal">Tipo: Normal</option>
-              <option value="Inicial">Tipo: Inicial</option>
-              <option value="Manitas">Tipo: Manitas</option>
-            </select>
-            <Filter size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-500 pointer-events-none" />
-            <ChevronDown size={12} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-orange-500 pointer-events-none" />
-            {filterType !== 'all' && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50 border border-white/50">
-                1
-              </span>
-            )}
+              <Filter size={12} className={activeFiltersCount > 0 ? "text-orange-600" : "text-orange-500"} />
+              <span>Filtro</span>
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50 border border-white/50">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+            <WorkerRecordsFilterModal 
+              isOpen={isFilterModalOpen}
+              onClose={() => setIsFilterModalOpen(false)}
+              filters={filters}
+              onApply={(newFilters) => {
+                setFilters(newFilters);
+              }}
+            />
           </div>
         </div>
       </header>
 
       {/* ── Resumen de totales ── */}
       {filteredRecords.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {[
-            { label: 'Servicios', value: totals.count, suffix: '' },
-            { label: 'Horas totales', value: totals.hours.toFixed(1), suffix: 'h' },
-            { label: 'Total generado', value: totals.earnings.toFixed(2), suffix: '€', highlight: true },
+            { label: 'Servicios realizados', value: animCount.toFixed(0), suffix: '' },
+            { label: 'Horas totales', value: animHours.toFixed(1), suffix: 'h' },
+            { label: 'Total generado', value: animEarnings.toFixed(2), suffix: '€', highlight: true },
           ].map(stat => (
             <div
               key={stat.label}
-              className={`bg-white/60 dark:bg-stone-900/40 backdrop-blur-md rounded-3xl border border-white/60 dark:border-stone-800/50 p-5 flex flex-col gap-1 ${
-                stat.highlight ? 'border-orange-200/60 dark:border-orange-800/30' : ''
-              }`}
+              className={`bg-white/60 dark:bg-stone-900/40 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/60 dark:border-stone-800/50 p-3 sm:p-5 flex-col justify-center items-center sm:items-start flex`}
             >
-              <p className="text-[11px] font-medium text-slate-500 dark:text-stone-500">{stat.label}</p>
-              <p className={`text-2xl font-medium font-display tabular-nums tracking-tight ${stat.highlight ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-stone-100'}`}>
-                {stat.value}<span className="text-sm font-normal ml-0.5 text-slate-400 dark:text-stone-500">{stat.suffix}</span>
-              </p>
+              <div className="flex flex-col items-start justify-center text-left w-fit gap-0.5 sm:gap-1">
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-stone-500">
+                  <span className="hidden sm:inline">{stat.label}</span>
+                  <span className="sm:hidden leading-tight flex flex-col">
+                    {stat.label.split(' ').map((word, idx) => (
+                      <span key={idx} className="block">{word}</span>
+                    ))}
+                  </span>
+                </p>
+                <p className={`text-lg sm:text-2xl font-normal font-display tabular-nums tracking-tight ${stat.highlight ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-stone-100'}`}>
+                  {stat.value}<span className="text-[10px] sm:text-sm font-normal ml-0.5 text-slate-400 dark:text-stone-500">{stat.suffix}</span>
+                </p>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── ESCRITORIO: Tabla ── */}
+      {/* Mobile Search Bar - rendered BELOW cards */}
+      <div className="sm:hidden relative group mt-1">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4 group-focus-within:text-orange-500 transition-colors" />
+        <input
+          type="text"
+          placeholder="Buscar alojamiento..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="pl-10 pr-4 py-3 sm:py-2.5 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-sm sm:text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-full"
+        />
+      </div>
+
+      </div> {/* END OF STICKY TOP */}
+
+      {/* ── CONTENIDO CREADO RESPONSIVO CON INNER SCROLL ── */}
+      <div className="flex-1 overflow-y-auto w-full lg:overflow-visible pb-24 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
       <div className="hidden lg:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
         <div className="grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
            {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Notas'].map(col => (
@@ -341,77 +395,55 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
         ) : (
           filteredRecords.map(record => {
             const cfg = typeConfig[record.type];
-            const TypeIcon = cfg.icon;
             const isExpanded = expandedId === record.id;
             return (
               <div
                 key={record.id}
                 onClick={() => setExpandedId(isExpanded ? null : record.id)}
                 className={`bg-white/80 dark:bg-stone-900/60 backdrop-blur-md rounded-3xl border border-white/60 dark:border-stone-800/50 overflow-hidden transition-all duration-300 ${
-                  isExpanded ? 'ring-2 ring-orange-500/20 shadow-xl' : 'shadow-sm active:scale-[0.98]'
+                  isExpanded ? 'pb-1 shadow-sm bg-white dark:bg-stone-900/80' : 'active:scale-[0.98]'
                 }`}
               >
                 {/* Card header */}
-                <div className="p-5 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 min-w-0">
+                <div className="p-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     {/* Fecha box */}
-                    <div className="flex flex-col items-center justify-center w-12 h-12 rounded-2xl bg-stone-50 dark:bg-stone-800 shrink-0 border border-stone-100 dark:border-stone-800">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
+                    <div className="flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl bg-stone-50 dark:bg-stone-800 shrink-0 border border-stone-100 dark:border-stone-800">
+                      <span className="text-[10px] font-normal text-slate-500 capitalize leading-none mb-1">
                         {record.date ? new Date(record.date).toLocaleDateString('es-ES', { month: 'short' }) : '—'}
-                      </span>
-                      <span className="text-base font-bold text-slate-800 dark:text-stone-200">
+                     </span>
+                      <span className="text-base font-bold text-slate-800 dark:text-stone-200 leading-none">
                         {record.date ? new Date(record.date).getDate() : '—'}
                       </span>
                     </div>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <TypeIcon size={11} className="shrink-0 text-slate-400" />
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-medium ${cfg.badge}`}>
-                          {cfg.label}
-                        </span>
-                        {record.earnings > 0 && (
-                          <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 ml-1">
-                            <Banknote size={10} />
-                            {record.earnings.toFixed(2)}€
-                          </span>
-                        )}
-                      </div>
-                      <h3 className="text-sm font-medium text-slate-800 dark:text-stone-100 truncate">
-                        {record.accommodation ? formatName(record.accommodation) : '—'}
-                      </h3>
-                      {record.horaEntrada && record.horaSalida && (
-                        <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                          <Clock size={9} />
-                          {record.horaEntrada} – {record.horaSalida}
-                          {record.hoursWorked > 0 && ` (${record.hoursWorked.toFixed(1)}h)`}
-                        </p>
-                      )}
-                    </div>
+                    <h3 className="text-[13px] font-medium text-slate-800 dark:text-stone-100 truncate">
+                      {record.accommodation ? formatName(record.accommodation) : '—'}
+                    </h3>
                   </div>
 
-                  <ChevronRight
-                    size={20}
-                    className={`text-slate-300 shrink-0 transition-transform duration-300 ${isExpanded ? 'rotate-90 text-orange-500' : ''}`}
-                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[13px] tabular-nums font-medium ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>
+                      {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                    </span>
+                    <ChevronRight size={18} className={`text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-90 text-slate-700 dark:text-stone-300' : ''}`} />
+                  </div>
                 </div>
 
                 {/* Detalle expandible */}
-                <div className={`px-5 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-80 pb-5 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
-                  <div className="grid grid-cols-3 gap-3 mb-3">
-                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-3 rounded-2xl">
-                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Generado</p>
-                      <p className="text-xs font-bold text-orange-600 dark:text-orange-400">
-                        {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                <div className={`px-4 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-80 pb-4 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tipo</p>
+                      <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{cfg.label}</p>
+                    </div>
+                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horario</p>
+                      <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                        {record.horaEntrada && record.horaSalida ? `${record.horaEntrada}-${record.horaSalida}` : '—'}
                       </p>
                     </div>
-                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-3 rounded-2xl">
-                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horas</p>
-                      <p className="text-xs font-semibold text-slate-700 dark:text-stone-200">
-                        {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
-                      </p>
-                    </div>
-                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-3 rounded-2xl">
+                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
                       <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">
                         {record.type === 'Manitas' ? 'Min' : 'KM'}
                       </p>
@@ -424,12 +456,12 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                   </div>
 
                   {record.observations && (
-                    <div className="bg-orange-50/30 dark:bg-orange-900/10 p-4 rounded-2xl border border-orange-100/30 dark:border-orange-800/20">
-                      <div className="flex items-center gap-1.5 mb-2 text-orange-600 dark:text-orange-400">
+                    <div className="bg-stone-50 dark:bg-stone-900/40 p-3.5 rounded-2xl border border-stone-100/50 dark:border-stone-800/50">
+                      <div className="flex items-center gap-1.5 mb-1.5 text-slate-500 dark:text-stone-400">
                         <Info size={12} />
                         <span className="text-[9px] uppercase font-bold tracking-wider">Observaciones</span>
                       </div>
-                      <p className="text-xs text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
+                      <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
                         "{record.observations}"
                       </p>
                     </div>
@@ -440,6 +472,26 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
           })
         )}
       </div>
+      </div>
+      {/* ── BOTON FILTRO FLOTANTE MÓVIL ── */}
+      <div className="fixed bottom-6 right-6 z-50 sm:hidden animate-in fade-in zoom-in slide-in-from-bottom-4 duration-500">
+        <button
+          onClick={() => setIsFilterModalOpen(true)}
+          className={`flex items-center justify-center w-[52px] h-[52px] rounded-full shadow-2xl transition-all active:scale-[0.92] border ${
+            activeFiltersCount > 0 
+              ? 'bg-orange-500 border-orange-400 text-white' 
+              : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-slate-600 dark:text-stone-300'
+          }`}
+        >
+          <Filter size={20} className={activeFiltersCount > 0 ? "text-white" : "text-orange-500"} />
+          {activeFiltersCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-stone-900">
+              {activeFiltersCount}
+            </span>
+          )}
+        </button>
+      </div>
+
     </div>
   );
 };

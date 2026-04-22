@@ -51,7 +51,7 @@ function App() {
     <UndoToastProvider>
     <NavigationGuardProvider>
     <BrowserRouter>
-      {user && <ChatBot />}
+      {user && user.role !== 'trabajador' && <ChatBot />}
       <Routes>
         <Route 
           path="/login" 
