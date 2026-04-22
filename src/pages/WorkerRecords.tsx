@@ -12,8 +12,11 @@ import {
   Home,
   Sparkles,
   Banknote,
+  Filter,
+  ChevronDown,
 } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { formatName } from '../utils/formatters';
 
 interface WorkerRecordsProps {
   user: User;
@@ -176,7 +179,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   }
 
   const typeConfig: Record<RecordType, { label: string; badge: string; icon: React.ComponentType<any> }> = {
-    Normal:  { label: 'Normal',  badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',       icon: Home },
+    Normal:  { label: 'Normal',  badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',       icon: Home },
     Inicial: { label: 'Inicial', badge: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400', icon: Sparkles },
     Manitas: { label: 'Manitas', badge: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',    icon: Wrench },
   };
@@ -206,20 +209,26 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
               className="pl-10 pr-4 py-2.5 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-full sm:w-56"
             />
           </div>
-          <div className="flex bg-white/40 dark:bg-stone-900/40 p-1 rounded-xl border border-white/60 dark:border-stone-800/50 backdrop-blur-md">
-            {(['all', 'Normal', 'Inicial', 'Manitas'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setFilterType(t)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                  filterType === t
-                    ? 'bg-white dark:bg-stone-800 text-orange-600 dark:text-orange-400 shadow-sm'
-                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
-                }`}
-              >
-                {t === 'all' ? 'Todos' : t}
-              </button>
-            ))}
+          <div className="relative">
+            <select
+              value={filterType}
+              onChange={e => setFilterType(e.target.value as RecordType | 'all')}
+              className={`appearance-none flex items-center justify-center gap-2 pl-9 pr-8 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all outline-none cursor-pointer shadow-sm ${
+                filterType !== 'all' ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90 shadow-md' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
+              }`}
+            >
+              <option value="all">Tipo: Todos</option>
+              <option value="Normal">Tipo: Normal</option>
+              <option value="Inicial">Tipo: Inicial</option>
+              <option value="Manitas">Tipo: Manitas</option>
+            </select>
+            <Filter size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-500 pointer-events-none" />
+            <ChevronDown size={12} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-orange-500 pointer-events-none" />
+            {filterType !== 'all' && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50 border border-white/50">
+                1
+              </span>
+            )}
           </div>
         </div>
       </header>
@@ -238,9 +247,9 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 stat.highlight ? 'border-orange-200/60 dark:border-orange-800/30' : ''
               }`}
             >
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-stone-500">{stat.label}</p>
-              <p className={`text-2xl font-bold font-display ${stat.highlight ? 'text-orange-600 dark:text-orange-400' : 'text-slate-800 dark:text-stone-100'}`}>
-                {stat.value}<span className="text-sm font-normal ml-0.5 opacity-70">{stat.suffix}</span>
+              <p className="text-[11px] font-medium text-slate-500 dark:text-stone-500">{stat.label}</p>
+              <p className={`text-2xl font-medium font-display tabular-nums tracking-tight ${stat.highlight ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-stone-100'}`}>
+                {stat.value}<span className="text-sm font-normal ml-0.5 text-slate-400 dark:text-stone-500">{stat.suffix}</span>
               </p>
             </div>
           ))}
@@ -248,72 +257,77 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
       )}
 
       {/* ── ESCRITORIO: Tabla ── */}
-      <div className="hidden lg:block bg-white/60 dark:bg-stone-900/40 backdrop-blur-md rounded-[32px] border border-white/60 dark:border-stone-800/50 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-slate-100 dark:border-stone-800/50">
-              {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Notas'].map(col => (
-                <th key={col} className="px-5 py-4 text-[10px] font-bold text-slate-400 dark:text-stone-600 uppercase tracking-widest">
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRecords.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-16 text-center text-slate-400 dark:text-stone-500 text-sm">
-                  No se encontraron registros
-                </td>
-              </tr>
-            ) : (
-              filteredRecords.map(record => {
-                const cfg = typeConfig[record.type];
-                return (
-                  <tr
-                    key={record.id}
-                    className="border-b border-slate-50 dark:border-stone-800/20 last:border-0 hover:bg-white/40 dark:hover:bg-stone-800/40 transition-colors text-sm"
-                  >
-                    <td className="px-5 py-4 whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="text-slate-700 dark:text-stone-200 font-medium">
-                          {record.date
-                            ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-                            : '—'}
-                        </span>
-                        {record.horaEntrada && record.horaSalida && (
-                          <span className="text-[10px] text-slate-400 tabular-nums">{record.horaEntrada} – {record.horaSalida}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider ${cfg.badge}`}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-slate-800 dark:text-stone-100 font-medium max-w-[180px] truncate">
-                      {record.accommodation || '—'}
-                    </td>
-                    <td className="px-5 py-4 text-slate-500 dark:text-stone-400 font-mono text-xs">
-                      {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
-                    </td>
-                    <td className="px-5 py-4 text-slate-500 dark:text-stone-400 font-mono text-xs">
-                      {record.kms > 0 ? `${record.kms} km` : '—'}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={`font-bold text-sm ${record.earnings > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-slate-400'}`}>
-                        {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-slate-500 dark:text-stone-400 text-xs max-w-[140px] truncate">
-                      {record.observations || <span className="opacity-40 italic">—</span>}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      <div className="hidden lg:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
+        <div className="grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
+           {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Notas'].map(col => (
+             <span key={col} className="text-xs text-slate-400 dark:text-stone-500">
+               {col}
+             </span>
+           ))}
+        </div>
+        
+        <ul className="divide-y divide-stone-100 dark:divide-stone-800 flex-1 overflow-y-auto">
+          {filteredRecords.length === 0 ? (
+            <li className="flex items-center justify-center py-16">
+              <span className="text-slate-400 dark:text-stone-500 text-sm">
+                No se encontraron registros
+              </span>
+            </li>
+          ) : (
+            filteredRecords.map(record => {
+              const cfg = typeConfig[record.type];
+              return (
+                <li
+                  key={record.id}
+                  className="group module-item grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-4 items-center transition-colors hover:bg-stone-100/50 dark:hover:bg-stone-700/30"
+                >
+                  {/* Fecha */}
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
+                      {record.date
+                        ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : '—'}
+                    </span>
+                    {record.horaEntrada && record.horaSalida && (
+                      <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
+                    )}
+                  </div>
+                  
+                  <div className="min-w-0">
+                    <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-medium truncate max-w-full ${cfg.badge}`}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                  
+                  {/* Alojamiento */}
+                  <p className="text-sm text-slate-800 dark:text-stone-200 truncate">
+                    {record.accommodation ? formatName(record.accommodation) : '—'}
+                  </p>
+                  
+                  {/* Horas */}
+                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                    {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
+                  </p>
+                  
+                  {/* KM */}
+                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                    {record.kms > 0 ? `${record.kms} km` : '—'}
+                  </p>
+                  
+                  {/* Generado */}
+                  <p className={`text-xs tabular-nums truncate ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
+                    {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                  </p>
+                  
+                  {/* Notas */}
+                  <p className="text-xs text-slate-500 dark:text-stone-400 truncate" title={record.observations}>
+                    {record.observations || <span className="opacity-40 italic">—</span>}
+                  </p>
+                </li>
+              );
+            })
+          )}
+        </ul>
       </div>
 
       {/* ── MÓVIL: Tarjetas ── */}
@@ -353,7 +367,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <TypeIcon size={11} className="shrink-0 text-slate-400" />
-                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest ${cfg.badge}`}>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-medium ${cfg.badge}`}>
                           {cfg.label}
                         </span>
                         {record.earnings > 0 && (
@@ -363,7 +377,9 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                           </span>
                         )}
                       </div>
-                      <h3 className="text-sm font-semibold text-slate-800 dark:text-stone-100 truncate">{record.accommodation || '—'}</h3>
+                      <h3 className="text-sm font-medium text-slate-800 dark:text-stone-100 truncate">
+                        {record.accommodation ? formatName(record.accommodation) : '—'}
+                      </h3>
                       {record.horaEntrada && record.horaSalida && (
                         <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
                           <Clock size={9} />
