@@ -29,7 +29,7 @@ const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; //
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
-const CLEANS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7jVfemlvNXvKNKv_Bxy5Iold2-mLQjgqVtoJ2KOe27zTzWJ4XM_7Icp_QvkrX9dVjhQ/exec';
+const CLEANS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyMkDcF97ZILtXPPS6_wIkNGqR1WrD_btp58dPBgY7P9dcRSy-xzK9DSd1b0H1KH_B0GQ/exec';
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
 const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
@@ -334,9 +334,14 @@ const getCleanSheetName = (type: CleanSheetType): string => {
 };
 
 const parseRowIndexFromId = (id: string): number => {
-  const rowIndex = parseInt(String(id || '').split('_')[1], 10);
+  if (!id) return -1;
+  // Soporta formatos nc_123, ic_123, hm_123 o simplemente el número
+  const parts = String(id).split('_');
+  const indexStr = parts.length > 1 ? parts[1] : parts[0];
+  const rowIndex = parseInt(indexStr, 10);
   if (!Number.isFinite(rowIndex) || rowIndex <= 1) {
-    throw new Error(`Invalid clean record id: ${id}`);
+    console.warn(`⚠️ Invalid clean record id for indexing: ${id}`);
+    return -1;
   }
   return rowIndex;
 };
@@ -1100,62 +1105,67 @@ export const appsScriptApi = {
         sheetName: getCleanSheetName(type),
         record: cleanRecordToPayload(type, record)
       };
+      
+      // Intentamos sincronizar con Apps Script
       await fetch(CLEANS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
+      
       return true;
     } catch (error) {
-      console.error('Error creating checkout record:', error);
+      console.error('❌ Error creating checkout record:', error);
       return false;
     }
   },
 
   updateCheckoutRecord: async (type: CleanSheetType, id: string, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Promise<boolean> => {
     try {
+      const rowIndex = parseRowIndexFromId(id);
+      if (rowIndex === -1) return false;
+
       const payload = {
         action: 'updateCheckout',
         sheetName: getCleanSheetName(type),
-        rowIndex: parseRowIndexFromId(id),
+        rowIndex,
         record: cleanRecordToPayload(type, record)
       };
+      
       await fetch(CLEANS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
       return true;
     } catch (error) {
-      console.error('Error updating checkout record:', error);
+      console.error('❌ Error updating checkout record:', error);
       return false;
     }
   },
 
   deleteCheckoutRecord: async (type: CleanSheetType, id: string): Promise<boolean> => {
     try {
+      const rowIndex = parseRowIndexFromId(id);
+      if (rowIndex === -1) return false;
+
       const payload = {
         action: 'deleteCheckout',
         sheetName: getCleanSheetName(type),
-        rowIndex: parseRowIndexFromId(id)
+        rowIndex
       };
+      
       await fetch(CLEANS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
       return true;
     } catch (error) {
-      console.error('Error deleting checkout record:', error);
+      console.error('❌ Error deleting checkout record:', error);
       return false;
     }
   },

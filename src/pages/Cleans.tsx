@@ -30,6 +30,8 @@ import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilter
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { getExpectedHours, computeHoursWorked } from '../utils/payments';
 import CleanCheckoutFormModal from '../components/cleans/CleanCheckoutFormModal';
+import CleanSortModal, { SortConfig } from '../components/cleans/CleanSortModal';
+import { ArrowUpDown } from 'lucide-react';
 
 type TabType = 'normal' | 'initial' | 'handyman';
 type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
@@ -159,6 +161,8 @@ const Cleans: React.FC = () => {
 
   // Filter Modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'fecha', direction: 'desc' });
   const [filters, setFilters] = useState<CleanFilters>({
     startDate: '',
     endDate: '',
@@ -399,9 +403,51 @@ const Cleans: React.FC = () => {
     return true;
   };
 
-  const filteredNormal = useMemo(() => normalCleans.filter(applyFilters), [normalCleans, searchTerm, filters]);
-  const filteredInitial = useMemo(() => initialCleans.filter(applyFilters), [initialCleans, searchTerm, filters]);
-  const filteredHandyman = useMemo(() => handymanRecords.filter(applyFilters), [handymanRecords, searchTerm, filters]);
+  const sortRecords = (records: any[], config: SortConfig, type: TabType) => {
+    return [...records].sort((a, b) => {
+      let valA: any, valB: any;
+      
+      switch (config.field) {
+        case 'fecha':
+          valA = type === 'handyman' ? (a.fechaLlegada || '') : (a.checkinFecha || '');
+          valB = type === 'handyman' ? (b.fechaLlegada || '') : (b.checkinFecha || '');
+          break;
+        case 'nombre':
+          valA = `${a.nombre || ''} ${a.apellidos || ''}`.toLowerCase();
+          valB = `${b.nombre || ''} ${b.apellidos || ''}`.toLowerCase();
+          break;
+        case 'apartamento':
+          valA = (type === 'handyman' ? (a.alojamiento || '') : (a.apartamento || '')).toLowerCase();
+          valB = (type === 'handyman' ? (b.alojamiento || '') : (b.apartamento || '')).toLowerCase();
+          break;
+        case 'km':
+          valA = type === 'handyman' ? (a.cantidadMinutos || 0) : (a.km || 0);
+          valB = type === 'handyman' ? (b.cantidadMinutos || 0) : (b.km || 0);
+          break;
+        default:
+          return 0;
+      }
+
+      if (valA < valB) return config.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return config.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const filteredNormal = useMemo(() => {
+    const filtered = normalCleans.filter(applyFilters);
+    return sortRecords(filtered, sortConfig, 'normal');
+  }, [normalCleans, searchTerm, filters, sortConfig]);
+
+  const filteredInitial = useMemo(() => {
+    const filtered = initialCleans.filter(applyFilters);
+    return sortRecords(filtered, sortConfig, 'initial');
+  }, [initialCleans, searchTerm, filters, sortConfig]);
+
+  const filteredHandyman = useMemo(() => {
+    const filtered = handymanRecords.filter(applyFilters);
+    return sortRecords(filtered, sortConfig, 'handyman');
+  }, [handymanRecords, searchTerm, filters, sortConfig]);
 
   const tabs = [
     { id: 'normal', label: 'Limpieza Normal', icon: <ClipboardList size={18} /> },
@@ -464,6 +510,23 @@ const Cleans: React.FC = () => {
               onApply={(newFilters) => {
                 setFilters(newFilters);
               }}
+            />
+          </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setIsSortModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 transition-all active:scale-[0.98] hover:bg-white/80 dark:hover:bg-stone-800/60"
+            >
+              <ArrowUpDown size={12} className="text-orange-500" />
+              <span>Ordenar</span>
+            </button>
+
+            <CleanSortModal 
+              isOpen={isSortModalOpen}
+              onClose={() => setIsSortModalOpen(false)}
+              sortConfig={sortConfig}
+              onApply={(newSort) => setSortConfig(newSort)}
             />
           </div>
         </div>
@@ -553,6 +616,8 @@ const Cleans: React.FC = () => {
         mode={checkoutForm.mode}
         type={checkoutForm.type}
         initialValues={checkoutForm.record}
+        workers={workers}
+        accommodations={accommodations}
         loading={actionLoading}
         onClose={() => setCheckoutForm(prev => ({ ...prev, open: false }))}
         onSubmit={handleCheckoutSubmit}
