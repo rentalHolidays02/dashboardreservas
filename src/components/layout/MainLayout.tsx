@@ -4,11 +4,12 @@ import { Menu } from 'lucide-react';
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  userRole: 'admin' | 'viewer';
+  userRole: 'admin' | 'viewer' | 'trabajador';
   onLogout: () => void;
+  onRoleChange: (role: 'admin' | 'viewer' | 'trabajador') => void;
 }
 
-const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout }) => {
+const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout, onRoleChange }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
@@ -33,6 +34,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout })
       <Sidebar
         userRole={userRole}
         onLogout={onLogout}
+        onRoleChange={onRoleChange}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         isCollapsed={isSidebarCollapsed}

@@ -1,7 +1,8 @@
 export interface User {
   email: string;
-  role: 'admin' | 'viewer';
+  role: 'admin' | 'viewer' | 'trabajador';
   name: string;
+  telefono?: string; // ID único del trabajador en la BBDD
 }
 
 export interface Worker {
@@ -56,6 +57,24 @@ export const MOCK_USERS: (User & { password: string })[] = [
     password: '1234',
     role: 'viewer',
     name: 'Visualizador RH'
+  },
+  {
+    email: 'juan.perez@rhpagos.es',
+    password: '1234',
+    role: 'trabajador',
+    name: 'Juan Pérez'
+  },
+  {
+    email: 'maria.garcia@rhpagos.es',
+    password: '1234',
+    role: 'trabajador',
+    name: 'María García'
+  },
+  {
+    email: 'rosmery@rhpagos.es',
+    password: '1234',
+    role: 'trabajador',
+    name: 'Rosmery'
   }
 ];
 

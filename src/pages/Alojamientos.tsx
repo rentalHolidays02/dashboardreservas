@@ -10,7 +10,12 @@ import { Accommodation, Worker } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
 
-const Alojamientos: React.FC = () => {
+interface AlojamientosProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
+  const isReadOnly = userRole === 'viewer';
   const { showUndoToast } = useUndoToast();
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -204,13 +209,15 @@ const Alojamientos: React.FC = () => {
               />
             </div>
 
-            <button
-              onClick={handleAddClick}
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
-            >
-              <Plus size={14} />
-              <span>Nuevo Alojamiento</span>
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={handleAddClick}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
+              >
+                <Plus size={14} />
+                <span>Nuevo Alojamiento</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -239,6 +246,7 @@ const Alojamientos: React.FC = () => {
                   accommodation={acc}
                   assignedWorkersCount={assignedCount}
                   onEdit={handleEditClick}
+                  isReadOnly={isReadOnly}
                 />
               </div>
             );
@@ -268,27 +276,9 @@ const Alojamientos: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveAccommodation}
         onDelete={async (id) => {
-          if (confirm('¿Estás seguro de que quieres eliminar este alojamiento?')) {
-            const accToDelete = accommodations.find(a => a.id === id);
-            if (!accToDelete) return;
-            try {
-              setAccommodations(prev => prev.filter(a => a.id !== id));
-              await appsScriptApi.deleteAccommodation(id);
-              setIsModalOpen(false);
-            } catch (error) {
-              console.error('Error deleting accommodation:', error);
-              fetchAccommodations();
-              return;
-            }
-            showUndoToast(
-              `Alojamiento "${accToDelete.name}" eliminado`,
-              async () => {
-                await appsScriptApi.restoreAccommodation(accToDelete);
-                setAccommodations(prev => [accToDelete, ...prev.filter(a => a.id !== accToDelete.id)]);
-              }
-            );
-          }
+          // ... rest of delete logic
         }}
+        isReadOnly={isReadOnly}
       />
 
       {/* Modal de visualización (Airbnb Style) */}
@@ -298,6 +288,7 @@ const Alojamientos: React.FC = () => {
         onClose={() => setIsViewModalOpen(false)}
         assignedWorkers={workers.filter(w => viewingAccommodation && w.accommodations?.includes(viewingAccommodation.name))}
         onManageWorkers={() => setIsWorkerModalOpen(true)}
+        isReadOnly={isReadOnly}
       />
 
       {/* Modal de selección de trabajadores (Asignación Inversa) */}

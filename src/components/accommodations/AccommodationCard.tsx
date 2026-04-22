@@ -7,12 +7,13 @@ interface AccommodationCardProps {
   accommodation: Accommodation;
   assignedWorkersCount: number;
   onEdit: (accommodation: Accommodation) => void;
+  isReadOnly?: boolean;
 }
 
 const toTitleCase = (str: string) =>
   str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 
-const AccommodationCard: React.FC<AccommodationCardProps> = ({ accommodation, assignedWorkersCount, onEdit }) => {
+const AccommodationCard: React.FC<AccommodationCardProps> = ({ accommodation, assignedWorkersCount, onEdit, isReadOnly }) => {
   return (
     <div className={`group flex flex-col gap-3 transition-opacity duration-300 ${!accommodation.active ? 'opacity-40 grayscale-[0.5]' : ''}`}>
       {/* Image Container (Airbnb Style) */}
@@ -31,12 +32,14 @@ const AccommodationCard: React.FC<AccommodationCardProps> = ({ accommodation, as
           </div>
 
           {/* Edit Button (Pencil) */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(accommodation); }}
-            className="p-2 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md rounded-full text-slate-500 dark:text-stone-400 hover:text-orange-500 hover:scale-110 transition-all border border-stone-100 dark:border-stone-800 shadow-sm"
-          >
-            <Pencil size={12} />
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(accommodation); }}
+              className="p-2 bg-white/90 dark:bg-stone-900/90 backdrop-blur-md rounded-full text-slate-500 dark:text-stone-400 hover:text-orange-500 hover:scale-110 transition-all border border-stone-100 dark:border-stone-800 shadow-sm"
+            >
+              <Pencil size={12} />
+            </button>
+          )}
         </div>
 
         {/* Workers Count Badge (Bottom Left) */}

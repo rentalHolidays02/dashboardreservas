@@ -8,9 +8,10 @@ interface IncidentEditModalProps {
   onClose: () => void;
   onSave: (incidentData: Incidencia) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  isReadOnly?: boolean;
 }
 
-const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen, onClose, onSave, onDelete }) => {
+const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen, onClose, onSave, onDelete, isReadOnly }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -74,33 +75,37 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {!showDeleteConfirm ? (
-              <button 
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors text-red-400 hover:text-red-600"
-                title="Eliminar incidencia"
-              >
-                <Trash2 size={18} />
-              </button>
-            ) : (
-              <div className="flex items-center animate-in slide-in-from-right-2 duration-200">
-                <button 
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="px-3 py-1.5 bg-red-600 text-white text-[10px] font-bold rounded-lg hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {isDeleting ? 'Borrando...' : 'Confirmar Borrar'}
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="p-2 text-slate-400 hover:text-slate-600 text-[10px]"
-                >
-                  Cerrar
-                </button>
-              </div>
+            {!isReadOnly && (
+              <>
+                {!showDeleteConfirm ? (
+                  <button 
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors text-red-400 hover:text-red-600"
+                    title="Eliminar incidencia"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                ) : (
+                  <div className="flex items-center animate-in slide-in-from-right-2 duration-200">
+                    <button 
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="px-3 py-1.5 bg-red-600 text-white text-[10px] font-bold rounded-lg hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {isDeleting ? 'Borrando...' : 'Confirmar Borrar'}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="p-2 text-slate-400 hover:text-slate-600 text-[10px]"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                )}
+              </>
             )}
             <button onClick={onClose} className="p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-xl transition-colors text-slate-400">
               <X size={20} />
@@ -117,23 +122,25 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
               <div className="flex gap-3">
                 <button
                   type="button"
+                  disabled={isReadOnly}
                   onClick={() => setFormData({ ...formData, checked: false })}
                   className={`flex-1 py-3 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2 text-xs ${
                     !formData.checked
                       ? 'bg-slate-50 dark:bg-stone-800 border-slate-200 dark:border-stone-700 text-slate-600 dark:text-stone-300 shadow-sm'
                       : 'border-transparent text-slate-400 dark:text-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800/50'
-                  }`}
+                  } ${isReadOnly ? 'cursor-default' : ''}`}
                 >
                   <Info size={14} /> Pendiente
                 </button>
                 <button
                   type="button"
+                  disabled={isReadOnly}
                   onClick={() => setFormData({ ...formData, checked: true })}
                   className={`flex-1 py-3 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2 text-xs ${
                     formData.checked
                       ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900/40 text-green-600 dark:text-green-400 shadow-sm'
                       : 'border-transparent text-slate-400 dark:text-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800/50'
-                  }`}
+                  } ${isReadOnly ? 'cursor-default' : ''}`}
                 >
                   <CheckCircle2 size={14} /> Revisada
                 </button>
@@ -148,9 +155,10 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
                 <input
                   type="number"
                   step="0.01"
+                  readOnly={isReadOnly}
                   value={formData.coste || ''}
                   onChange={e => setFormData({ ...formData, coste: parseFloat(e.target.value) })}
-                  className="w-full px-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40 transition-all font-light"
+                  className={`w-full px-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none transition-all font-light ${isReadOnly ? 'cursor-default focus:ring-0 focus:border-slate-100 dark:focus:border-stone-700/50' : 'focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40'}`}
                   placeholder="0.00"
                 />
               </div>
@@ -163,9 +171,10 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
                   <input
                     type="number"
                     step="0.1"
+                    readOnly={isReadOnly}
                     value={formData.kms || 0}
                     onChange={e => setFormData({ ...formData, kms: parseFloat(e.target.value) })}
-                    className="w-full pl-10 pr-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40 transition-all font-light"
+                    className={`w-full pl-10 pr-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none transition-all font-light ${isReadOnly ? 'cursor-default focus:ring-0 focus:border-slate-100 dark:focus:border-stone-700/50' : 'focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40'}`}
                   />
                 </div>
               </div>
@@ -177,9 +186,10 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
               </label>
               <textarea
                 value={formData.description || ''}
+                readOnly={isReadOnly}
                 onChange={e => setFormData({ ...formData, description: e.target.value })}
                 rows={4}
-                className="w-full px-4 py-4 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40 transition-all font-light resize-none"
+                className={`w-full px-4 py-4 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none transition-all font-light resize-none ${isReadOnly ? 'cursor-default focus:ring-0 focus:border-slate-100 dark:focus:border-stone-700/50' : 'focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40'}`}
               />
             </div>
           </div>
@@ -188,21 +198,23 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 px-6 bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 font-bold rounded-2xl hover:bg-stone-200 dark:hover:bg-stone-700 transition-all active:scale-95 text-xs"
+              className={`py-3 px-6 bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 font-bold rounded-2xl hover:bg-stone-200 dark:hover:bg-stone-700 transition-all active:scale-95 text-xs ${isReadOnly ? 'w-full' : 'flex-1'}`}
             >
-              Cancelar
+              {isReadOnly ? 'Cerrar' : 'Cancelar'}
             </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="flex-[2] py-3 px-6 bg-orange-600 text-white font-bold rounded-2xl hover:bg-orange-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-xs shadow-lg shadow-orange-500/20"
-            >
-              {isSaving ? (
-                <><Loader2 className="animate-spin" size={16} /> Guardando...</>
-              ) : (
-                <><Save size={16} /> Guardar Cambios</>
-              )}
-            </button>
+            {!isReadOnly && (
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-[2] py-3 px-6 bg-orange-600 text-white font-bold rounded-2xl hover:bg-orange-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 text-xs shadow-lg shadow-orange-500/20"
+              >
+                {isSaving ? (
+                  <><Loader2 className="animate-spin" size={16} /> Guardando...</>
+                ) : (
+                  <><Save size={16} /> Guardar Cambios</>
+                )}
+              </button>
+            )}
           </div>
         </form>
       </div>

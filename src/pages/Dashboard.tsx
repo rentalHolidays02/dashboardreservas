@@ -12,7 +12,11 @@ import { CheckoutContextModal } from '../components/dashboard/CheckoutContextMod
 
 type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInOut[]>([]);
   const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
@@ -297,6 +301,7 @@ const Dashboard: React.FC = () => {
           workers={filteredWorkers}
           selectedWorker={selectedWorker}
           onWorkerSelect={setSelectedWorker}
+          userRole={userRole}
         />
       </section>
 

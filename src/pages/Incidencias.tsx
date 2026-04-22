@@ -13,7 +13,12 @@ const fmtDate = (iso: string) =>
 const fmtCost = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
-const Incidencias: React.FC = () => {
+interface IncidenciasProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
+  const isReadOnly = userRole === 'viewer';
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -246,6 +251,7 @@ const Incidencias: React.FC = () => {
         incident={selectedIncident}
         onSave={handleSaveIncident}
         onDelete={handleDeleteIncident}
+        isReadOnly={isReadOnly}
       />
     </div>
   );

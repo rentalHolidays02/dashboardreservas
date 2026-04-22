@@ -408,11 +408,52 @@ const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | 
 export const appsScriptApi = {
   login: async (email: string, pass: string): Promise<User | null> => {
     await delay(800);
-    const user = MOCK_USERS.find(u => u.email === email && u.password === pass);
-    if (user) {
-      const { password, ...userWithoutPass } = user;
+    
+    // 1. Intentar login con usuarios predefinidos (Admin/Viewer)
+    const mockUser = MOCK_USERS.find(u => u.email === email && u.password === pass);
+    if (mockUser) {
+      const { password, ...userWithoutPass } = mockUser;
+      // Si es trabajador, enriquecer la sesión con el teléfono real de la BBDD (ID único)
+      if (userWithoutPass.role === 'trabajador') {
+        try {
+          const workers = await appsScriptApi.getWorkers();
+          const normName = (s: string) =>
+            s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const worker = workers.find(w =>
+            (w.email && w.email.toLowerCase() === email.toLowerCase()) ||
+            normName(w.fullName).startsWith(normName(userWithoutPass.name).split(/\s+/)[0])
+          );
+          if (worker?.telefono) {
+            return { ...userWithoutPass, telefono: worker.telefono };
+          }
+        } catch (_) { /* fallback sin teléfono */ }
+      }
       return userWithoutPass;
     }
+
+    // 2. Si no es admin/viewer, buscar en la BBDD de trabajadores
+    try {
+      // Usamos el password '1234' por defecto para todos los trabajadores en este entorno
+      if (pass !== '1234') return null;
+
+      const workers = await appsScriptApi.getWorkers();
+      const worker = workers.find(w => 
+        (w.email && w.email.toLowerCase() === email.toLowerCase()) || 
+        (w.fullName && w.fullName.toLowerCase().replace(/\s/g, '.') + '@rh.local' === email.toLowerCase())
+      );
+
+      if (worker) {
+        return {
+          email: worker.email || email,
+          role: 'trabajador',
+          name: worker.fullName,
+          telefono: worker.telefono || undefined
+        };
+      }
+    } catch (error) {
+      console.error('Error durante el login de trabajador:', error);
+    }
+
     return null;
   },
 
