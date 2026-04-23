@@ -1,8 +1,10 @@
 export interface User {
+  id?: string;
   email: string;
-  role: 'admin' | 'viewer' | 'trabajador';
+  role: 'admin' | 'editor' | 'viewer' | 'trabajador';
   name: string;
-  telefono?: string; // ID único del trabajador en la BBDD
+  telefono?: string;
+  last_location?: any;
 }
 
 export interface Worker {
@@ -45,38 +47,7 @@ export interface Accommodation {
   image?: string;
 }
 
-export const MOCK_USERS: (User & { password: string })[] = [
-  {
-    email: 'rentalholidays.es@gmail.com',
-    password: 'rental-0211',
-    role: 'admin',
-    name: 'Administrador RH'
-  },
-  {
-    email: 'view@rh.local',
-    password: 'rh-viewer',
-    role: 'viewer',
-    name: 'Visualizador RH'
-  },
-  {
-    email: 'juan.perez@rhpagos.es',
-    password: 'rh-worker',
-    role: 'trabajador',
-    name: 'Juan Pérez'
-  },
-  {
-    email: 'maria.garcia@rhpagos.es',
-    password: 'rh-worker',
-    role: 'trabajador',
-    name: 'María García'
-  },
-  {
-    email: 'rosmery@rhpagos.es',
-    password: 'rh-worker',
-    role: 'trabajador',
-    name: 'Rosmery'
-  }
-];
+export const MOCK_USERS: (User & { password: string })[] = [];
 
 export interface CheckInOut {
   id: string;

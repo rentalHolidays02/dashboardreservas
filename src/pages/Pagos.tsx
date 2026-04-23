@@ -15,7 +15,7 @@ const fmtDate = (s: string) =>
   });
 
 interface PagosProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 const Pagos: React.FC<PagosProps> = ({ userRole }) => {

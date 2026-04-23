@@ -489,7 +489,7 @@ const COLS = 'grid-cols-[2fr_1.1fr_1.2fr_0.9fr_0.9fr_100px]';
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 interface EntregaDeLlavesProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {

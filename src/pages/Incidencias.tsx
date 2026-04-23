@@ -14,7 +14,7 @@ const fmtCost = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
 interface IncidenciasProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {

@@ -4,7 +4,8 @@ import { Worker } from '../../services/mockData';
 
 interface WorkerCardProps {
   worker: Worker;
-  onEdit: (worker: Worker) => void;
+  onEdit?: (worker: Worker) => void;
+  isReadOnly?: boolean;
 }
 
 const PAGO_CONFIG: Record<string, string> = {
@@ -26,7 +27,7 @@ function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
+const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit, isReadOnly }) => {
   const initials = getInitials(worker.fullName);
 
   return (
@@ -65,13 +66,15 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit }) => {
             </div>
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(worker); }}
-          className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all active:scale-90"
-          title="Editar trabajador"
-        >
-          <Edit2 size={15} />
-        </button>
+        {!isReadOnly && onEdit && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(worker); }}
+            className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all active:scale-90"
+            title="Editar trabajador"
+          >
+            <Edit2 size={15} />
+          </button>
+        )}
       </div>
 
       {/* Stats strip */}

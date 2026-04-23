@@ -2,21 +2,22 @@ import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import WorkerBottomNav from './WorkerBottomNav';
 import { Menu } from 'lucide-react';
+import type { User } from '../../services/mockData';
 
 interface MainLayoutProps {
   children: React.ReactNode;
-  userRole: 'admin' | 'viewer' | 'trabajador';
+  user: User;
   onLogout: () => void;
-  onRoleChange: (role: 'admin' | 'viewer' | 'trabajador') => void;
+  onRoleChange?: (role: User['role']) => void;
 }
 
-const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout, onRoleChange }) => {
+const MainLayout: React.FC<MainLayoutProps> = ({ children, user, onLogout, onRoleChange }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
   const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
-  const isWorker = userRole === 'trabajador';
+  const isWorker = user.role === 'trabajador';
 
   return (
     <div className="h-screen bg-transparent flex flex-col xl:flex-row overflow-hidden">
@@ -36,7 +37,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, userRole, onLogout, o
       {/* Sidebar — hidden on mobile for worker */}
       <div className={isWorker ? 'hidden xl:block' : ''}>
         <Sidebar
-          userRole={userRole}
+          user={user}
           onLogout={onLogout}
           onRoleChange={onRoleChange}
           isOpen={isSidebarOpen}

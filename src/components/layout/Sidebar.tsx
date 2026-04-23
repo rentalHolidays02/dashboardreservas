@@ -20,11 +20,12 @@ import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
 import { appsScriptApi } from '../../services/api';
 import logoFull from '../../assets/logo/LogoEstandar.png';
+import type { User as AppUser } from '../../services/mockData';
 
 interface SidebarProps {
-  userRole: 'admin' | 'viewer' | 'trabajador';
+  user: AppUser;
   onLogout: () => void;
-  onRoleChange: (role: 'admin' | 'viewer' | 'trabajador') => void;
+  onRoleChange?: (role: AppUser['role']) => void;
   isOpen: boolean;
   onClose: () => void;
   isCollapsed: boolean;
@@ -71,7 +72,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({
-  userRole,
+  user,
   onLogout,
   onRoleChange,
   isOpen,
@@ -80,6 +81,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onCollapse,
   onHoverChange,
 }) => {
+  const userRole = user.role;
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
@@ -234,12 +236,19 @@ const Sidebar: React.FC<SidebarProps> = ({
               ${collapsed ? '' : 'bg-white/20 dark:bg-stone-800/40 border border-white/40 dark:border-stone-700/40'}
               hover:bg-black/5 dark:hover:bg-black/20`}
           >
-            <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
-              {userRole === 'admin' ? 'A' : userRole === 'viewer' ? 'V' : 'T'}
+            <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-[10px] font-medium soft-shadow overflow-hidden">
+              {(user.name || 'U')
+                .split(' ')
+                .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''))
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((w) => w[0])
+                .join('')
+                .toUpperCase() || 'U'}
             </div>
             <div className="sidebar-fade min-w-0">
-              <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight">
-                {userRole === 'admin' ? 'Administrador' : userRole === 'trabajador' ? 'Trabajador' : 'Visualizador'}
+              <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight truncate max-w-[120px]">
+                {user.name}
               </p>
               <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">Ver perfil</p>
             </div>

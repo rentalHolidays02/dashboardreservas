@@ -21,7 +21,7 @@ import ChatBot from './components/chatbot/ChatBot';
 import WorkerPanel from './pages/WorkerPanel';
 import WorkerAnalytics from './pages/WorkerAnalytics';
 import WorkerRecords from './pages/WorkerRecords';
-import type { User } from './services/mockData';
+import { User } from './services/mockData';
 
 function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -39,7 +39,7 @@ function App() {
     localStorage.removeItem('rh_user');
   };
 
-  const handleRoleChange = (newRole: 'admin' | 'viewer' | 'trabajador') => {
+  const handleRoleChange = (newRole: 'admin' | 'editor' | 'viewer' | 'trabajador') => {
     if (user) {
       const updatedUser = { ...user, role: newRole };
       setUser(updatedUser);
@@ -63,7 +63,7 @@ function App() {
           path="/usuarios"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <GestionUsuarios />
               </MainLayout>
             ) : (
@@ -76,7 +76,7 @@ function App() {
           path="/dashboard"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 {user.role === 'trabajador' ? <WorkerPanel user={user} /> : <Dashboard userRole={user.role} />}
               </MainLayout>
             ) : (
@@ -89,7 +89,7 @@ function App() {
           path="/analiticas"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <WorkerAnalytics user={user} />
               </MainLayout>
             ) : (
@@ -102,7 +102,7 @@ function App() {
           path="/registros"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <WorkerRecords user={user} />
               </MainLayout>
             ) : (
@@ -115,7 +115,7 @@ function App() {
           path="/cleans"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Cleans userRole={user.role} />
               </MainLayout>
             ) : (
@@ -128,7 +128,7 @@ function App() {
           path="/workers"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Workers userRole={user.role} />
               </MainLayout>
             ) : (
@@ -141,7 +141,7 @@ function App() {
           path="/incidencias"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Incidencias userRole={user.role} />
               </MainLayout>
             ) : (
@@ -154,7 +154,7 @@ function App() {
           path="/sugerencias"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout}>
+              <MainLayout user={user} onLogout={handleLogout}>
                 <Sugerencias />
               </MainLayout>
             ) : (
@@ -167,7 +167,7 @@ function App() {
           path="/pagos"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Pagos userRole={user.role} />
               </MainLayout>
             ) : (
@@ -180,7 +180,7 @@ function App() {
           path="/alojamientos"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Alojamientos userRole={user.role} />
               </MainLayout>
             ) : (
@@ -193,7 +193,7 @@ function App() {
           path="/analisis"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Analisis />
               </MainLayout>
             ) : (
@@ -206,7 +206,7 @@ function App() {
           path="/generar-informe"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <GenerarInforme />
               </MainLayout>
             ) : (
@@ -220,7 +220,7 @@ function App() {
           path="/entrega-de-llaves"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <EntregaDeLlaves userRole={user.role} />
               </MainLayout>
             ) : (
@@ -233,7 +233,7 @@ function App() {
           path="/perfil"
           element={
             user ? (
-              <MainLayout userRole={user.role} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                 <Profile user={user} onLogout={handleLogout} />
               </MainLayout>
             ) : (

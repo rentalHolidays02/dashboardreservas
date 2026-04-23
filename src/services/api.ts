@@ -1,5 +1,4 @@
 import {
-  MOCK_USERS,
   MOCK_WORKERS,
   MOCK_CHECKINS,
   MOCK_INCIDENCIAS,
@@ -20,6 +19,7 @@ import {
   MOCK_ACCOMMODATIONS,
   Suggestion
 } from './mockData';
+import { supabase } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets API Configuration
@@ -454,54 +454,140 @@ const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | 
 
 export const appsScriptApi = {
   login: async (email: string, pass: string): Promise<User | null> => {
-    await delay(800);
-    
-    // 1. Intentar login con usuarios predefinidos (Admin/Viewer)
-    const mockUser = MOCK_USERS.find(u => u.email === email && u.password === pass);
-    if (mockUser) {
-      const { password, ...userWithoutPass } = mockUser;
-      // Si es trabajador, enriquecer la sesión con el teléfono real de la BBDD (ID único)
-      if (userWithoutPass.role === 'trabajador') {
-        try {
-          const workers = await appsScriptApi.getWorkers();
-          const normName = (s: string) =>
-            s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          const worker = workers.find(w =>
-            (w.email && w.email.toLowerCase() === email.toLowerCase()) ||
-            normName(w.fullName).startsWith(normName(userWithoutPass.name).split(/\s+/)[0])
-          );
-          if (worker?.telefono) {
-            return { ...userWithoutPass, telefono: worker.telefono };
-          }
-        } catch (_) { /* fallback sin teléfono */ }
-      }
-      return userWithoutPass;
-    }
-
-    // 2. Si no es admin/viewer, buscar en la BBDD de trabajadores
     try {
-      // Usamos el password 'rh-worker' por defecto para todos los trabajadores en este entorno
-      if (pass !== 'rh-worker') return null;
+      // 1. Intentar login con Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
+      });
 
-      const workers = await appsScriptApi.getWorkers();
-      const worker = workers.find(w => 
-        (w.email && w.email.toLowerCase() === email.toLowerCase()) || 
-        (w.fullName && w.fullName.toLowerCase().replace(/\s/g, '.') + '@rh.local' === email.toLowerCase())
-      );
+      if (authError) {
+        console.error('Error de autenticación:', authError.message);
+        // Fallback para trabajadores que aún no están en Supabase (Opcional, según prefiera el usuario)
+        if (pass === 'rh-worker') {
+           const workers = await appsScriptApi.getWorkers();
+           const worker = workers.find(w => w.email?.toLowerCase() === email.toLowerCase());
+           if (worker) return { email: worker.email || email, role: 'trabajador', name: worker.fullName, telefono: worker.telefono };
+        }
+        return null;
+      }
 
-      if (worker) {
+      const sessionUser = authData.user;
+      if (!sessionUser) return null;
+
+      // 2. Obtener datos del perfil (rol, nombre completo) desde la tabla 'profiles'
+      if (sessionUser.email === 'rentalholidays.es@gmail.com') {
         return {
-          email: worker.email || email,
-          role: 'trabajador',
-          name: worker.fullName,
-          telefono: worker.telefono || undefined
+          id: sessionUser.id,
+          email: sessionUser.email || '',
+          role: 'admin',
+          name: 'Cati (Admin)',
+          telefono: '+34 617 21 25 66'
         };
       }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', sessionUser.id)
+        .single();
+
+      if (profileError) {
+        console.warn('No se encontró perfil para el usuario:', profileError.message);
+        // Retornar datos básicos de Auth si no hay perfil
+        return {
+          email: sessionUser.email || '',
+          role: 'viewer', // Rol por defecto
+          name: sessionUser.user_metadata?.full_name || 'Usuario'
+        };
+      }
+
+      return {
+        email: profile.email,
+        role: profile.role as any,
+        name: profile.full_name,
+        telefono: profile.phone || undefined
+      };
     } catch (error) {
-      console.error('Error durante el login de trabajador:', error);
+      console.error('Error durante el proceso de login:', error);
+      return null;
+    }
+  },
+
+  // --- Funciones de Administración (Supabase) ---
+
+  getAllUsers: async (): Promise<User[]> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('full_name', { ascending: true });
+
+    if (error) {
+      console.error('Error al obtener usuarios:', error.message);
+      return [];
     }
 
-    return null;
+    return data.map(p => ({
+      id: p.id,
+      email: p.email,
+      role: p.role as any,
+      name: p.full_name,
+      telefono: p.phone || undefined
+    }));
+  },
+
+  updateProfile: async (userId: string, profileData: Partial<User>) => {
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        email: profileData.email,
+        full_name: profileData.name,
+        role: profileData.role,
+        phone: profileData.telefono,
+      });
+
+    if (error) throw error;
+  },
+
+  deleteProfile: async (userId: string) => {
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', userId);
+    if (error) throw error;
+  },
+
+  getSensitiveData: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('worker_sensitive_data')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 es "no rows found"
+      console.error('Error al obtener datos sensibles:', error.message);
+    }
+    return data || null;
+  },
+
+  updateSensitiveData: async (userId: string, data: { dni?: string; home_address?: string; bank_account?: string }) => {
+    const { error } = await supabase
+      .from('worker_sensitive_data')
+      .upsert({
+        id: userId,
+        ...data
+      });
+
+    if (error) throw error;
+  },
+
+  deleteSensitiveData: async (userId: string) => {
+    const { error } = await supabase
+      .from('worker_sensitive_data')
+      .delete()
+      .eq('id', userId);
+    if (error) throw error;
   },
 
   getWorkers: async (): Promise<Worker[]> => {

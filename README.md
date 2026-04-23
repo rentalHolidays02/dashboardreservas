@@ -60,7 +60,20 @@
     Crea un archivo `.env` basado en `.env.example` y añade tu URL de Google Apps Script:
     ```env
     VITE_APP_SCRIPT_URL=tu_url_aqui
+    VITE_SUPABASE_URL=tu_url_supabase
+    VITE_SUPABASE_ANON_KEY=tu_anon_key
     ```
+
+### 🗄️ Configuración de Supabase
+Para la gestión de roles, se recomienda crear una tabla `profiles` en el esquema `public`:
+```sql
+create table profiles (
+  id uuid references auth.users on delete cascade primary key,
+  email text unique,
+  full_name text,
+  role text check (role in ('admin', 'editor', 'viewer')) default 'viewer'
+);
+```
 4.  **Ejecutar en modo desarrollo:**
     ```bash
     npm run dev
