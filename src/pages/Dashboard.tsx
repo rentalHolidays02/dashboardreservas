@@ -26,6 +26,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
   const [activeInitialCheckins, setActiveInitialCheckins] = useState<InitialCleanRecord[]>([]);
   const [activeHandymanCheckins, setActiveHandymanCheckins] = useState<HandymanRecord[]>([]);
   const [entregaLlaves, setEntregaLlaves] = useState<EntregaLlaves[]>([]);
+  const [accommodations, setAccommodations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,7 +65,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
       try {
         const [
           workersData, checkInsData, normalData, initialData, handymanData,
-          activeNormalData, activeInitialData, activeHandymanData, entregaData
+          activeNormalData, activeInitialData, activeHandymanData, entregaData,
+          accommodationsData
         ] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getRecentCheckIns(),
@@ -75,6 +77,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
           appsScriptApi.getInitialCheckins(),
           appsScriptApi.getHandymanCheckins(),
           appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
+          appsScriptApi.getAccommodations().catch(() => []),
         ]);
         setWorkers(workersData);
         setCheckIns(checkInsData);
@@ -85,6 +88,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
         setActiveInitialCheckins(activeInitialData);
         setActiveHandymanCheckins(activeHandymanData);
         setEntregaLlaves(entregaData);
+        setAccommodations(accommodationsData);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -310,6 +314,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
         mode="create"
         type={checkoutForm.type}
         initialValues={checkoutForm.record}
+        workers={workers}
+        accommodations={accommodations}
         loading={isSavingCheckout}
         onClose={() => setCheckoutForm(prev => ({ ...prev, open: false }))}
         onSubmit={handleCheckoutSubmit}

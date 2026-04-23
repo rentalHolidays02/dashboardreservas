@@ -30,9 +30,12 @@ import CleanFilterModal, { CleanFilters } from '../components/cleans/CleanFilter
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { getExpectedHours, computeHoursWorked } from '../utils/payments';
 import CleanCheckoutFormModal from '../components/cleans/CleanCheckoutFormModal';
+import CleanSortModal, { SortConfig } from '../components/cleans/CleanSortModal';
+import { ArrowUpDown } from 'lucide-react';
 
 type TabType = 'normal' | 'initial' | 'handyman';
 type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
+type CleansLoadStatus = 'ok' | 'empty' | 'error';
 
 const emptyNormalRecord = (): NormalCleanRecord => ({
   id: '',
@@ -145,6 +148,8 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
   const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
   const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
+  const [cleansLoadStatus, setCleansLoadStatus] = useState<CleansLoadStatus>('ok');
+  const [cleansLoadError, setCleansLoadError] = useState<string>('');
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [geoData, setGeoData] = useState<Record<string, { lat: number, lng: number }>>({});
@@ -164,6 +169,8 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
 
   // Filter Modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'fecha', direction: 'desc' });
   const [filters, setFilters] = useState<CleanFilters>({
     startDate: '',
     endDate: '',
@@ -178,6 +185,7 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
     type: TabType;
     wasChecked: boolean;
   } | null>(null);
+  const didInitLoadRef = useRef(false);
 
   const photoMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -196,6 +204,10 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
   }, [accommodations]);
 
   useEffect(() => {
+    // En dev (React.StrictMode) este effect se monta 2 veces, duplicando llamadas y causando 429.
+    if (didInitLoadRef.current) return;
+    didInitLoadRef.current = true;
+
     appsScriptApi.getWorkers().then(setWorkers);
     appsScriptApi.getAccommodations().then(async (accs) => {
       setAccommodations(accs);
@@ -222,16 +234,36 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
     const fetchAllData = async () => {
       setLoading(true);
       try {
-        const [nc, ic, hm] = await Promise.all([
-          appsScriptApi.getNormalCleans(),
-          appsScriptApi.getInitialCleans(),
-          appsScriptApi.getHandymanRecords()
+        const [ncRes, icRes, hmRes] = await Promise.all([
+          appsScriptApi.getNormalCleansResult(),
+          appsScriptApi.getInitialCleansResult(),
+          appsScriptApi.getHandymanRecordsResult()
         ]);
-        setNormalCleans(nc);
-        setInitialCleans(ic);
-        setHandymanRecords(hm);
+
+        setNormalCleans(ncRes.records);
+        setInitialCleans(icRes.records);
+        setHandymanRecords(hmRes.records);
+
+        const anyError = [ncRes, icRes, hmRes].some(r => r.status === 'error');
+        const allEmpty = [ncRes, icRes, hmRes].every(r => r.status === 'empty' && r.records.length === 0);
+
+        if (anyError) {
+          setCleansLoadStatus('error');
+          setCleansLoadError(ncRes.error || icRes.error || hmRes.error || 'Error desconocido');
+        } else if (allEmpty) {
+          setCleansLoadStatus('empty');
+          setCleansLoadError('');
+        } else {
+          setCleansLoadStatus('ok');
+          setCleansLoadError('');
+        }
       } catch (error) {
         console.error('Error fetching cleans data:', error);
+        setNormalCleans([]);
+        setInitialCleans([]);
+        setHandymanRecords([]);
+        setCleansLoadStatus('error');
+        setCleansLoadError(String((error as any)?.message || error));
       } finally {
         setLoading(false);
       }
@@ -240,14 +272,27 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
   }, []);
 
   const refreshCleans = async () => {
-    const [nc, ic, hm] = await Promise.all([
-      appsScriptApi.getNormalCleans(),
-      appsScriptApi.getInitialCleans(),
-      appsScriptApi.getHandymanRecords()
+    const [ncRes, icRes, hmRes] = await Promise.all([
+      appsScriptApi.getNormalCleansResult(),
+      appsScriptApi.getInitialCleansResult(),
+      appsScriptApi.getHandymanRecordsResult()
     ]);
-    setNormalCleans(nc);
-    setInitialCleans(ic);
-    setHandymanRecords(hm);
+    setNormalCleans(ncRes.records);
+    setInitialCleans(icRes.records);
+    setHandymanRecords(hmRes.records);
+
+    const anyError = [ncRes, icRes, hmRes].some(r => r.status === 'error');
+    const allEmpty = [ncRes, icRes, hmRes].every(r => r.status === 'empty' && r.records.length === 0);
+    if (anyError) {
+      setCleansLoadStatus('error');
+      setCleansLoadError(ncRes.error || icRes.error || hmRes.error || 'Error desconocido');
+    } else if (allEmpty) {
+      setCleansLoadStatus('empty');
+      setCleansLoadError('');
+    } else {
+      setCleansLoadStatus('ok');
+      setCleansLoadError('');
+    }
   };
 
   const handleCreateCheckout = (type: TabType) => {
@@ -305,6 +350,31 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
       window.alert('Error al borrar checkout.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (type: TabType, id: string, checked: boolean) => {
+    try {
+      if (type === 'normal') {
+        const old = normalCleans.find(r => r.id === id);
+        if (old) setLastAction({ id, type: 'normal', wasChecked: old.checked });
+        setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+      } else if (type === 'initial') {
+        const old = initialCleans.find(r => r.id === id);
+        if (old) setLastAction({ id, type: 'initial', wasChecked: old.checked });
+        setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+      } else {
+        const old = handymanRecords.find(r => r.id === id);
+        if (old) setLastAction({ id, type: 'handyman', wasChecked: old.estadoCompletado === 'Completado' });
+        setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
+      }
+
+      const ok = await appsScriptApi.updateCleanStatus(type, id, checked);
+      if (!ok) throw new Error('No se pudo guardar el estado');
+    } catch (error) {
+      console.error(error);
+      window.alert('No se pudo guardar el estado. Revisa el despliegue del Apps Script (ping/listSheets) y tu conexión.');
+      await refreshCleans();
     }
   };
 
@@ -404,15 +474,64 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
     return true;
   };
 
-  const filteredNormal = useMemo(() => normalCleans.filter(applyFilters), [normalCleans, searchTerm, filters]);
-  const filteredInitial = useMemo(() => initialCleans.filter(applyFilters), [initialCleans, searchTerm, filters]);
-  const filteredHandyman = useMemo(() => handymanRecords.filter(applyFilters), [handymanRecords, searchTerm, filters]);
+  const sortRecords = (records: any[], config: SortConfig, type: TabType) => {
+    return [...records].sort((a, b) => {
+      let valA: any, valB: any;
+      
+      switch (config.field) {
+        case 'fecha':
+          valA = type === 'handyman' ? (a.fechaLlegada || '') : (a.checkinFecha || '');
+          valB = type === 'handyman' ? (b.fechaLlegada || '') : (b.checkinFecha || '');
+          break;
+        case 'nombre':
+          valA = `${a.nombre || ''} ${a.apellidos || ''}`.toLowerCase();
+          valB = `${b.nombre || ''} ${b.apellidos || ''}`.toLowerCase();
+          break;
+        case 'apartamento':
+          valA = (type === 'handyman' ? (a.alojamiento || '') : (a.apartamento || '')).toLowerCase();
+          valB = (type === 'handyman' ? (b.alojamiento || '') : (b.apartamento || '')).toLowerCase();
+          break;
+        case 'km':
+          valA = type === 'handyman' ? (a.cantidadMinutos || 0) : (a.km || 0);
+          valB = type === 'handyman' ? (b.cantidadMinutos || 0) : (b.km || 0);
+          break;
+        default:
+          return 0;
+      }
+
+      if (valA < valB) return config.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return config.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const filteredNormal = useMemo(() => {
+    const filtered = normalCleans.filter(applyFilters);
+    return sortRecords(filtered, sortConfig, 'normal');
+  }, [normalCleans, searchTerm, filters, sortConfig]);
+
+  const filteredInitial = useMemo(() => {
+    const filtered = initialCleans.filter(applyFilters);
+    return sortRecords(filtered, sortConfig, 'initial');
+  }, [initialCleans, searchTerm, filters, sortConfig]);
+
+  const filteredHandyman = useMemo(() => {
+    const filtered = handymanRecords.filter(applyFilters);
+    return sortRecords(filtered, sortConfig, 'handyman');
+  }, [handymanRecords, searchTerm, filters, sortConfig]);
 
   const tabs = [
     { id: 'normal', label: 'Limpieza Normal', icon: <ClipboardList size={18} /> },
     { id: 'initial', label: 'Limpieza Inicial', icon: <Sparkles size={18} /> },
     { id: 'handyman', label: 'Manitas', icon: <Wrench size={18} /> },
   ] as const;
+
+  const totalRecordsCount = normalCleans.length + initialCleans.length + handymanRecords.length;
+  const showCleansEmptyState =
+    totalRecordsCount === 0 &&
+    !searchTerm &&
+    activeFiltersCount === 0 &&
+    (cleansLoadStatus === 'empty' || cleansLoadStatus === 'error');
 
   if (loading) {
     return <LoadingSpinner />;
@@ -471,6 +590,23 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
               onApply={(newFilters) => {
                 setFilters(newFilters);
               }}
+            />
+          </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setIsSortModalOpen(true)}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 transition-all active:scale-[0.98] hover:bg-white/80 dark:hover:bg-stone-800/60"
+            >
+              <ArrowUpDown size={12} className="text-orange-500" />
+              <span>Ordenar</span>
+            </button>
+
+            <CleanSortModal 
+              isOpen={isSortModalOpen}
+              onClose={() => setIsSortModalOpen(false)}
+              sortConfig={sortConfig}
+              onApply={(newSort) => setSortConfig(newSort)}
             />
           </div>
         </div>
@@ -556,6 +692,59 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
             onDelete={(id) => handleDeleteCheckout('handyman', id)}
             isReadOnly={isReadOnly}
           />
+        {showCleansEmptyState ? (
+          <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
+            <div className="w-12 h-12 rounded-2xl bg-orange-500/10 dark:bg-orange-500/10 flex items-center justify-center mb-4">
+              <Info size={18} className="text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="text-sm font-medium text-slate-700 dark:text-stone-200">
+              {cleansLoadStatus === 'empty' ? 'No hay checkouts todavía.' : 'No se pudieron cargar los checkouts.'}
+            </div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-stone-400 max-w-md">
+              {cleansLoadStatus === 'empty'
+                ? 'Cuando existan registros en Google Sheets aparecerán aquí.'
+                : `Revisa tu conexión o límites de Google Sheets (429) y reintenta. ${cleansLoadError ? `(${cleansLoadError})` : ''}`}
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'normal' && (
+              <TableNormalCleans 
+                data={filteredNormal} 
+                photoMap={photoMap} 
+                geoData={geoData}
+                workers={workers}
+                addressMap={addressMap}
+                onUpdate={(id, checked) => { void handleToggleStatus('normal', id, checked); }}
+                onEdit={(record) => handleEditCheckout('normal', record)}
+                onDelete={(id) => handleDeleteCheckout('normal', id)}
+              />
+            )}
+            {activeTab === 'initial' && (
+              <TableInitialCleans 
+                data={filteredInitial} 
+                photoMap={photoMap} 
+                geoData={geoData}
+                workers={workers}
+                addressMap={addressMap}
+                onUpdate={(id, checked) => { void handleToggleStatus('initial', id, checked); }}
+                onEdit={(record) => handleEditCheckout('initial', record)}
+                onDelete={(id) => handleDeleteCheckout('initial', id)}
+              />
+            )}
+            {activeTab === 'handyman' && (
+              <TableHandyman 
+                data={filteredHandyman} 
+                photoMap={photoMap} 
+                geoData={geoData}
+                workers={workers}
+                addressMap={addressMap}
+                onUpdate={(id, checked) => { void handleToggleStatus('handyman', id, checked); }}
+                onEdit={(record) => handleEditCheckout('handyman', record)}
+                onDelete={(id) => handleDeleteCheckout('handyman', id)}
+              />
+            )}
+          </>
         )}
       </div>
       <CleanCheckoutFormModal
@@ -563,6 +752,8 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
         mode={checkoutForm.mode}
         type={checkoutForm.type}
         initialValues={checkoutForm.record}
+        workers={workers}
+        accommodations={accommodations}
         loading={actionLoading}
         onClose={() => setCheckoutForm(prev => ({ ...prev, open: false }))}
         onSubmit={handleCheckoutSubmit}
@@ -1134,9 +1325,9 @@ const TableNormalCleans: React.FC<{
               {expandedId === r.id && (
                 <tr className="bg-orange-50/20 dark:bg-stone-900/40 border-b border-stone-100 dark:border-stone-800 animate-in fade-in slide-in-from-top-2 duration-300">
                   <td colSpan={6} className="px-8 py-6">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                       {/* Observaciones */}
-                      <div className="space-y-2">
+                      <div className="space-y-2 md:col-span-2">
                         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
                           <MessageSquare size={12} className="text-orange-500" />
                           <span>Observaciones</span>
@@ -1192,8 +1383,8 @@ const TableNormalCleans: React.FC<{
                           <User size={12} className="text-orange-500" />
                           <span>Estado del Huésped</span>
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border self-start ${
+                        <div className="flex items-center gap-3">
+                          <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border ${
                             r.sigueHuesped 
                               ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/40 text-amber-700 dark:text-amber-400' 
                               : 'bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-900/40 text-blue-600 dark:text-blue-400'
@@ -1201,14 +1392,21 @@ const TableNormalCleans: React.FC<{
                             <div className={`w-1.5 h-1.5 rounded-full ${r.sigueHuesped ? 'bg-amber-500 animate-pulse' : 'bg-blue-500'}`} />
                             <span>{r.sigueHuesped ? 'Salió tarde' : 'YA SALIÓ'}</span>
                           </div>
-                          {r.fechaSalidaReserva && (
-                            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-stone-400 bg-white/40 dark:bg-stone-800/40 px-3 py-1.5 rounded-lg border border-stone-100/50 dark:border-stone-700/30 w-fit">
-                              <Clock size={12} className="text-orange-500" />
-                              <span>Hora en la que salió: <span className="font-semibold">{r.fechaSalidaReserva}</span></span>
-                            </div>
-                          )}
                         </div>
                       </div>
+
+                      {/* Salida Reserva */}
+                      {r.sigueHuesped && r.fechaSalidaReserva && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                            <Clock size={12} className="text-orange-500" />
+                            <span>Salida Reserva</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-stone-400 bg-white/40 dark:bg-stone-800/40 px-3 py-2 rounded-xl border border-stone-100/50 dark:border-stone-700/30 w-fit">
+                            <span className="font-semibold">{r.fechaSalidaReserva}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>

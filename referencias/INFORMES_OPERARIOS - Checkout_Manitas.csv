@@ -1,0 +1,3 @@
+Telefono,Nombre,Apellidos,Checkin Fecha Trabajador,Checkin Ubicacion Trabajador,Checkout Fecha Trabajador,Checkout Ubicacion Trabajador,Apartamento,Hora Reparacion Entrada,Hora Reparacion Salida,Km,Observaciones,Checked
+34625223891,Willian,Bernal,"7/4/2026, 15:50:39","40.11681, 0.15466","7/4/2026, 16:14:00","40.11681, 0.15466",APTO ACAPULCO IV,15:08,16:14,0,"Se destapa persiana para mirar que es lo que tiene roto 
+Persiana salida a la terraza",TRUE

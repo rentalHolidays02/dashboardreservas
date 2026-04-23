@@ -17,7 +17,8 @@ import {
   HandymanRecord,
   PagoRecord,
   Accommodation,
-  MOCK_ACCOMMODATIONS
+  MOCK_ACCOMMODATIONS,
+  Suggestion
 } from './mockData';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
@@ -29,13 +30,37 @@ const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; //
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
-const CLEANS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby7jVfemlvNXvKNKv_Bxy5Iold2-mLQjgqVtoJ2KOe27zTzWJ4XM_7Icp_QvkrX9dVjhQ/exec';
+const CLEANS_APPS_SCRIPT_URL =
+  import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL ||
+  'https://script.google.com/macros/s/AKfycbzm72ot1nECxcBf406o--XzL2jty55cxNRrG1Nbd64YAmYU4wl7kwi842jjlybE4ErVgw/exec';
 const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
 const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
 const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxX8IQ6wsfmnJt77UWCpR3Zt0ND0RDFXafIEgrzZtBC5QzMSeLLYipcYx3l6qRWvPA9LA/exec';
 const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:S";
 const ENTREGA_LLAVES_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbGhmFQLhv7ndi_pdnFLGgUTYKcygm1H3H8R0kpOGX_SyxHI2G3snlaDHkawH1DUneUA/exec';
+const SUGERENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz_REPLACE_WITH_YOUR_NEW_SCRIPT_URL/exec';
+
+type AppsScriptJsonResponse = { ok: boolean; error?: string; [k: string]: any };
+
+const postToCleansScript = async (payload: Record<string, any>): Promise<AppsScriptJsonResponse> => {
+  try {
+    // Apps Script Web App no permite controlar CORS headers en la respuesta (TextOutput no soporta setHeader),
+    // así que desde localhost el navegador bloqueará leer la respuesta. Enviamos fire-and-forget con no-cors.
+    await fetch(CLEANS_APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    return { ok: true };
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message || error) };
+  }
+};
+
+export type CleansFetchStatus = 'ok' | 'empty' | 'error';
+export type CleansFetchResult<T> = { records: T[]; status: CleansFetchStatus; error?: string };
 
 // Utilidad para limpiar números formateados (ej: "10,00 €" -> 10.0)
 const parseExcelNumber = (val: any): number => {
@@ -327,6 +352,23 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 type CleanSheetType = 'normal' | 'initial' | 'handyman';
 
+const buildWorkersSheetPayload = (workerData: Partial<Worker> & { fullName?: string; telefono?: string; telefonoBizum?: string }) => {
+  const fullName = String(workerData.fullName || '').trim();
+  const telefonoText = workerData.telefono ? `'${String(workerData.telefono).replace(/^'/, '')}` : '';
+  const telefonoBizumText = workerData.telefonoBizum ? `'${String(workerData.telefonoBizum).replace(/^'/, '')}` : '';
+
+  return {
+    ...workerData,
+    // Columnas del Excel (por compatibilidad, mandamos varias claves posibles)
+    OPERARIO: fullName,
+    OPERARIOS: fullName,
+    MOVIL: telefonoText,
+    Telefono: telefonoText,
+    telefono: telefonoText,
+    telefonoBizum: telefonoBizumText,
+  };
+};
+
 const getCleanSheetName = (type: CleanSheetType): string => {
   if (type === 'normal') return 'Checkout_Limpieza_Normal';
   if (type === 'initial') return 'Checkout_Limpieza_Inicial';
@@ -340,9 +382,14 @@ const getCheckinSheetName = (type: string): string => {
 };
 
 const parseRowIndexFromId = (id: string): number => {
-  const rowIndex = parseInt(String(id || '').split('_')[1], 10);
+  if (!id) return -1;
+  // Soporta formatos nc_123, ic_123, hm_123 o simplemente el número
+  const parts = String(id).split('_');
+  const indexStr = parts.length > 1 ? parts[1] : parts[0];
+  const rowIndex = parseInt(indexStr, 10);
   if (!Number.isFinite(rowIndex) || rowIndex <= 1) {
-    throw new Error(`Invalid clean record id: ${id}`);
+    console.warn(`⚠️ Invalid clean record id for indexing: ${id}`);
+    return -1;
   }
   return rowIndex;
 };
@@ -540,10 +587,7 @@ export const appsScriptApi = {
   updateWorker: async (workerData: Worker): Promise<Worker> => {
     try {
       const payload = {
-        ...workerData,
-        // Limpiar comillas existentes y añadir la comilla simple para forzar formato texto en Excel
-        telefono: workerData.telefono ? `'${workerData.telefono.replace(/^'/, '')}` : '',
-        telefonoBizum: workerData.telefonoBizum ? `'${workerData.telefonoBizum.replace(/^'/, '')}` : '',
+        ...buildWorkersSheetPayload(workerData),
         action: 'update'
       };
       
@@ -569,11 +613,7 @@ export const appsScriptApi = {
 
   addWorker: async (workerData: Omit<Worker, 'id'>): Promise<Worker> => {
     try {
-      const payload = {
-        ...workerData,
-        telefono: workerData.telefono ? `'${workerData.telefono.replace(/^'/, '')}` : '',
-        telefonoBizum: workerData.telefonoBizum ? `'${workerData.telefonoBizum.replace(/^'/, '')}` : '',
-      };
+      const payload = buildWorkersSheetPayload(workerData);
 
       // Intentamos sincronizar con Google Sheets
       fetch(WORKERS_APPS_SCRIPT_URL, {
@@ -629,9 +669,7 @@ export const appsScriptApi = {
       const isRealExcelRow = worker.id.startsWith('real_worker_');
       if (isRealExcelRow) {
         const payload = {
-          ...worker,
-          telefono: worker.telefono ? `'${worker.telefono.replace(/^'/, '')}` : '',
-          telefonoBizum: worker.telefonoBizum ? `'${worker.telefonoBizum.replace(/^'/, '')}` : '',
+          ...buildWorkersSheetPayload(worker),
           action: 'restore',
         };
         fetch(WORKERS_APPS_SCRIPT_URL, {
@@ -659,7 +697,7 @@ export const appsScriptApi = {
   getRecentIncidencias: async (limit = 50): Promise<Incidencia[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${INCIDENCIAS_SPREADSHEET_ID}/values/${encodeURIComponent(INCIDENCIAS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
       
       if (!response.ok) {
         throw new Error(`Error en la API de Google Sheets (Incidencias): ${response.statusText}`);
@@ -723,6 +761,45 @@ export const appsScriptApi = {
     } catch (error) {
       console.error('Error fetching incidencias from Sheets:', error);
       return MOCK_INCIDENCIAS;
+    }
+  },
+
+  getSuggestions: async (limit = 20): Promise<Suggestion[]> => {
+    try {
+      // Nota: El usuario deberá reemplazar SUGERENCIAS_APPS_SCRIPT_URL con la URL real desplegada
+      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=listSuggestions&limit=${limit}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('Error al obtener sugerencias');
+      }
+
+      const data = await response.json();
+      if (data.ok) return data.suggestions;
+      return [];
+    } catch (error) {
+      console.error('Error fetching suggestions:', error);
+      // Datos de ejemplo para desarrollo si la URL falla
+      return [
+        {
+          id: 'msg_1',
+          subject: 'Sugerencia: Nuevos uniformes',
+          from: 'Maria Garcia <maria@example.com>',
+          date: new Date().toISOString(),
+          snippet: 'Me gustaría sugerir que se revisen los uniformes de verano...',
+          body: 'Hola,\n\nMe gustaría sugerir que se revisen los uniformes de verano, ya que el material actual es muy caluroso.\n\nSaludos,\nMaria.',
+          isRead: false
+        },
+        {
+          id: 'msg_2',
+          subject: 'Mejora en el proceso de limpieza',
+          from: 'Juan Perez <juan@example.com>',
+          date: new Date(Date.now() - 86400000).toISOString(),
+          snippet: 'He notado que podríamos ahorrar tiempo si cambiamos el orden...',
+          body: 'Buenas tardes,\n\nHe notado que podríamos ahorrar tiempo si cambiamos el orden de limpieza de los baños.\n\nUn saludo.',
+          isRead: true
+        }
+      ];
     }
   },
 
@@ -877,7 +954,7 @@ export const appsScriptApi = {
   getAccommodations: async (): Promise<Accommodation[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
       
       if (!response.ok) {
         throw new Error(`Error en la API de Google Sheets: ${response.statusText}`);
@@ -1054,7 +1131,7 @@ export const appsScriptApi = {
     }
   },
 
-  getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
+  getNormalCleansResult: async (): Promise<CleansFetchResult<NormalCleanRecord>> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
       const response = await fetchWithRetry(url);
@@ -1065,7 +1142,7 @@ export const appsScriptApi = {
 
       const data = await response.json();
       if (!data.values || data.values.length <= 1) {
-        return MOCK_NORMAL_CLEANS;
+        return { records: [], status: 'empty' };
       }
 
       const headers = data.values[0] as string[];
@@ -1096,7 +1173,14 @@ export const appsScriptApi = {
             horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
             horaSalida: String(getVal('Hora Limpieza Salida') || ''),
             sigueHuesped: parseBool(getVal('Sigue Huesped')),
-            fechaSalidaReserva: parseDateTime(getVal('Fecha Salida Reserva')),
+            // Mantener como texto: en el sheet puede venir como "DD/MM/YYYY HH:mm" o "HH:mm, DD/MM/YYYY"
+            // y no queremos perderlo por parseos.
+            fechaSalidaReserva: String(
+              getVal('Fecha Salida Reserva') ||
+              getVal('FECHA SALIDA RESERVA') ||
+              getVal('FECHA SALIDA RE') ||
+              ''
+            ).trim(),
             recogeLlaves: parseBool(getVal('Recoge Llaves')),
             km: parseExcelNumber(getVal('Km')),
             observaciones: String(getVal('Observaciones') || ''),
@@ -1105,11 +1189,16 @@ export const appsScriptApi = {
         })
         .filter((r: NormalCleanRecord | null): r is NormalCleanRecord => r !== null);
 
-      return records;
+      return { records, status: records.length ? 'ok' : 'empty' };
     } catch (error) {
       console.error('Error fetching normal cleans from Sheets:', error);
-      return MOCK_NORMAL_CLEANS;
+      return { records: [], status: 'error', error: String((error as any)?.message || error) };
     }
+  },
+
+  getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
+    const res = await appsScriptApi.getNormalCleansResult();
+    return res.records;
   },
 
   updateCleanStatus: async (type: CleanSheetType, id: string, checked: boolean): Promise<boolean> => {
@@ -1124,15 +1213,11 @@ export const appsScriptApi = {
         checked
       };
 
-      await fetch(CLEANS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify(payload)
-      });
-
+      const res = await postToCleansScript(payload);
+      if (!res.ok) {
+        console.error('Apps Script updateCleanStatus failed:', res);
+        return false;
+      }
       return true;
     } catch (error) {
       console.error('Error updating clean status:', error);
@@ -1147,67 +1232,67 @@ export const appsScriptApi = {
         sheetName: getCleanSheetName(type),
         record: cleanRecordToPayload(type, record)
       };
-      await fetch(CLEANS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify(payload)
-      });
+      
+      const res = await postToCleansScript(payload);
+      if (!res.ok) {
+        console.error('Apps Script createCheckout failed:', res);
+        return false;
+      }
       return true;
     } catch (error) {
-      console.error('Error creating checkout record:', error);
+      console.error('❌ Error creating checkout record:', error);
       return false;
     }
   },
 
   updateCheckoutRecord: async (type: CleanSheetType, id: string, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Promise<boolean> => {
     try {
+      const rowIndex = parseRowIndexFromId(id);
+      if (rowIndex === -1) return false;
+
       const payload = {
         action: 'updateCheckout',
         sheetName: getCleanSheetName(type),
-        rowIndex: parseRowIndexFromId(id),
+        rowIndex,
         record: cleanRecordToPayload(type, record)
       };
-      await fetch(CLEANS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify(payload)
-      });
+      
+      const res = await postToCleansScript(payload);
+      if (!res.ok) {
+        console.error('Apps Script updateCheckout failed:', res);
+        return false;
+      }
       return true;
     } catch (error) {
-      console.error('Error updating checkout record:', error);
+      console.error('❌ Error updating checkout record:', error);
       return false;
     }
   },
 
   deleteCheckoutRecord: async (type: CleanSheetType, id: string): Promise<boolean> => {
     try {
+      const rowIndex = parseRowIndexFromId(id);
+      if (rowIndex === -1) return false;
+
       const payload = {
         action: 'deleteCheckout',
         sheetName: getCleanSheetName(type),
-        rowIndex: parseRowIndexFromId(id)
+        rowIndex
       };
-      await fetch(CLEANS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify(payload)
-      });
+      
+      const res = await postToCleansScript(payload);
+      if (!res.ok) {
+        console.error('Apps Script deleteCheckout failed:', res);
+        return false;
+      }
       return true;
     } catch (error) {
-      console.error('Error deleting checkout record:', error);
+      console.error('❌ Error deleting checkout record:', error);
       return false;
     }
   },
 
-  getInitialCleans: async (): Promise<InitialCleanRecord[]> => {
+  getInitialCleansResult: async (): Promise<CleansFetchResult<InitialCleanRecord>> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Inicial!A:M?key=${GOOGLE_API_KEY}`;
       const response = await fetchWithRetry(url);
@@ -1218,7 +1303,7 @@ export const appsScriptApi = {
 
       const data = await response.json();
       if (!data.values || data.values.length <= 1) {
-        return MOCK_INITIAL_CLEANS;
+        return { records: [], status: 'empty' };
       }
 
       const headers = data.values[0] as string[];
@@ -1260,14 +1345,19 @@ export const appsScriptApi = {
         })
         .filter((r: InitialCleanRecord | null): r is InitialCleanRecord => r !== null);
 
-      return records;
+      return { records, status: records.length ? 'ok' : 'empty' };
     } catch (error) {
       console.error('Error fetching initial cleans from Sheets:', error);
-      return MOCK_INITIAL_CLEANS;
+      return { records: [], status: 'error', error: String((error as any)?.message || error) };
     }
   },
 
-  getHandymanRecords: async (): Promise<HandymanRecord[]> => {
+  getInitialCleans: async (): Promise<InitialCleanRecord[]> => {
+    const res = await appsScriptApi.getInitialCleansResult();
+    return res.records;
+  },
+
+  getHandymanRecordsResult: async (): Promise<CleansFetchResult<HandymanRecord>> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Manitas!A:M?key=${GOOGLE_API_KEY}`;
       const response = await fetchWithRetry(url);
@@ -1278,7 +1368,7 @@ export const appsScriptApi = {
 
       const data = await response.json();
       if (!data.values || data.values.length <= 1) {
-        return MOCK_HANDYMAN_RECORDS;
+        return { records: [], status: 'empty' };
       }
 
       const headers = data.values[0] as string[];
@@ -1320,17 +1410,22 @@ export const appsScriptApi = {
         })
         .filter((r: HandymanRecord | null): r is HandymanRecord => r !== null);
 
-      return records;
+      return { records, status: records.length ? 'ok' : 'empty' };
     } catch (error) {
       console.error('Error fetching handyman records from Sheets:', error);
-      return MOCK_HANDYMAN_RECORDS;
+      return { records: [], status: 'error', error: String((error as any)?.message || error) };
     }
+  },
+
+  getHandymanRecords: async (): Promise<HandymanRecord[]> => {
+    const res = await appsScriptApi.getHandymanRecordsResult();
+    return res.records;
   },
 
   getNormalCheckins: async (): Promise<NormalCleanRecord[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
       if (!response.ok) throw new Error(`Error fetching normal checkins: ${response.statusText}`);
       const data = await response.json();
       if (!data.values || data.values.length <= 1) return [];
@@ -1369,7 +1464,7 @@ export const appsScriptApi = {
   getInitialCheckins: async (): Promise<InitialCleanRecord[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Inicial!A:P?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
       if (!response.ok) throw new Error(`Error fetching initial checkins: ${response.statusText}`);
       const data = await response.json();
       if (!data.values || data.values.length <= 1) return [];
@@ -1408,7 +1503,7 @@ export const appsScriptApi = {
   getHandymanCheckins: async (): Promise<HandymanRecord[]> => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Manitas!A:M?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
+      const response = await fetchWithRetry(url);
       if (!response.ok) throw new Error(`Error fetching handyman checkins: ${response.statusText}`);
       const data = await response.json();
       if (!data.values || data.values.length <= 1) return [];
