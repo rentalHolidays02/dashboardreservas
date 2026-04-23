@@ -31,6 +31,69 @@
   animation: chart-enter 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+@keyframes slide-in-right {
+  from { transform: translateX(30px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slide-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(30px); opacity: 0; }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-out-right {
+  animation: slide-out-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Master-Detail Suggestions Layout */
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .suggestions-grid {
+    transition: grid-template-columns 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .suggestions-grid.detail-closed {
+    grid-template-columns: 1fr 0fr;
+    gap: 0;
+  }
+  
+  .suggestions-grid.detail-open {
+    grid-template-columns: 5fr 7fr;
+    gap: 1.5rem;
+  }
+}
+
+.detail-view-container {
+  overflow: hidden;
+  transition: 
+    opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+    visibility 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.detail-view-container.hidden-state {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(20px);
+}
+
+.detail-view-container.visible-state {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
 
 @keyframes text-wave {
   0%   { background-position: -200% center; }
