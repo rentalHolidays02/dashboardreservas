@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Mail, User, Calendar, Loader2, Search, ArrowRight, MessageSquare, Clock, CheckCircle2 } from 'lucide-react';
+import { Mail, User, Calendar, Loader2, Search, ArrowRight, MessageSquare, Clock, CheckCircle2, X } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { Suggestion } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -21,7 +21,11 @@ const Sugerencias: React.FC = () => {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // States for smooth animation
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
+  const [activeSuggestion, setActiveSuggestion] = useState<Suggestion | null>(null);
+  const [isDetailVisible, setIsDetailVisible] = useState(false);
 
   useEffect(() => {
     fetchSuggestions();
@@ -32,6 +36,20 @@ const Sugerencias: React.FC = () => {
     const data = await appsScriptApi.getSuggestions();
     setSuggestions(data);
     setLoading(false);
+  };
+
+  const handleSelect = (s: Suggestion) => {
+    setActiveSuggestion(s);
+    setSelectedSuggestion(s);
+    setIsDetailVisible(true);
+  };
+
+  const handleClose = () => {
+    setIsDetailVisible(false);
+    // Keep activeSuggestion for the duration of the animation
+    setTimeout(() => {
+      setSelectedSuggestion(null);
+    }, 600);
   };
 
   const filteredSuggestions = suggestions.filter(s => {
@@ -69,9 +87,9 @@ const Sugerencias: React.FC = () => {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className={`suggestions-grid items-start ${isDetailVisible ? 'detail-open' : 'detail-closed'}`}>
         {/* List View */}
-        <div className={`${selectedSuggestion ? 'lg:col-span-5' : 'lg:col-span-12'} transition-all duration-300`}>
+        <div className="min-w-0 h-fit">
           <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden shadow-sm">
             {filteredSuggestions.length === 0 ? (
               <div className="px-5 py-12 flex flex-col items-center justify-center gap-2">
@@ -84,7 +102,7 @@ const Sugerencias: React.FC = () => {
                   <li 
                     key={s.id} 
                     className={`px-5 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group relative ${selectedSuggestion?.id === s.id ? 'bg-orange-50/50 dark:bg-orange-950/20' : ''}`}
-                    onClick={() => setSelectedSuggestion(s)}
+                    onClick={() => handleSelect(s)}
                   >
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
@@ -109,19 +127,19 @@ const Sugerencias: React.FC = () => {
         </div>
 
         {/* Detail View */}
-        {selectedSuggestion && (
-          <div className="lg:col-span-7 animate-in fade-in slide-in-from-right-4 duration-500">
-            <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden shadow-sm h-full flex flex-col">
+        <div className={`detail-view-container h-fit ${isDetailVisible ? 'visible-state' : 'hidden-state'}`}>
+          {activeSuggestion && (
+            <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden shadow-sm flex flex-col">
               <div className="p-6 border-b border-stone-100 dark:border-stone-800">
                 <div className="flex justify-between items-start mb-4">
                   <h2 className="text-lg font-medium text-slate-900 dark:text-stone-100 leading-tight">
-                    {selectedSuggestion.subject}
+                    {activeSuggestion.subject}
                   </h2>
                   <button 
-                    onClick={() => setSelectedSuggestion(null)}
-                    className="text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 transition-colors"
+                    onClick={handleClose}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 transition-colors p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg"
                   >
-                    ×
+                    <X size={20} />
                   </button>
                 </div>
                 
@@ -131,9 +149,9 @@ const Sugerencias: React.FC = () => {
                       <User size={14} />
                     </div>
                     <div>
-                      <p className="font-medium text-slate-700 dark:text-stone-300">{selectedSuggestion.from}</p>
+                      <p className="font-medium text-slate-700 dark:text-stone-300">{activeSuggestion.from}</p>
                       <p className="text-slate-400 dark:text-stone-500 flex items-center gap-1">
-                        <Clock size={10} /> {fmtDate(selectedSuggestion.date)}
+                        <Clock size={10} /> {fmtDate(activeSuggestion.date)}
                       </p>
                     </div>
                   </div>
@@ -143,7 +161,7 @@ const Sugerencias: React.FC = () => {
               <div className="p-6 flex-1 overflow-y-auto bg-slate-50/30 dark:bg-stone-900/10">
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <p className="whitespace-pre-wrap text-slate-700 dark:text-stone-300 leading-relaxed text-sm">
-                    {selectedSuggestion.body}
+                    {activeSuggestion.body}
                   </p>
                 </div>
               </div>
@@ -155,8 +173,8 @@ const Sugerencias: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
