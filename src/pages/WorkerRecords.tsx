@@ -214,7 +214,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   return (
     <div className="space-y-0 md:pb-20">
       {/* ── BLOQUE STICKY MÓVIL ── */}
-      <div className="sticky top-0 z-30 pt-2 lg:pt-0 pb-4 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col gap-4 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="sticky top-0 z-30 pt-0 lg:pt-0 pb-4 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col gap-6 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
         
         {/* Header Desktop / Titles */}
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -474,7 +474,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
       </div>
       </div>
       {/* ── BOTON FILTRO FLOTANTE MÓVIL ── */}
-      <div className="fixed bottom-6 right-6 z-50 sm:hidden animate-in fade-in zoom-in slide-in-from-bottom-4 duration-500">
+      <div className="fixed bottom-16 right-4 z-50 sm:hidden animate-in fade-in zoom-in duration-300">
         <button
           onClick={() => setIsFilterModalOpen(true)}
           className={`flex items-center justify-center w-[52px] h-[52px] rounded-full shadow-2xl transition-all active:scale-[0.92] border ${

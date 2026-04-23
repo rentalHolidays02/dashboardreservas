@@ -38,7 +38,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     label: 'PRINCIPAL',
     items: [
       { Icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-      { Icon: TrendingUp, label: 'Analíticas', path: '/analiticas' },
+      { Icon: TrendingUp, label: 'Resumen', path: '/analiticas' },
       { Icon: FileText, label: 'Registros', path: '/registros' },
       { Icon: Banknote, label: 'Análisis', path: '/analisis' },
     ],
@@ -151,7 +151,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             .map((cat) => {
       const filteredItems = cat.items.filter(item => {
         if (userRole === 'trabajador') {
-          return item.label === 'Dashboard' || item.label === 'Analíticas' || item.label === 'Registros';
+          return item.label === 'Dashboard' || item.label === 'Resumen' || item.label === 'Registros';
         }
         return item.label !== 'Registros';
       });

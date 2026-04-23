@@ -1,45 +1,78 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import { appsScriptApi } from '../services/api';
-import { 
-  Calendar, 
-  MapPin, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle,
-  Banknote,
+import { computeCleanPay, computeHoursWorked, cleanPhone } from '../utils/payments';
+import {
   Search,
-  History,
-  TrendingUp,
-  LayoutDashboard,
-  CheckCircle,
-  ArrowRight
+  Calendar,
+  Clock,
+  ChevronRight,
+  Info,
+  Wrench,
+  Home,
+  Sparkles,
+  Banknote,
+  Filter,
+  CheckCircle2,
 } from 'lucide-react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
-} from 'recharts';
-import { aggregateDailyData } from '../utils/analytics';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { formatName } from '../utils/formatters';
+import WorkerRecordsFilterModal, { WorkerRecordsFilters } from '../components/workers/WorkerRecordsFilterModal';
+import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 
 interface WorkerPanelProps {
   user: User;
 }
 
+type RecordType = 'Normal' | 'Inicial' | 'Manitas';
+
+interface UnifiedRecord {
+  id: string;
+  type: RecordType;
+  date: string;
+  accommodation: string;
+  kms: number;
+  minutes?: number;
+  hoursWorked: number;
+  earnings: number;
+  observations: string;
+  horaEntrada?: string;
+  horaSalida?: string;
+  checked?: boolean;
+}
+
+const normName = (s: string) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const matchRecord = (
+  recordPhone: string,
+  recordNombre: string,
+  recordApellidos: string,
+  userPhone: string | undefined,
+  userName: string
+): boolean => {
+  const recPhone = cleanPhone(recordPhone);
+  const usrPhone = cleanPhone(userPhone);
+
+  if (recPhone && usrPhone) return recPhone === usrPhone;
+
+  const full = normName(`${recordNombre} ${recordApellidos}`);
+  return normName(userName).split(/\s+/).every(part => full.includes(part));
+};
+
 const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<UnifiedRecord[]>([]);
   const [workerData, setWorkerData] = useState<Worker | null>(null);
-  
-  const [history, setHistory] = useState<{
-    normal: NormalCleanRecord[];
-    initial: InitialCleanRecord[];
-    handyman: HandymanRecord[];
-  }>({
-    normal: [],
-    initial: [],
-    handyman: [],
-  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'all' | 'normal' | 'initial' | 'handyman'>('all');
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filters, setFilters] = useState<WorkerRecordsFilters>({
+    startDate: '',
+    endDate: '',
+    type: 'all'
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,27 +82,84 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
           appsScriptApi.getWorkers(),
           appsScriptApi.getNormalCleans(),
           appsScriptApi.getInitialCleans(),
-          appsScriptApi.getHandymanRecords()
+          appsScriptApi.getHandymanRecords(),
         ]);
-        
-        const foundWorker = workers.find(w => 
-          w.fullName.toLowerCase().includes(user.name.toLowerCase()) || 
-          (w.email && w.email.toLowerCase() === user.email.toLowerCase())
-        );
 
-        if (foundWorker) {
-          setWorkerData(foundWorker);
-          const phone = foundWorker.telefono || '';
-          const filterByPhone = (recs: any[]) => recs.filter(r => r.telefono === phone);
-          
-          setHistory({
-            normal: filterByPhone(normal),
-            initial: filterByPhone(initial),
-            handyman: filterByPhone(handyman),
-          });
-        }
+        const worker: Worker | undefined = workers.find(w => {
+          const wPhone = cleanPhone(w.telefono);
+          const uPhone = cleanPhone(user.telefono);
+          if (wPhone && uPhone) return wPhone === uPhone;
+          return normName(w.fullName).includes(normName(user.name).split(/\s+/)[0]);
+        });
+        
+        if (worker) setWorkerData(worker);
+
+        const pagoPorReserva = worker?.pagoPorReserva ?? 0;
+        const precioPorKm = worker?.precioPorKm ?? 0;
+
+        const unified: UnifiedRecord[] = [
+          ...normal
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: NormalCleanRecord) => {
+              const pay = computeCleanPay(r.apartamento, r.horaEntrada, r.horaSalida, pagoPorReserva);
+              const kmPay = (r.km || 0) * precioPorKm;
+              return {
+                id: r.id,
+                type: 'Normal' as RecordType,
+                date: r.checkoutFecha || r.checkinFecha,
+                accommodation: r.apartamento,
+                kms: r.km || 0,
+                hoursWorked: pay.hoursWorked,
+                earnings: pay.base + pay.extraPay + kmPay,
+                observations: r.observaciones || '',
+                horaEntrada: r.horaEntrada,
+                horaSalida: r.horaSalida,
+                checked: r.checked,
+              };
+            }),
+          ...initial
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: InitialCleanRecord) => {
+              const pay = computeCleanPay(r.apartamento, r.horaEntrada, r.horaSalida, pagoPorReserva);
+              const kmPay = (r.km || 0) * precioPorKm;
+              return {
+                id: r.id,
+                type: 'Inicial' as RecordType,
+                date: r.checkoutFecha || r.checkinFecha,
+                accommodation: r.apartamento,
+                kms: r.km || 0,
+                hoursWorked: pay.hoursWorked,
+                earnings: pay.base + pay.extraPay + kmPay,
+                observations: r.observaciones || '',
+                horaEntrada: r.horaEntrada,
+                horaSalida: r.horaSalida,
+                checked: r.checked,
+              };
+            }),
+          ...handyman
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: HandymanRecord) => {
+              const hrs = computeHoursWorked(r.horaInicioTarea, r.horaFinTarea);
+              const kms = r.cantidadMinutos || 0;
+              return {
+                id: r.id,
+                type: 'Manitas' as RecordType,
+                date: r.fechaFin || r.fechaLlegada,
+                accommodation: r.alojamiento,
+                kms,
+                minutes: r.cantidadMinutos || 0,
+                hoursWorked: hrs,
+                earnings: kms * precioPorKm,
+                observations: r.observacionesTarea || '',
+                horaEntrada: r.horaInicioTarea,
+                horaSalida: r.horaFinTarea,
+              };
+            }),
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        setRecords(unified);
       } catch (error) {
-        console.error('Error fetching worker panel data:', error);
+        console.error('Error fetching records:', error);
       } finally {
         setLoading(false);
       }
@@ -77,149 +167,319 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
     fetchData();
   }, [user]);
 
+  const filteredRecords = useMemo(() => {
+    return records.filter(r => {
+      const matchesType = filters.type === 'all' || r.type === filters.type;
+      const matchesSearch =
+        r.accommodation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.observations?.toLowerCase().includes(searchTerm.toLowerCase());
+        
+      let matchesDate = true;
+      if (filters.startDate || filters.endDate) {
+        const recordDate = (r.date || '').split('T')[0].split(' ')[0];
+        if (filters.startDate && recordDate < filters.startDate) matchesDate = false;
+        if (filters.endDate && recordDate > filters.endDate) matchesDate = false;
+      }
+      
+      return matchesType && matchesSearch && matchesDate;
+    });
+  }, [records, filters, searchTerm]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.type !== 'all') count++;
+    if (filters.startDate || filters.endDate) count++;
+    return count;
+  }, [filters]);
+
+  const totals = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    
+    const recordsThisMonth = records.filter(r => {
+      const d = new Date(r.date || '');
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const totalHours = recordsThisMonth.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0);
+
+    return {
+        owed: workerData?.owedMoney || 0,
+        cleans: workerData?.cleansCountMonth || 0,
+        hours: totalHours
+    };
+  }, [workerData, records]);
+
   if (loading) {
     return <LoadingSpinner message="Preparando tu historial..." />;
   }
 
-  const allRecords = [
-    ...history.normal.map(r => ({ ...r, type: 'Normal' })),
-    ...history.initial.map(r => ({ ...r, type: 'Inicial' })),
-    ...history.handyman.map(r => ({ ...r, type: 'Manitas', apartamento: r.alojamiento, checkoutFecha: r.fechaFin }))
-  ].sort((a, b) => new Date(b.checkoutFecha || 0).getTime() - new Date(a.checkoutFecha || 0).getTime());
-
-  const stats = [
-    { label: 'Saldo Pendiente', value: `${workerData?.owedMoney?.toFixed(2) || '0.00'}€`, icon: Banknote, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-950/30' },
-    { label: 'Limpiezas Mes', value: workerData?.cleansCountMonth || 0, icon: CheckCircle, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' },
-    { label: 'Kilómetros', value: `${workerData?.kmsMonth?.toFixed(1) || '0.0'} km`, icon: TrendingUp, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-950/30' },
-  ];
+  const typeConfig: Record<RecordType, { label: string; badge: string; icon: React.ComponentType<any> }> = {
+    Normal:  { label: 'Normal',  badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',       icon: Home },
+    Inicial: { label: 'Inicial', badge: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400', icon: Sparkles },
+    Manitas: { label: 'Manitas', badge: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',    icon: Wrench },
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-1 mb-2">
-        <div className="flex flex-col">
-          <h1 className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display shrink-0">
+    <div className="space-y-0 md:pb-20">
+      
+      {/* ── BLOQUE STICKY MÓVIL ── */}
+      <div className="relative sticky top-0 z-30 pt-0 lg:pt-0 pb-4 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col gap-6 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
+        
+        {/* Centered Greeting con mas espaciado */}
+        <header className="flex flex-col items-center lg:items-start justify-center lg:justify-start text-center lg:text-left gap-2 pt-8 pb-6 lg:pt-4 lg:pb-2">
+          <h1 className="text-2xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
             Hola, {(workerData?.fullName || user.name).split(' ')[0]} 👋
           </h1>
-          <p className="text-[11px] text-slate-400 dark:text-stone-500 font-light mt-0.5">
+          <p className="text-sm text-slate-400 dark:text-stone-500 font-light">
             Resumen de tu actividad y pagos recientes
           </p>
-        </div>
+        </header>
 
-        <div className="flex flex-col sm:flex-row gap-3 items-center">
-          <div className="flex bg-white/40 dark:bg-stone-900/40 p-1 rounded-xl border border-white/60 dark:border-stone-700/50 backdrop-blur-md">
-             {['all', 'normal', 'initial', 'handyman'].map((tab) => (
-                <button
-                   key={tab}
-                   onClick={() => setActiveTab(tab as any)}
-                   className={`px-3 py-1.5 rounded-lg text-[9px] font-medium transition-all ${
-                     activeTab === tab 
-                      ? 'bg-white dark:bg-stone-700 text-orange-600 dark:text-orange-400 shadow-sm' 
-                      : 'text-slate-400 dark:text-stone-500 hover:text-slate-800 dark:hover:text-stone-200'
-                   }`}
-                >
-                   {tab === 'all' ? 'Todo' : tab === 'normal' ? 'Normal' : tab === 'initial' ? 'Inicial' : 'Manitas'}
-                </button>
-             ))}
-          </div>
-        </div>
-      </header>
-
-      <div className="space-y-8 animate-in fade-in duration-500">
-        {/* Stats Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {stats.map((stat, i) => (
-            <div key={i} className="group bg-white/60 dark:bg-stone-900/40 backdrop-blur-md p-6 rounded-[24px] border border-white/60 dark:border-stone-800/50 shadow-sm transition-all hover:shadow-lg hover:shadow-orange-500/5 hover:-translate-y-1">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-2xl ${stat.bg} ${stat.color} transition-transform duration-300 group-hover:scale-110`}>
-                  <stat.icon size={20} />
-                </div>
-                <span className="text-[10px] font-semibold text-slate-300 dark:text-stone-700 uppercase tracking-widest">{stat.label}</span>
+        {/* Stats Boxes (Saldo, Limpiezas, Horas) */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          {[
+            { label: 'Saldo Pendiente', value: totals.owed.toFixed(2), suffix: '€', highlight: true },
+            { label: 'Limpiezas Mes', value: totals.cleans, suffix: '' },
+            { label: 'Horas Totales', value: totals.hours.toFixed(1), suffix: 'h' },
+          ].map(stat => (
+            <div
+              key={stat.label}
+              className="bg-white/60 dark:bg-stone-900/40 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/60 dark:border-stone-800/50 p-3 sm:p-5 flex-col justify-center items-center sm:items-start flex shadow-sm"
+            >
+              <div className="flex flex-col items-start justify-center text-left w-fit gap-0.5 sm:gap-1">
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-stone-500">
+                  <span className="hidden sm:inline">{stat.label}</span>
+                  <span className="sm:hidden leading-tight flex flex-col">
+                    {stat.label.split(' ').map((word, idx) => (
+                      <span key={idx} className="block">{word}</span>
+                    ))}
+                  </span>
+                </p>
+                <p className={`text-lg sm:text-2xl font-normal font-display tabular-nums tracking-tight ${stat.highlight ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-stone-100'}`}>
+                  {stat.value}<span className="text-[10px] sm:text-sm font-normal ml-0.5 text-slate-400 dark:text-stone-500">{stat.suffix}</span>
+                </p>
               </div>
-              <p className="text-2xl font-normal text-slate-800 dark:text-stone-100 tracking-tight font-display">
-                {stat.value}
-              </p>
             </div>
           ))}
         </div>
 
-        {/* History List */}
+        {/* Search bar - sticky alongside stats */}
+        <div className="flex items-center gap-3 pb-3 lg:hidden">
+          <div className="relative group flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4 group-focus-within:text-orange-500 transition-colors" />
+            <input
+              type="text"
+              placeholder="Buscar alojamiento..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-3 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-sm text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-full shadow-sm"
+            />
+          </div>
+        </div>
+
+        {/* Gradient fade border */}
+        <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-b from-transparent to-[#F5F4F2] dark:to-[#1c1a18] pointer-events-none lg:hidden" />
+      </div>
+
+
+      {/* ── CONTENIDO SCROLLABLE ── */}
+      <div className="flex-1 w-full lg:overflow-visible pb-24 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
         <section className="space-y-4">
-          <div className="px-1 mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-wider">Actividad Reciente</span>
+          
+
+          
+          <WorkerRecordsFilterModal 
+            isOpen={isFilterModalOpen}
+            onClose={() => setIsFilterModalOpen(false)}
+            filters={filters}
+            onApply={(newFilters) => {
+              setFilters(newFilters);
+            }}
+          />
+
+          {/* Desktop Table */}
+          <div className="hidden lg:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
+            <div className="grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
+               {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Estado'].map(col => (
+                 <span key={col} className="text-xs text-slate-400 dark:text-stone-500">
+                   {col}
+                 </span>
+               ))}
+            </div>
+            
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800 flex-1 overflow-y-auto">
+              {filteredRecords.length === 0 ? (
+                <li className="flex items-center justify-center py-16">
+                  <span className="text-slate-400 dark:text-stone-500 text-sm">
+                    No se encontraron registros
+                  </span>
+                </li>
+              ) : (
+                filteredRecords.map(record => {
+                  const cfg = typeConfig[record.type];
+                  return (
+                    <li
+                      key={record.id}
+                      className="group module-item grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-4 items-center transition-colors hover:bg-stone-100/50 dark:hover:bg-stone-700/30"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
+                          {record.date
+                            ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+                            : '—'}
+                        </span>
+                        {record.horaEntrada && record.horaSalida && (
+                          <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
+                        )}
+                      </div>
+                      
+                      <div className="min-w-0">
+                        <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-medium truncate max-w-full ${cfg.badge}`}>
+                          {cfg.label}
+                        </span>
+                      </div>
+                      
+                      <p className="text-sm text-slate-800 dark:text-stone-200 truncate font-medium">
+                        {record.accommodation ? formatName(record.accommodation) : '—'}
+                      </p>
+                      
+                      <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                        {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
+                      </p>
+                      
+                      <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                        {record.kms > 0 ? `${record.kms} km` : '—'}
+                      </p>
+                      
+                      <p className={`text-sm tabular-nums truncate ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-500 dark:text-stone-400'}`}>
+                        {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                      </p>
+                      
+                      <div className="flex items-center">
+                        {record.type !== 'Manitas' ? (
+                          <span className={`text-[10px] font-medium ${record.checked ? 'text-green-600' : 'text-amber-600'}`}>
+                            {record.checked ? 'Pagado' : 'Pendiente'}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">—</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
-            {allRecords
-              .filter(r => activeTab === 'all' || r.type.toLowerCase().includes(activeTab))
-              .map((record: any, idx) => (
-              <div 
-                key={idx}
-                className={`group bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl px-6 py-4 flex items-center justify-between transition-all duration-300 hover:bg-white dark:hover:bg-stone-900/80 hover:shadow-lg hover:shadow-orange-500/5 ${
-                  record.checked ? 'opacity-60 hover:opacity-100' : 'opacity-100'
-                }`}
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="flex flex-col items-center justify-center w-10 h-10 rounded-xl bg-stone-50 dark:bg-stone-800 border border-stone-100 dark:border-stone-800 shrink-0 soft-shadow">
-                    <span className="text-[8px] font-bold text-slate-400 dark:text-stone-500 uppercase leading-none">
-                      {new Date(record.checkoutFecha || 0).toLocaleDateString('es-ES', { month: 'short' })}
-                    </span>
-                    <span className="text-sm font-bold text-slate-700 dark:text-stone-300">
-                      {new Date(record.checkoutFecha || 0).getDate()}
-                    </span>
-                  </div>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`px-2 py-0.5 rounded-md text-[8px] font-bold uppercase tracking-widest ${
-                        record.type === 'Normal' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400' : 
-                        record.type === 'Inicial' ? 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400' : 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400'
-                      }`}>
-                        {record.type}
-                      </span>
-                      <span className="text-[10px] text-slate-400 dark:text-stone-500 tabular-nums">
-                        {new Date(record.checkoutFecha || 0).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-medium text-slate-700 dark:text-stone-200 truncate group-hover:text-orange-500 transition-colors">
-                      {record.apartamento || 'Sin especificar'}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
-                      <MapPin size={10} className="text-orange-400/80" />
-                      <span className="truncate">{record.checkoutUbicacion || 'Ubicación registrada'} • {record.km || 0} km</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                   <div className="hidden sm:block text-right">
-                      <p className="text-[10px] font-bold text-slate-700 dark:text-stone-300">
-                        {record.checked ? 'Verificado' : 'En revisión'}
-                      </p>
-                      <p className="text-[9px] text-slate-400 dark:text-stone-500">
-                        {record.checked ? 'Pago procesado' : 'Pendiente de validar'}
-                      </p>
-                   </div>
-                   <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                      record.checked 
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-500' 
-                        : 'bg-amber-50 dark:bg-amber-900/20 text-amber-500'
-                   }`}>
-                      {record.checked ? <CheckCircle2 size={16} /> : <Clock size={16} />}
-                   </div>
-                </div>
-              </div>
-            ))}
-
-            {allRecords.length === 0 && (
-              <div className="flex flex-col items-center justify-center p-12 bg-white/30 dark:bg-stone-900/30 rounded-3xl border-2 border-dashed border-slate-200 dark:border-stone-800">
+          {/* Mobile Cards (Misma UI que Registros pero con el "Estado" de WorkerPanel) */}
+          <div className="lg:hidden space-y-3">
+            {filteredRecords.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 bg-white/30 dark:bg-stone-900/30 rounded-3xl border-2 border-dashed border-slate-200 dark:border-stone-800 mt-4">
                 <Search size={40} className="text-slate-300 dark:text-stone-700 mb-3" />
                 <p className="text-slate-500 dark:text-stone-400 font-medium">No se encontraron registros</p>
-                <p className="text-xs text-slate-400 dark:text-stone-500">Tu actividad aparecerá aquí una vez que se registre.</p>
+                <p className="text-xs text-slate-400 dark:text-stone-500">Prueba con otra búsqueda o filtros.</p>
               </div>
+            ) : (
+              filteredRecords.map(record => {
+                const cfg = typeConfig[record.type];
+                const isExpanded = expandedId === record.id;
+                return (
+                  <div
+                    key={record.id}
+                    onClick={() => setExpandedId(isExpanded ? null : record.id)}
+                    className={`bg-white/80 dark:bg-stone-900/60 backdrop-blur-md rounded-3xl border border-white/60 dark:border-stone-800/50 overflow-hidden transition-all duration-300 ${
+                      isExpanded ? 'pb-1 shadow-sm bg-white dark:bg-stone-900/80' : 'active:scale-[0.98]'
+                    }`}
+                  >
+                    <div className="p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl bg-stone-50 dark:bg-stone-800 shrink-0 border border-stone-100 dark:border-stone-800">
+                          <span className="text-[10px] font-normal text-slate-500 capitalize leading-none mb-1">
+                            {record.date ? new Date(record.date).toLocaleDateString('es-ES', { month: 'short' }) : '—'}
+                          </span>
+                          <span className="text-base font-bold text-slate-800 dark:text-stone-200 leading-none">
+                            {record.date ? new Date(record.date).getDate() : '—'}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-[13px] font-medium text-slate-800 dark:text-stone-100 truncate">
+                            {record.accommodation ? formatName(record.accommodation) : '—'}
+                          </h3>
+
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[13px] tabular-nums font-medium ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>
+                          {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                        </span>
+                        <ChevronRight size={18} className={`text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-90 text-slate-700 dark:text-stone-300' : ''}`} />
+                      </div>
+                    </div>
+
+                    <div className={`px-4 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-80 pb-4 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                            <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tipo</p>
+                            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{cfg.label}</p>
+                          </div>
+                          <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                            <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horario</p>
+                            <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                              {record.horaEntrada && record.horaSalida ? `${record.horaEntrada}-${record.horaSalida}` : '—'}
+                            </p>
+                          </div>
+                          <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                            <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">
+                              {record.type === 'Manitas' ? 'Min' : 'KM'}
+                            </p>
+                            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                              {record.type === 'Manitas' ? (record.minutes || 0) : (record.kms || 0)}
+                            </p>
+                          </div>
+                        </div>
+
+                      {record.observations && (
+                        <div className="bg-stone-50 dark:bg-stone-900/40 p-3.5 rounded-2xl border border-stone-100/50 dark:border-stone-800/50">
+                          <div className="flex items-center gap-1.5 mb-1.5 text-slate-500 dark:text-stone-400">
+                            <Info size={12} />
+                            <span className="text-[9px] uppercase font-bold tracking-wider">Observaciones</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
+                            "{record.observations}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
+
         </section>
       </div>
+      
+      {/* BOTON FILTRO FLOTANTE MÓVIL (Solo se muestra en movil como en Registros) */}
+      <div className="fixed bottom-16 right-4 z-50 sm:hidden animate-in fade-in zoom-in duration-300">
+        <button
+          onClick={() => setIsFilterModalOpen(true)}
+          className={`flex items-center justify-center w-[52px] h-[52px] rounded-full shadow-2xl transition-all active:scale-[0.92] border ${
+            activeFiltersCount > 0 
+              ? 'bg-orange-500 border-orange-400 text-white' 
+              : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-slate-600 dark:text-stone-300'
+          }`}
+        >
+          <Filter size={20} className={activeFiltersCount > 0 ? "text-white" : "text-orange-500"} />
+          {activeFiltersCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-stone-900">
+              {activeFiltersCount}
+            </span>
+          )}
+        </button>
+      </div>
+
     </div>
   );
 };
