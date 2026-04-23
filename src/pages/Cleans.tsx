@@ -639,59 +639,6 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
 
       {/* Content Area */}
       <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-x-auto">
-        {activeTab === 'normal' && (
-          <TableNormalCleans 
-            data={filteredNormal} 
-            photoMap={photoMap} 
-            geoData={geoData}
-            workers={workers}
-            addressMap={addressMap}
-            onUpdate={(id, checked) => {
-              const old = normalCleans.find(r => r.id === id);
-              if (old) setLastAction({ id, type: 'normal', wasChecked: old.checked });
-              setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
-              appsScriptApi.updateCleanStatus('normal', id, checked);
-            }}
-            onEdit={(record) => handleEditCheckout('normal', record)}
-            onDelete={(id) => handleDeleteCheckout('normal', id)}
-            isReadOnly={isReadOnly}
-          />
-        )}
-        {activeTab === 'initial' && (
-          <TableInitialCleans 
-            data={filteredInitial} 
-            photoMap={photoMap} 
-            geoData={geoData}
-            workers={workers}
-            addressMap={addressMap}
-            onUpdate={(id, checked) => {
-              const old = initialCleans.find(r => r.id === id);
-              if (old) setLastAction({ id, type: 'initial', wasChecked: old.checked });
-              setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
-              appsScriptApi.updateCleanStatus('initial', id, checked);
-            }}
-            onEdit={(record) => handleEditCheckout('initial', record)}
-            onDelete={(id) => handleDeleteCheckout('initial', id)}
-            isReadOnly={isReadOnly}
-          />
-        )}
-        {activeTab === 'handyman' && (
-          <TableHandyman 
-            data={filteredHandyman} 
-            photoMap={photoMap} 
-            geoData={geoData}
-            workers={workers}
-            addressMap={addressMap}
-            onUpdate={(id, checked) => {
-              const old = handymanRecords.find(r => r.id === id);
-              if (old) setLastAction({ id, type: 'handyman', wasChecked: old.estadoCompletado === 'Completado' });
-              setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
-              appsScriptApi.updateCleanStatus('handyman', id, checked);
-            }}
-            onEdit={(record) => handleEditCheckout('handyman', record)}
-            onDelete={(id) => handleDeleteCheckout('handyman', id)}
-            isReadOnly={isReadOnly}
-          />
         {showCleansEmptyState ? (
           <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
             <div className="w-12 h-12 rounded-2xl bg-orange-500/10 dark:bg-orange-500/10 flex items-center justify-center mb-4">
@@ -715,9 +662,15 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
                 geoData={geoData}
                 workers={workers}
                 addressMap={addressMap}
-                onUpdate={(id, checked) => { void handleToggleStatus('normal', id, checked); }}
+                onUpdate={(id, checked) => {
+                  const old = normalCleans.find(r => r.id === id);
+                  if (old) setLastAction({ id, type: 'normal', wasChecked: old.checked });
+                  setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+                  appsScriptApi.updateCleanStatus('normal', id, checked);
+                }}
                 onEdit={(record) => handleEditCheckout('normal', record)}
                 onDelete={(id) => handleDeleteCheckout('normal', id)}
+                isReadOnly={isReadOnly}
               />
             )}
             {activeTab === 'initial' && (
@@ -727,9 +680,15 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
                 geoData={geoData}
                 workers={workers}
                 addressMap={addressMap}
-                onUpdate={(id, checked) => { void handleToggleStatus('initial', id, checked); }}
+                onUpdate={(id, checked) => {
+                  const old = initialCleans.find(r => r.id === id);
+                  if (old) setLastAction({ id, type: 'initial', wasChecked: old.checked });
+                  setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+                  appsScriptApi.updateCleanStatus('initial', id, checked);
+                }}
                 onEdit={(record) => handleEditCheckout('initial', record)}
                 onDelete={(id) => handleDeleteCheckout('initial', id)}
+                isReadOnly={isReadOnly}
               />
             )}
             {activeTab === 'handyman' && (
@@ -739,9 +698,15 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
                 geoData={geoData}
                 workers={workers}
                 addressMap={addressMap}
-                onUpdate={(id, checked) => { void handleToggleStatus('handyman', id, checked); }}
+                onUpdate={(id, checked) => {
+                  const old = handymanRecords.find(r => r.id === id);
+                  if (old) setLastAction({ id, type: 'handyman', wasChecked: old.estadoCompletado === 'Completado' });
+                  setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
+                  appsScriptApi.updateCleanStatus('handyman', id, checked);
+                }}
                 onEdit={(record) => handleEditCheckout('handyman', record)}
                 onDelete={(id) => handleDeleteCheckout('handyman', id)}
+                isReadOnly={isReadOnly}
               />
             )}
           </>
