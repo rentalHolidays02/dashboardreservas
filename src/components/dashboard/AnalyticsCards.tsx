@@ -376,7 +376,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
               </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0 pl-2">
                   <span className="text-[10px] text-slate-400 dark:text-stone-500 tabular-nums">
-                    {new Date(entry.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                    {entry.timestamp && !isNaN(new Date(entry.timestamp).getTime())
+                      ? new Date(entry.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                      : '--:--'
+                    }
                   </span>
                   <div className="flex items-center h-5">
                     {!entry.isFinished

@@ -59,7 +59,10 @@ export const CheckoutContextModal: React.FC<Props> = ({
             </span>
             <span className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-stone-400">
               <Clock size={10} />
-              {new Date(startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              {startTime && !isNaN(new Date(startTime).getTime())
+                ? new Date(startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+                : '--:--'
+              }
             </span>
           </div>
         </div>

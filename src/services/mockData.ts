@@ -381,4 +381,14 @@ export interface PagoRecord {
   estado: 'pagado' | 'pendiente';
 }
 
+export interface Suggestion {
+  id: string;
+  subject: string;
+  from: string;
+  date: string;
+  snippet: string;
+  body: string;
+  isRead: boolean;
+}
+
 export const MOCK_PAGOS: PagoRecord[] = [];

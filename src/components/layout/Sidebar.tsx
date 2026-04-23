@@ -6,6 +6,7 @@ import {
   Calendar,
   Banknote,
   AlertTriangle,
+  Mail,
   Home,
   FileText,
   User,
@@ -58,6 +59,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     items: [
       { Icon: Banknote, label: 'Pagos', path: '/pagos' },
       { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
+      { Icon: Mail, label: 'Sugerencias', path: '/sugerencias' },
       { Icon: FileText, label: 'Generar Informe', path: '/generar-informe', prominent: true },
     ],
   },

@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Cleans from './pages/Cleans';
 import Workers from './pages/Workers';
 import Incidencias from './pages/Incidencias';
+import Sugerencias from './pages/Sugerencias';
 import Pagos from './pages/Pagos';
 import Alojamientos from './pages/Alojamientos';
 import Analisis from './pages/Analisis';
@@ -105,6 +106,19 @@ function App() {
             user ? (
               <MainLayout userRole={user.role} onLogout={handleLogout}>
                 <Incidencias />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        <Route
+          path="/sugerencias"
+          element={
+            user ? (
+              <MainLayout userRole={user.role} onLogout={handleLogout}>
+                <Sugerencias />
               </MainLayout>
             ) : (
               <Navigate to="/login" />
