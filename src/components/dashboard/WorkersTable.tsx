@@ -7,6 +7,7 @@ interface WorkersTableProps {
   workers: Worker[];
   selectedWorker?: Worker | null;
   onWorkerSelect?: (w: Worker | null) => void;
+  userRole?: 'admin' | 'viewer' | 'trabajador';
 }
 
 const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px]';
@@ -39,7 +40,8 @@ const AccommodationTags: React.FC<{ items: string[] }> = ({ items }) => {
   );
 };
 
-const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, onWorkerSelect }) => {
+const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, onWorkerSelect, userRole }) => {
+  const isReadOnly = userRole === 'viewer';
   const [query, setQuery]               = useState('');
   const [accommodation, setAccommodation] = useState('');
   const [sort, setSort]                 = useState<SortKey>('owed_desc');
@@ -206,13 +208,15 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
                     >
                       <Info size={16} />
                     </button>
-                    <button
-                      onClick={e => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-orange-500 p-1 rounded-md"
-                      title="Editar"
-                    >
-                      <Pencil size={16} />
-                    </button>
+                    {!isReadOnly && (
+                      <button
+                        onClick={e => e.stopPropagation()}
+                        className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-orange-500 p-1 rounded-md"
+                        title="Editar"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                    )}
                   </div>
                 </li>
               </React.Fragment>

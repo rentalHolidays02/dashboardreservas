@@ -12,16 +12,19 @@ import {
   User,
   ShieldCheck,
   KeyRound,
+  TrendingUp,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
+import { appsScriptApi } from '../../services/api';
 import logoFull from '../../assets/logo/LogoEstandar.png';
 
 interface SidebarProps {
-  userRole: 'admin' | 'viewer';
+  userRole: 'admin' | 'viewer' | 'trabajador';
   onLogout: () => void;
+  onRoleChange: (role: 'admin' | 'viewer' | 'trabajador') => void;
   isOpen: boolean;
   onClose: () => void;
   isCollapsed: boolean;
@@ -36,6 +39,8 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     label: 'PRINCIPAL',
     items: [
       { Icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+      { Icon: TrendingUp, label: 'Resumen', path: '/analiticas' },
+      { Icon: FileText, label: 'Registros', path: '/registros' },
       { Icon: Banknote, label: 'Análisis', path: '/analisis' },
     ],
   },
@@ -68,6 +73,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
 const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   onLogout,
+  onRoleChange,
   isOpen,
   onClose,
   isCollapsed,
@@ -83,7 +89,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const collapsed = isCollapsed && !isOpen && !isHovered;
   const isHoverExpanded = isCollapsed && isHovered && !isOpen;
-
 
   const handleMouseEnter = () => {
     clearTimeout(leaveTimer.current);
@@ -137,18 +142,34 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* ── Navigation ───────────────────────────────────────────────── */}
-        {/* nav px-3 + link pl-2 = 20px from sidebar edge. Never changes. */}
         <nav className="flex-1 overflow-y-auto py-2 space-y-4">
-          {categories.map((cat) => (
-            <div key={cat.label}>
-              <div className="h-5 pl-5 mb-1 flex items-center">
-                <span className="sidebar-fade text-[10px] tracking-widest text-slate-400 uppercase whitespace-nowrap">
-                  {cat.label}
-                </span>
-              </div>
+          {categories
+            .filter(cat => {
+              if (userRole === 'trabajador') {
+                return cat.label === 'PRINCIPAL' || cat.label === 'OPERACIONES';
+              }
+              return true;
+            })
+            .map((cat) => {
+      const filteredItems = cat.items.filter(item => {
+        if (userRole === 'trabajador') {
+          return item.label === 'Dashboard' || item.label === 'Resumen' || item.label === 'Registros';
+        }
+        return item.label !== 'Registros';
+      });
 
-              <ul className="space-y-0.5 px-3">
-                {cat.items.map(({ Icon, label, path, prominent }) => {
+              if (filteredItems.length === 0) return null;
+
+              return (
+                <div key={cat.label}>
+                  <div className="h-5 pl-5 mb-1 flex items-center">
+                    <span className="sidebar-fade text-[10px] tracking-widest text-slate-400 uppercase whitespace-nowrap">
+                      {cat.label}
+                    </span>
+                  </div>
+
+                  <ul className="space-y-0.5 px-3">
+                    {filteredItems.map(({ Icon, label, path, prominent }) => {
                   const active = location.pathname === path;
                   
                   const linkBase = "flex items-center h-10 w-full gap-3 pl-2 pr-3 rounded-md text-sm tracking-tight transition-all duration-200";
@@ -188,10 +209,11 @@ const Sidebar: React.FC<SidebarProps> = ({
                       </Link>
                     </li>
                   );
-                })}
-              </ul>
-            </div>
-          ))}
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
         </nav>
 
         {/* ── Footer ───────────────────────────────────────────────────── */}
@@ -213,18 +235,17 @@ const Sidebar: React.FC<SidebarProps> = ({
               hover:bg-black/5 dark:hover:bg-black/20`}
           >
             <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-xs font-medium soft-shadow">
-              {userRole === 'admin' ? 'A' : 'V'}
+              {userRole === 'admin' ? 'A' : userRole === 'viewer' ? 'V' : 'T'}
             </div>
             <div className="sidebar-fade min-w-0">
               <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight">
-                {userRole === 'admin' ? 'Administrador' : 'Visualizador'}
+                {userRole === 'admin' ? 'Administrador' : userRole === 'trabajador' ? 'Trabajador' : 'Visualizador'}
               </p>
               <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">Ver perfil</p>
             </div>
           </Link>
 
         </div>
-
       </div>
     </>
   );

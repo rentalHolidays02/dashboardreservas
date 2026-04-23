@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { appsScriptApi } from '../services/api';
 import { Eye, EyeOff, Loader2, AlertCircle, Users, BarChart3, FileText } from 'lucide-react';
-import { User } from '../services/mockData';
+import type { User } from '../services/mockData';
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;

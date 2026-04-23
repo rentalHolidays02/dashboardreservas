@@ -9,7 +9,12 @@ import { Worker } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
 
-const Workers: React.FC = () => {
+interface WorkersProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const Workers: React.FC<WorkersProps> = ({ userRole }) => {
+  const isReadOnly = userRole === 'viewer';
   const { showUndoToast } = useUndoToast();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [accommodations, setAccommodations] = useState<string[]>([]);
@@ -223,13 +228,15 @@ const Workers: React.FC = () => {
               />
             </div>
 
-            <button
-              onClick={handleAddClick}
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
-            >
-              <Plus size={14} />
-              <span>Nuevo Trabajador</span>
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={handleAddClick}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
+              >
+                <Plus size={14} />
+                <span>Nuevo Trabajador</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -254,7 +261,8 @@ const Workers: React.FC = () => {
             >
               <WorkerCard
                 worker={worker}
-                onEdit={(w) => { setProfileWorker(w); setProfileEditMode(true); }}
+                onEdit={isReadOnly ? undefined : (w) => { setProfileWorker(w); setProfileEditMode(true); }}
+                isReadOnly={isReadOnly}
               />
             </div>
           ))}

@@ -12,6 +12,7 @@ interface AccommodationDetailModalProps {
   onClose: () => void;
   assignedWorkers: Worker[];
   onManageWorkers?: () => void;
+  isReadOnly?: boolean;
 }
 
 const toTitleCase = (str: string) =>
@@ -22,7 +23,8 @@ const AccommodationDetailModal: React.FC<AccommodationDetailModalProps> = ({
   isOpen, 
   onClose, 
   assignedWorkers,
-  onManageWorkers
+  onManageWorkers,
+  isReadOnly
 }) => {
   const [showNotes, setShowNotes] = React.useState(false);
   const [shouldRender, setShouldRender] = React.useState(isOpen);
@@ -134,13 +136,17 @@ const AccommodationDetailModal: React.FC<AccommodationDetailModalProps> = ({
                 
                 <div className="flex items-center flex-wrap gap-1 md:justify-end">
                   {assignedWorkers.length === 0 ? (
-                    <button 
-                      onClick={onManageWorkers}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 border border-stone-200/50 dark:border-stone-700/50 text-[10px] font-normal hover:bg-orange-500 hover:text-white dark:hover:bg-orange-600 transition-all active:scale-95 group"
-                    >
-                      <Plus size={10} className="group-hover:rotate-90 transition-transform" />
-                      <span>Asignar limpiador</span>
-                    </button>
+                    !isReadOnly ? (
+                      <button 
+                        onClick={onManageWorkers}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 border border-stone-200/50 dark:border-stone-700/50 text-[10px] font-normal hover:bg-orange-500 hover:text-white dark:hover:bg-orange-600 transition-all active:scale-95 group"
+                      >
+                        <Plus size={10} className="group-hover:rotate-90 transition-transform" />
+                        <span>Asignar limpiador</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 dark:text-stone-500 px-3 py-1.5 bg-stone-100/50 dark:bg-stone-800/30 rounded-full border border-dashed border-stone-200 dark:border-stone-700">Sin asignaciones</span>
+                    )
                   ) : (
                     <>
                       {assignedWorkers.slice(0, 4).map((worker) => (
@@ -156,13 +162,15 @@ const AccommodationDetailModal: React.FC<AccommodationDetailModalProps> = ({
                           +{assignedWorkers.length - 4}
                         </div>
                       )}
-                      <button 
-                        onClick={onManageWorkers}
-                        className="ml-1 p-1 bg-stone-50 dark:bg-stone-800 text-slate-400 hover:text-orange-500 rounded-full transition-colors flex items-center justify-center"
-                        title="Gestionar limpiadores"
-                      >
-                        <Plus size={12} />
-                      </button>
+                      {!isReadOnly && (
+                        <button 
+                          onClick={onManageWorkers}
+                          className="ml-1 p-1 bg-stone-50 dark:bg-stone-800 text-slate-400 hover:text-orange-500 rounded-full transition-colors flex items-center justify-center"
+                          title="Gestionar limpiadores"
+                        >
+                          <Plus size={12} />
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

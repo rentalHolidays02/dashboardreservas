@@ -14,7 +14,11 @@ const fmtDate = (s: string) =>
     day: '2-digit', month: '2-digit', year: 'numeric',
   });
 
-const Pagos: React.FC = () => {
+interface PagosProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const Pagos: React.FC<PagosProps> = ({ userRole }) => {
   const [pagos, setPagos] = useState<PagoRecord[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);

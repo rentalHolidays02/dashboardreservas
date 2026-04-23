@@ -90,9 +90,10 @@ interface ModalProps {
   onClose: () => void;
   onDelete?: () => void;
   accommodations: Accommodation[];
+  isReadOnly?: boolean;
 }
 
-const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete, accommodations }) => {
+const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete, accommodations, isReadOnly }) => {
   const isEdit = !!initial?.id;
   const [form, setForm] = useState<Omit<EntregaLlaves, 'id'>>(() => {
     const base = { ...emptyEntrega(), ...initial };
@@ -123,12 +124,13 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
         <label className={labelCls}>{label}</label>
         <button
           type="button"
+          disabled={isReadOnly}
           onClick={() => set(field, typeof form[field] === 'string' ? (isTrue ? customFalse : customTrue) : !isTrue)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs transition-all w-full
             ${isTrue
               ? 'border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
               : 'border-white/60 dark:border-stone-700/50 bg-white/80 dark:bg-stone-900 text-slate-400 dark:text-stone-500'
-            }`}
+            } ${isReadOnly ? 'cursor-default' : ''}`}
         >
           <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-all
             ${isTrue ? 'bg-green-500 border-green-500' : 'border-slate-300 dark:border-stone-500'}`}>
@@ -201,6 +203,7 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
                 <input 
                   type="text" 
                   value={fmtPhone(form.telefono)} 
+                  readOnly={isReadOnly}
                   onChange={e => {
                     // Quitamos todo lo que no sea número y limitamos a 9 caracteres
                     const digits = e.target.value.replace(/\D/g, '');
@@ -209,7 +212,7 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
                   placeholder="6XX XX XX XX" 
                   pattern="^([6789]\d{2})( \d{2}){3}$|^[6789]\d{8}$"
                   title="Introduce un teléfono español válido (9 dígitos)"
-                  className={`${inputCls} ${form.telefono && !/^[6789]\d{8}$/.test(form.telefono.replace(/\D/g, '')) ? 'border-red-300 dark:border-red-700 bg-red-50/30' : ''}`} 
+                  className={`${inputCls} ${form.telefono && !/^[6789]\d{8}$/.test(form.telefono.replace(/\D/g, '')) ? 'border-red-300 dark:border-red-700 bg-red-50/30' : ''} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} 
                 />
                 {form.telefono && !/^[6789]\d{8}$/.test(form.telefono.replace(/\D/g, '')) && (
                   <p className="text-[10px] text-red-400 mt-0.5">Teléfono no válido (9 dígitos, empieza por 6,7,8,9)</p>
@@ -217,11 +220,11 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               </div>
               <div>
                 <label className={labelCls}>Nombre</label>
-                <input type="text" value={form.nombre} onChange={e => set('nombre', e.target.value)} placeholder="Nombre" className={inputCls} />
+                <input type="text" value={form.nombre} onChange={e => set('nombre', e.target.value)} readOnly={isReadOnly} placeholder="Nombre" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
               <div>
                 <label className={labelCls}>Apellidos</label>
-                <input type="text" value={form.apellidos} onChange={e => set('apellidos', e.target.value)} placeholder="Apellidos" className={inputCls} />
+                <input type="text" value={form.apellidos} onChange={e => set('apellidos', e.target.value)} readOnly={isReadOnly} placeholder="Apellidos" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
             </div>
           </div>
@@ -236,9 +239,10 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
                   list="apartamentos-list"
                   type="text"
                   value={form.apartamento} 
+                  readOnly={isReadOnly}
                   onChange={e => set('apartamento', e.target.value)} 
                   placeholder="Escribe o selecciona..."
-                  className={inputCls}
+                  className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`}
                 />
                 <datalist id="apartamentos-list">
                   {accommodations.map(acc => (
@@ -248,15 +252,15 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               </div>
               <div>
                 <label className={labelCls}>Nombre cliente</label>
-                <input type="text" value={form.nombreCliente} onChange={e => set('nombreCliente', e.target.value)} placeholder="Nombre en la reserva" className={inputCls} />
+                <input type="text" value={form.nombreCliente} onChange={e => set('nombreCliente', e.target.value)} readOnly={isReadOnly} placeholder="Nombre en la reserva" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
               <div>
                 <label className={labelCls}>Fecha entrada reserva</label>
-                <input type="datetime-local" value={form.fechaEntradaReserva} onChange={e => set('fechaEntradaReserva', e.target.value)} className={inputCls} />
+                <input type="datetime-local" value={form.fechaEntradaReserva} onChange={e => set('fechaEntradaReserva', e.target.value)} readOnly={isReadOnly} className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
               <div>
                 <label className={labelCls}>Fecha salida reserva</label>
-                <input type="datetime-local" value={form.fechaSalidaReserva} onChange={e => set('fechaSalidaReserva', e.target.value)} className={inputCls} />
+                <input type="datetime-local" value={form.fechaSalidaReserva} onChange={e => set('fechaSalidaReserva', e.target.value)} readOnly={isReadOnly} className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
             </div>
           </div>
@@ -271,29 +275,32 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
                   <input 
                     type="text" 
                     value={form.fechaUbicacionEntrega} 
+                    readOnly={isReadOnly}
                     onChange={e => set('fechaUbicacionEntrega', e.target.value)}
                     placeholder="Escribe manualmente o usa el botón GPS..." 
-                    className={`${inputCls} flex-1`} 
+                    className={`${inputCls} flex-1 ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} 
                   />
-                  <button 
-                    type="button" 
-                    onClick={handleGetLocation} 
-                    disabled={gettingLocation}
-                    className="px-3 py-1.5 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 hover:bg-orange-200 transition-colors shrink-0 disabled:opacity-50"
-                  >
-                    {gettingLocation ? <Loader2 className="animate-spin" size={14} /> : <MapPin size={14} />}
-                  </button>
+                  {!isReadOnly && (
+                    <button 
+                      type="button" 
+                      onClick={handleGetLocation} 
+                      disabled={gettingLocation}
+                      className="px-3 py-1.5 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 hover:bg-orange-200 transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {gettingLocation ? <Loader2 className="animate-spin" size={14} /> : <MapPin size={14} />}
+                    </button>
+                  )}
                 </div>
               </div>
               <BoolToggle label="Llaves entregadas" field="entregaLlaves" />
               <BoolToggle label="Sábanas y Toallas" field="sabanasToallas" customTrue="Sí, entregadas" customFalse="No" />
               <div>
                 <label className={labelCls}>Km</label>
-                <input type="number" min="0" value={form.km} onChange={e => set('km', e.target.value)} placeholder="0" className={inputCls} />
+                <input type="number" min="0" value={form.km} onChange={e => set('km', e.target.value)} readOnly={isReadOnly} placeholder="0" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
               <div>
                 <label className={labelCls}>Observaciones</label>
-                <input type="text" value={form.observaciones} onChange={e => set('observaciones', e.target.value)} placeholder="Notas adicionales..." className={inputCls} />
+                <input type="text" value={form.observaciones} onChange={e => set('observaciones', e.target.value)} readOnly={isReadOnly} placeholder="Notas adicionales..." className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
               </div>
             </div>
           </div>
@@ -305,7 +312,7 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               <div className="space-y-2">
                 <div>
                   <label className={labelCls}>Medio de Pago</label>
-                  <select value={form.fianzaMonto} onChange={e => set('fianzaMonto', e.target.value)} className={inputCls}>
+                  <select value={form.fianzaMonto} onChange={e => set('fianzaMonto', e.target.value)} disabled={isReadOnly} className={`${inputCls} ${isReadOnly ? 'cursor-default' : ''}`}>
                     <option value="Efectivo">Efectivo</option>
                     <option value="Bizum">Bizum</option>
                     <option value="Tarjeta">Tarjeta</option>
@@ -313,11 +320,11 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
                 </div>
                 <div>
                   <label className={labelCls}>Número Bizum</label>
-                  <input type="text" value={form.bizumMonto} onChange={e => set('bizumMonto', e.target.value)} placeholder="6XX XXX XXX" className={inputCls} />
+                  <input type="text" value={form.bizumMonto} onChange={e => set('bizumMonto', e.target.value)} readOnly={isReadOnly} placeholder="6XX XXX XXX" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
                 </div>
                 <div>
                   <label className={labelCls}>Cantidad pagada (€)</label>
-                  <input type="number" min="0" value={form.cantidadPagadaMonto} onChange={e => set('cantidadPagadaMonto', e.target.value)} placeholder="0.00" className={inputCls} />
+                  <input type="number" min="0" value={form.cantidadPagadaMonto} onChange={e => set('cantidadPagadaMonto', e.target.value)} readOnly={isReadOnly} placeholder="0.00" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
                 </div>
               </div>
             </div>
@@ -326,7 +333,7 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               <div className="space-y-2">
                 <div>
                   <label className={labelCls}>Medio de Pago</label>
-                  <select value={form.fianzaGarantia} onChange={e => set('fianzaGarantia', e.target.value)} className={inputCls}>
+                  <select value={form.fianzaGarantia} onChange={e => set('fianzaGarantia', e.target.value)} disabled={isReadOnly} className={`${inputCls} ${isReadOnly ? 'cursor-default' : ''}`}>
                     <option value="Efectivo">Efectivo</option>
                     <option value="Bizum">Bizum</option>
                     <option value="Tarjeta">Tarjeta</option>
@@ -334,11 +341,11 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
                 </div>
                 <div>
                   <label className={labelCls}>Número Bizum</label>
-                  <input type="text" value={form.bizumGarantia} onChange={e => set('bizumGarantia', e.target.value)} placeholder="6XX XXX XXX" className={inputCls} />
+                  <input type="text" value={form.bizumGarantia} onChange={e => set('bizumGarantia', e.target.value)} readOnly={isReadOnly} placeholder="6XX XXX XXX" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
                 </div>
                 <div>
                   <label className={labelCls}>Cantidad pagada (€)</label>
-                  <input type="number" min="0" value={form.cantidadPagadaGarantia} onChange={e => set('cantidadPagadaGarantia', e.target.value)} placeholder="0.00" className={inputCls} />
+                  <input type="number" min="0" value={form.cantidadPagadaGarantia} onChange={e => set('cantidadPagadaGarantia', e.target.value)} readOnly={isReadOnly} placeholder="0.00" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
                 </div>
               </div>
             </div>
@@ -351,7 +358,7 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
 
           {/* Footer */}
           <div className="flex items-center justify-between pt-3 border-t border-stone-100 dark:border-stone-800">
-            {isEdit && onDelete ? (
+            {isEdit && onDelete && !isReadOnly ? (
               confirmDelete ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-red-500">¿Eliminar?</span>
@@ -374,14 +381,16 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
 
             <div className="flex items-center gap-2">
               <button type="button" onClick={onClose}
-                className="px-4 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-stone-700 text-slate-600 dark:text-stone-300 hover:bg-slate-200 dark:hover:bg-stone-600 transition-colors">
-                Cancelar
+                className={`py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-stone-700 text-slate-600 dark:text-stone-300 hover:bg-slate-200 dark:hover:bg-stone-600 transition-colors ${isReadOnly ? 'px-8' : 'px-4'}`}>
+                {isReadOnly ? 'Cerrar' : 'Cancelar'}
               </button>
-              <button type="submit"
-                className="px-4 py-1.5 text-xs rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors">
-                {isEdit ? 'Guardar cambios' : 'Crear entrega'}
-                {isSaving && <Loader2 size={12} className="animate-spin ml-1 inline" />}
-              </button>
+              {!isReadOnly && (
+                <button type="submit"
+                  className="px-4 py-1.5 text-xs rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-medium transition-colors">
+                  {isEdit ? 'Guardar cambios' : 'Crear entrega'}
+                  {isSaving && <Loader2 size={12} className="animate-spin ml-1 inline" />}
+                </button>
+              )}
             </div>
           </div>
         </form>
@@ -479,7 +488,12 @@ const COLS = 'grid-cols-[2fr_1.1fr_1.2fr_0.9fr_0.9fr_100px]';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-const EntregaDeLlaves: React.FC = () => {
+interface EntregaDeLlavesProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
+  const isReadOnly = userRole === 'viewer';
   const [entregas, setEntregas] = useState<EntregaLlaves[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -587,13 +601,15 @@ const EntregaDeLlaves: React.FC = () => {
             />
           </div>
 
-          <button
-            onClick={openNew}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60 transition-all active:scale-[0.98]"
-          >
-            <Plus size={12} className="text-orange-500" />
-            <span>Nueva entrega</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={openNew}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60 transition-all active:scale-[0.98]"
+            >
+              <Plus size={12} className="text-orange-500" />
+              <span>Nueva entrega</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -662,12 +678,12 @@ const EntregaDeLlaves: React.FC = () => {
                   <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{fmtDate(e.fechaSalidaReserva)}</p>
 
                   {/* Acciones */}
-                  <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={ev => openEdit(e, ev)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-stone-300 hover:text-orange-600 bg-white dark:bg-stone-800 backdrop-blur-sm px-2.5 py-1.5 rounded-lg soft-shadow"
                     >
-                      <Pencil size={12} /> Editar
+                      <Pencil size={12} /> {isReadOnly ? 'Ver' : 'Editar'}
                     </button>
                     <ChevronDown
                       size={14}
@@ -699,6 +715,7 @@ const EntregaDeLlaves: React.FC = () => {
           onClose={() => setIsModalOpen(false)}
           onDelete={modalData?.id ? handleDelete : undefined}
           accommodations={accommodations}
+          isReadOnly={isReadOnly}
         />
       )}
     </div>

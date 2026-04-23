@@ -631,7 +631,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
   const tabs: { id: MainTab; label: string }[] = [
     { id: 'datos', label: 'Datos trabajador' },
     { id: 'registros', label: 'Registros' },
-    { id: 'analiticas', label: 'Analíticas' },
+    { id: 'analiticas', label: 'Resumen' },
     { id: 'alojamientos', label: 'Alojamientos' },
   ];
 

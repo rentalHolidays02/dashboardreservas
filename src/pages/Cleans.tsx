@@ -137,7 +137,12 @@ const formatDisplayDate = (value: unknown): string => {
   return datePart;
 };
 
-const Cleans: React.FC = () => {
+interface CleansProps {
+  userRole?: 'admin' | 'viewer' | 'trabajador';
+}
+
+const Cleans: React.FC<CleansProps> = ({ userRole }) => {
+  const isReadOnly = userRole === 'viewer';
   const [activeTab, setActiveTab] = useState<TabType>('normal');
   const [loading, setLoading] = useState(true);
   const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
@@ -541,13 +546,15 @@ const Cleans: React.FC = () => {
         </h1>
 
         <div className="flex flex-col md:flex-row gap-3 justify-end items-center flex-1">
-          <button
-            onClick={() => handleCreateCheckout(activeTab)}
-            disabled={actionLoading}
-            className="px-4 py-2.5 rounded-xl text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition"
-          >
-            {actionLoading ? 'Procesando...' : 'Nuevo Checkout'}
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => handleCreateCheckout(activeTab)}
+              disabled={actionLoading}
+              className="px-4 py-2.5 rounded-xl text-xs font-medium bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {actionLoading ? 'Procesando...' : 'Nuevo Checkout'}
+            </button>
+          )}
           <div className="relative w-full md:w-72">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500 pointer-events-none" size={14} />
             <input
@@ -632,6 +639,59 @@ const Cleans: React.FC = () => {
 
       {/* Content Area */}
       <div className="bg-white/60 dark:bg-stone-950 backdrop-blur-md border border-white dark:border-stone-800 rounded-2xl overflow-x-auto">
+        {activeTab === 'normal' && (
+          <TableNormalCleans 
+            data={filteredNormal} 
+            photoMap={photoMap} 
+            geoData={geoData}
+            workers={workers}
+            addressMap={addressMap}
+            onUpdate={(id, checked) => {
+              const old = normalCleans.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'normal', wasChecked: old.checked });
+              setNormalCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+              appsScriptApi.updateCleanStatus('normal', id, checked);
+            }}
+            onEdit={(record) => handleEditCheckout('normal', record)}
+            onDelete={(id) => handleDeleteCheckout('normal', id)}
+            isReadOnly={isReadOnly}
+          />
+        )}
+        {activeTab === 'initial' && (
+          <TableInitialCleans 
+            data={filteredInitial} 
+            photoMap={photoMap} 
+            geoData={geoData}
+            workers={workers}
+            addressMap={addressMap}
+            onUpdate={(id, checked) => {
+              const old = initialCleans.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'initial', wasChecked: old.checked });
+              setInitialCleans(prev => prev.map(r => r.id === id ? { ...r, checked } : r));
+              appsScriptApi.updateCleanStatus('initial', id, checked);
+            }}
+            onEdit={(record) => handleEditCheckout('initial', record)}
+            onDelete={(id) => handleDeleteCheckout('initial', id)}
+            isReadOnly={isReadOnly}
+          />
+        )}
+        {activeTab === 'handyman' && (
+          <TableHandyman 
+            data={filteredHandyman} 
+            photoMap={photoMap} 
+            geoData={geoData}
+            workers={workers}
+            addressMap={addressMap}
+            onUpdate={(id, checked) => {
+              const old = handymanRecords.find(r => r.id === id);
+              if (old) setLastAction({ id, type: 'handyman', wasChecked: old.estadoCompletado === 'Completado' });
+              setHandymanRecords(prev => prev.map(r => r.id === id ? { ...r, estadoCompletado: checked ? 'Completado' : 'Pendiente' } : r));
+              appsScriptApi.updateCleanStatus('handyman', id, checked);
+            }}
+            onEdit={(record) => handleEditCheckout('handyman', record)}
+            onDelete={(id) => handleDeleteCheckout('handyman', id)}
+            isReadOnly={isReadOnly}
+          />
         {showCleansEmptyState ? (
           <div className="px-6 py-16 flex flex-col items-center justify-center text-center">
             <div className="w-12 h-12 rounded-2xl bg-orange-500/10 dark:bg-orange-500/10 flex items-center justify-center mb-4">
@@ -1155,7 +1215,8 @@ const TableNormalCleans: React.FC<{
   onUpdate: (id: string, checked: boolean) => void;
   onEdit: (record: NormalCleanRecord) => void;
   onDelete: (id: string) => void;
-}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete }) => {
+  isReadOnly?: boolean;
+}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete, isReadOnly }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1283,17 +1344,22 @@ const TableNormalCleans: React.FC<{
                           <CheckCircle2 size={12} className="text-orange-500" />
                           <span>Estado Verificado (Checked)</span>
                         </div>
-                        <VerificationCell verified={r.checked} onClick={() => onUpdate(r.id, !r.checked)} />
+                        <VerificationCell 
+                          verified={r.checked} 
+                          onClick={isReadOnly ? () => {} : () => onUpdate(r.id, !r.checked)} 
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
-                          <span>Acciones</span>
+                      {!isReadOnly && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                            <span>Acciones</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
+                            <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
-                          <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
-                        </div>
-                      </div>
+                      )}
 
                       {/* Llaves */}
                       <div className="space-y-2">
@@ -1379,7 +1445,8 @@ const TableInitialCleans: React.FC<{
   onUpdate: (id: string, checked: boolean) => void;
   onEdit: (record: InitialCleanRecord) => void;
   onDelete: (id: string) => void;
-}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete }) => {
+  isReadOnly?: boolean;
+}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete, isReadOnly }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1499,17 +1566,22 @@ const TableInitialCleans: React.FC<{
                           <CheckCircle2 size={12} className="text-orange-500" />
                           <span>Estado Verificado (Checked)</span>
                         </div>
-                        <VerificationCell verified={r.checked} onClick={() => onUpdate(r.id, !r.checked)} />
+                        <VerificationCell 
+                          verified={r.checked} 
+                          onClick={isReadOnly ? () => {} : () => onUpdate(r.id, !r.checked)} 
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
-                          <span>Acciones</span>
+                      {!isReadOnly && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                            <span>Acciones</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
+                            <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
-                          <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -1548,7 +1620,8 @@ const TableHandyman: React.FC<{
   onUpdate: (id: string, checked: boolean) => void;
   onEdit: (record: HandymanRecord) => void;
   onDelete: (id: string) => void;
-}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete }) => {
+  isReadOnly?: boolean;
+}> = ({ data, geoData, workers, addressMap, onUpdate, onEdit, onDelete, isReadOnly }) => {
   const [locationModal, setLocationModal] = useState<{
     open: boolean;
     anchor: HTMLElement | null;
@@ -1668,17 +1741,22 @@ const TableHandyman: React.FC<{
                           <CheckCircle2 size={12} className="text-orange-500" />
                           <span>Estado Verificado (Checked)</span>
                         </div>
-                        <VerificationCell verified={r.estadoCompletado === 'Completado'} onClick={() => onUpdate(r.id, r.estadoCompletado !== 'Completado')} />
+                        <VerificationCell 
+                          verified={r.estadoCompletado === 'Completado'} 
+                          onClick={isReadOnly ? () => {} : () => onUpdate(r.id, r.estadoCompletado !== 'Completado')} 
+                        />
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
-                          <span>Acciones</span>
+                      {!isReadOnly && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 font-bold">
+                            <span>Acciones</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
+                            <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => onEdit(r)} className="px-3 py-1.5 text-xs rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Editar</button>
-                          <button type="button" onClick={() => onDelete(r.id)} className="px-3 py-1.5 text-xs rounded-lg bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Borrar</button>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </td>
                 </tr>
