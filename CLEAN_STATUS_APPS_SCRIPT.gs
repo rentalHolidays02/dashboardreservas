@@ -20,6 +20,48 @@ function doPost(e) {
   }
 }
 
+function doGet(e) {
+  try {
+    var params = (e && e.parameter) ? e.parameter : {};
+    var action = String(params.action || 'ping');
+
+    if (action === 'ping') {
+      return jsonResponse({
+        ok: true,
+        action: 'ping',
+        version: '2026-04-22',
+        spreadsheetIdConfigured: !!getCleansSpreadsheetId_(),
+        spreadsheetId: getCleansSpreadsheetId_() || null
+      });
+    }
+
+    if (action === 'listSheets') {
+      var spreadsheetId = getCleansSpreadsheetId_();
+      var ss = spreadsheetId
+        ? SpreadsheetApp.openById(spreadsheetId)
+        : SpreadsheetApp.getActiveSpreadsheet();
+      var names = ss.getSheets().map(function (s) { return s.getName(); });
+      return jsonResponse({
+        ok: true,
+        action: 'listSheets',
+        spreadsheetIdConfigured: !!spreadsheetId,
+        spreadsheetId: spreadsheetId || null,
+        sheets: names
+      });
+    }
+
+    return jsonResponse({ ok: false, error: 'Unsupported action: ' + action });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
+function getCleansSpreadsheetId_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = String(props.getProperty('CLEANS_SPREADSHEET_ID') || '').trim();
+  return id || '';
+}
+
 function getAllowedSheets() {
   return {
     'Checkout_Limpieza_Normal': true,
@@ -35,7 +77,10 @@ function getValidSheet(sheetName) {
   var allowedSheets = getAllowedSheets();
   if (!allowedSheets[sheetName]) return { error: 'Invalid sheetName: ' + sheetName };
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var spreadsheetId = getCleansSpreadsheetId_();
+  var ss = spreadsheetId
+    ? SpreadsheetApp.openById(spreadsheetId)
+    : SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) return { error: 'Sheet not found: ' + sheetName };
   return { sheet: sheet };

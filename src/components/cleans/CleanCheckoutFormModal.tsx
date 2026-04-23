@@ -18,8 +18,8 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { InitialCleanRecord, HandymanRecord, NormalCleanRecord, Worker, Accommodation } from '../../services/mockData';
-import { computeHoursWorked, getExpectedHours } from '../../utils/payments';
-import { reverseGeocode } from '../../services/api';
+import { computeHoursWorked, getExpectedHours, matchesWorkerByPhone } from '../../utils/payments';
+import { appsScriptApi, reverseGeocode } from '../../services/api';
 
 // Fix for default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -62,6 +62,23 @@ const COUNTRY_PREFIXES = [
   { code: '+49', label: 'DEU', flag: '🇩🇪' },
   { code: '+351', label: 'PRT', flag: '🇵🇹' },
 ];
+
+const toDigits = (s: string) => String(s || '').replace(/\D/g, '');
+
+const splitFullName = (fullName: string): { nombre: string; apellidos: string } => {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { nombre: '', apellidos: '' };
+  if (parts.length === 1) return { nombre: parts[0], apellidos: '' };
+  return { nombre: parts[0], apellidos: parts.slice(1).join(' ') };
+};
+
+const normalizeNameKey = (s: string) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const formatWorkerPhoneForSheet = (prefix: string, localDigits: string) => {
+  const p = prefix.startsWith('+') ? prefix : `+${prefix}`;
+  const formatted = formatPhoneNumber(localDigits);
+  return `${p} ${formatted}`.trim();
+};
 
 // Valida si una cadena tiene el formato "lat, lng" (solo números, no direcciones de texto)
 const isCoordString = (s: string): boolean =>
@@ -237,6 +254,10 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
   const [mapPicker, setMapPicker] = useState<{ open: boolean; field: string; initial?: string; sibling?: string }>({ open: false, field: '' });
   
   const [phonePrefix, setPhonePrefix] = useState('+34');
+  const [workerInput, setWorkerInput] = useState('');
+  const [accommodationInput, setAccommodationInput] = useState('');
+  const [workerPickerOpen, setWorkerPickerOpen] = useState(false);
+  const [accPickerOpen, setAccPickerOpen] = useState(false);
   const [extraHoursReason, setExtraHoursReason] = useState('');
   const [reservaTime, setReservaTime] = useState('');
   const [reservaDate, setReservaDate] = useState('');
@@ -246,22 +267,56 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
     setKmInput(String((initialValues as any).km ?? (initialValues as any).cantidadMinutos ?? 0));
     setError('');
 
-    const tel = String((initialValues as any).telefono || '');
-    if (tel.startsWith('+')) {
-      const parts = tel.split(' ');
+    const telRaw = String((initialValues as any).telefono || '');
+    const telDigits = toDigits(telRaw);
+    // Soporta formato viejo "+34 600..." y el nuevo "34#########"
+    if (telRaw.startsWith('+')) {
+      const parts = telRaw.split(' ');
       const prefix = parts[0];
       if (COUNTRY_PREFIXES.some(p => p.code === prefix)) {
         setPhonePrefix(prefix);
         updateField('telefono', parts.slice(1).join(' '));
       }
+    } else if (telDigits.length > 9) {
+      const knownPrefix = COUNTRY_PREFIXES.find(p => telDigits.startsWith(toDigits(p.code)));
+      if (knownPrefix) {
+        setPhonePrefix(knownPrefix.code);
+        const local = telDigits.slice(toDigits(knownPrefix.code).length).slice(-9);
+        updateField('telefono', formatPhoneNumber(local));
+      } else {
+        updateField('telefono', formatPhoneNumber(telDigits.slice(-9)));
+      }
+    } else if (telDigits.length > 0) {
+      updateField('telefono', formatPhoneNumber(telDigits));
     }
+
+    const currentFullName = `${String((initialValues as any).nombre || '').trim()} ${String((initialValues as any).apellidos || '').trim()}`.trim();
+    setWorkerInput(currentFullName);
+    const isHandymanLocal = type === 'handyman';
+    const apt = isHandymanLocal
+      ? String((initialValues as HandymanRecord).alojamiento || '')
+      : String((initialValues as NormalCleanRecord | InitialCleanRecord).apartamento || '');
+    setAccommodationInput(apt);
 
     if (type === 'normal') {
       const val = (initialValues as NormalCleanRecord).fechaSalidaReserva || '';
-      if (val.includes(',')) {
-        const [time, date] = val.split(',').map(s => s.trim());
-        setReservaTime(time);
-        setReservaDate(date);
+      const raw = String(val || '').trim();
+      if (!raw) {
+        setReservaTime('');
+        setReservaDate('');
+      } else if (raw.includes(',')) {
+        const [a, b] = raw.split(',').map(s => s.trim());
+        // Soportar ambos formatos: "HH:mm, DD/MM/YYYY" y "DD/MM/YYYY, HH:mm"
+        const aIsTime = /\d{1,2}:\d{2}/.test(a);
+        setReservaTime(aIsTime ? a : b);
+        setReservaDate(aIsTime ? b : a);
+      } else if (raw.includes(' ')) {
+        // Soporta "DD/MM/YYYY HH:mm" o "YYYY-MM-DD HH:mm"
+        const parts = raw.split(' ').filter(Boolean);
+        const maybeTime = parts.find(p => /\d{1,2}:\d{2}/.test(p)) || '';
+        const maybeDate = parts.find(p => /\d{2}\/\d{2}\/\d{4}/.test(p) || /\d{4}-\d{2}-\d{2}/.test(p)) || '';
+        setReservaTime(maybeTime);
+        setReservaDate(maybeDate);
       } else {
         setReservaTime('');
         setReservaDate('');
@@ -294,9 +349,20 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
   const checkRequired = () => {
     const nombre = String((form as any).nombre || '').trim();
     const apellidos = String((form as any).apellidos || '').trim();
+    const workerText = workerInput.trim();
     const apt = String(apartmentValue || '').trim();
-    if (!nombre || !apellidos || !apt) {
-      setError('Nombre, apellidos y alojamiento son obligatorios.');
+    const telLocalDigits = toDigits(String((form as any).telefono || ''));
+
+    if ((!nombre && !apellidos) && !workerText) {
+      setError('El operario es obligatorio.');
+      return false;
+    }
+    if (!apt) {
+      setError('El alojamiento es obligatorio.');
+      return false;
+    }
+    if (telLocalDigits.length !== 9) {
+      setError('El teléfono es obligatorio y debe tener exactamente 9 dígitos (sin prefijo).');
       return false;
     }
     return true;
@@ -319,6 +385,22 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
 
   const inputClass = "w-full pl-10 pr-4 py-3.5 bg-white/50 dark:bg-stone-900/50 border border-stone-200 dark:border-stone-800 rounded-xl text-xs text-slate-700 dark:text-stone-300 focus:outline-none focus:ring-1 focus:ring-orange-500/50 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-600 peer";
   const labelClass = "text-[10px] font-bold text-slate-400 dark:text-stone-500 mb-1.5 block ml-1 uppercase tracking-[0.1em]";
+  const dropdownClass = "absolute left-0 right-0 mt-2 z-[210] max-h-64 overflow-auto rounded-xl border border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-950/95 backdrop-blur-xl shadow-2xl";
+  const dropdownItemClass = "w-full text-left px-4 py-2.5 text-xs text-slate-700 dark:text-stone-200 hover:bg-orange-500/10 dark:hover:bg-orange-500/10 transition";
+
+  const filteredWorkers = useMemo(() => {
+    const q = normalizeNameKey(workerInput);
+    const all = [...workers].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    if (!q) return all.slice(0, 50);
+    return all.filter(w => normalizeNameKey(w.fullName).includes(q)).slice(0, 50);
+  }, [workerInput, workers]);
+
+  const filteredAccommodations = useMemo(() => {
+    const q = normalizeNameKey(accommodationInput);
+    const all = [...accommodations].sort((a, b) => a.name.localeCompare(b.name));
+    if (!q) return all.slice(0, 80);
+    return all.filter(a => normalizeNameKey(a.name).includes(q)).slice(0, 80);
+  }, [accommodationInput, accommodations]);
 
   if (!isOpen) return null;
 
@@ -350,9 +432,25 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
           if (!checkRequired()) return; 
           setError(''); 
           const finalRecord = { ...form } as any;
-          if (finalRecord.telefono) {
-            finalRecord.telefono = `${phonePrefix} ${finalRecord.telefono.trim()}`;
+          // Guardar teléfono del checkout como solo dígitos con prefijo (ej +34 + 777 77 77 77 -> 34777777777)
+          const prefixDigits = toDigits(phonePrefix);
+          const localDigits = toDigits(String(finalRecord.telefono || ''));
+          finalRecord.telefono = prefixDigits && localDigits ? `${prefixDigits}${localDigits}` : localDigits;
+
+          // Si el operario se ha escrito a mano, actualizamos nombre/apellidos desde el input
+          const typedWorker = workerInput.trim();
+          if (typedWorker) {
+            const { nombre, apellidos } = splitFullName(typedWorker);
+            finalRecord.nombre = nombre;
+            finalRecord.apellidos = apellidos;
           }
+          // Si alojamiento se ha escrito a mano
+          const typedAcc = accommodationInput.trim();
+          if (typedAcc) {
+            if (isHandyman) finalRecord.alojamiento = typedAcc;
+            else finalRecord.apartamento = typedAcc;
+          }
+
           if (isExtra && extraHoursReason.trim()) {
             const obsKey = isHandyman ? 'observacionesTarea' : 'observaciones';
             const currentObs = String(finalRecord[obsKey] || '');
@@ -360,10 +458,28 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
           }
           if (type === 'normal' && (finalRecord as NormalCleanRecord).sigueHuesped) {
             if (reservaTime && reservaDate) {
-              (finalRecord as NormalCleanRecord).fechaSalidaReserva = `${reservaTime}, ${reservaDate}`;
+              // Guardar con fecha primero para que sea legible y consistente en el sheet
+              (finalRecord as NormalCleanRecord).fechaSalidaReserva = `${reservaDate} ${reservaTime}`.trim();
             }
           } else if (type === 'normal') {
             (finalRecord as NormalCleanRecord).fechaSalidaReserva = '';
+          }
+
+          // Si el operario no existe aún en la lista, lo añadimos a "informacion operarios"
+          const typedKey = normalizeNameKey(typedWorker);
+          const exists = !typedKey ? true : workers.some(w => normalizeNameKey(w.fullName) === typedKey);
+          const workerPhoneForSheet = formatWorkerPhoneForSheet(phonePrefix, localDigits);
+          const phoneExists = !!localDigits && workers.some(w => matchesWorkerByPhone(workerPhoneForSheet, w.telefono));
+          if (typedWorker && !exists && !phoneExists) {
+            await appsScriptApi.addWorker({
+              fullName: typedWorker,
+              telefono: workerPhoneForSheet,
+              netMoneyMonth: 0,
+              owedMoney: 0,
+              cleansCountMonth: 0,
+              kmsMonth: 0,
+              accommodations: [],
+            });
           }
           await onSubmit(finalRecord); 
         }}>
@@ -376,24 +492,64 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
               <label className={labelClass}>Operario Responsable</label>
               <div className="relative group">
                 <User size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
-                <select className={`${inputClass} !pl-10`} value={String((form as any).nombre || '') + '|' + String((form as any).apellidos || '')} onChange={(e) => {
+                <input
+                  className={`${inputClass} !pl-10`}
+                  value={workerInput}
+                  onFocus={() => setWorkerPickerOpen(true)}
+                  onBlur={() => setTimeout(() => setWorkerPickerOpen(false), 120)}
+                  onChange={(e) => {
                     const val = e.target.value;
-                    if (val === '|') { updateField('nombre', ''); updateField('apellidos', ''); updateField('telefono', ''); return; }
-                    const [nom, ape] = val.split('|');
-                    const worker = workers.find(w => w.fullName === (nom + ' ' + ape).trim());
-                    updateField('nombre', nom); updateField('apellidos', ape);
+                    setWorkerInput(val);
+                    const { nombre, apellidos } = splitFullName(val);
+                    updateField('nombre', nombre);
+                    updateField('apellidos', apellidos);
+
+                    const worker = workers.find(w => normalizeNameKey(w.fullName) === normalizeNameKey(val));
                     if (worker) {
-                      let rawTel = (worker.telefono || '').replace(/\D/g, '');
-                      if (rawTel.startsWith('34') && rawTel.length > 9) {
-                        setPhonePrefix('+34');
-                        rawTel = rawTel.slice(2);
+                      const raw = String(worker.telefono || '');
+                      let digits = toDigits(raw);
+                      // Si viene con +34 o 34 delante, lo llevamos al selector de prefijo
+                      const knownPrefix = COUNTRY_PREFIXES.find(p => digits.startsWith(toDigits(p.code)));
+                      if (knownPrefix) {
+                        setPhonePrefix(knownPrefix.code);
+                        digits = digits.slice(toDigits(knownPrefix.code).length);
                       }
-                      updateField('telefono', formatPhoneNumber(rawTel));
+                      updateField('telefono', formatPhoneNumber(digits));
                     }
-                  }}>
-                  <option value="|">Elegir operario...</option>
-                  {workers.map(w => <option key={w.id} value={`${w.fullName.trim().split(' ')[0]}|${w.fullName.trim().split(' ').slice(1).join(' ')}`}>{w.fullName}</option>)}
-                </select>
+                  }}
+                  placeholder="Elegir o escribir operario..."
+                />
+
+                {workerPickerOpen && filteredWorkers.length > 0 && (
+                  <div className={dropdownClass}>
+                    {filteredWorkers.map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        className={dropdownItemClass}
+                        onMouseDown={(ev) => {
+                          ev.preventDefault(); // evita blur antes de seleccionar
+                          setWorkerInput(w.fullName);
+                          const { nombre, apellidos } = splitFullName(w.fullName);
+                          updateField('nombre', nombre);
+                          updateField('apellidos', apellidos);
+
+                          const raw = String(w.telefono || '');
+                          let digits = toDigits(raw);
+                          const knownPrefix = COUNTRY_PREFIXES.find(p => digits.startsWith(toDigits(p.code)));
+                          if (knownPrefix) {
+                            setPhonePrefix(knownPrefix.code);
+                            digits = digits.slice(toDigits(knownPrefix.code).length);
+                          }
+                          updateField('telefono', formatPhoneNumber(digits));
+                          setWorkerPickerOpen(false);
+                        }}
+                      >
+                        {w.fullName}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -401,10 +557,38 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
               <label className={labelClass}>Alojamiento / Propiedad</label>
               <div className="relative group">
                 <Home size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
-                <select className={`${inputClass} !pl-10`} value={apartmentValue || ''} onChange={(e) => updateField(isHandyman ? 'alojamiento' : 'apartamento', e.target.value)}>
-                  <option value="">Elegir alojamiento...</option>
-                  {accommodations.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
-                </select>
+                <input
+                  className={`${inputClass} !pl-10`}
+                  value={accommodationInput}
+                  onFocus={() => setAccPickerOpen(true)}
+                  onBlur={() => setTimeout(() => setAccPickerOpen(false), 120)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAccommodationInput(val);
+                    updateField(isHandyman ? 'alojamiento' : 'apartamento', val);
+                  }}
+                  placeholder="Elegir o escribir alojamiento..."
+                />
+
+                {accPickerOpen && filteredAccommodations.length > 0 && (
+                  <div className={dropdownClass}>
+                    {filteredAccommodations.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className={dropdownItemClass}
+                        onMouseDown={(ev) => {
+                          ev.preventDefault();
+                          setAccommodationInput(a.name);
+                          updateField(isHandyman ? 'alojamiento' : 'apartamento', a.name);
+                          setAccPickerOpen(false);
+                        }}
+                      >
+                        {a.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
