@@ -47,32 +47,32 @@ export interface Accommodation {
 
 export const MOCK_USERS: (User & { password: string })[] = [
   {
-    email: 'admin@rh.local',
-    password: '1234',
+    email: 'rentalholidays.es@gmail.com',
+    password: 'rental-0211',
     role: 'admin',
-    name: 'Admin RH'
+    name: 'Administrador RH'
   },
   {
     email: 'view@rh.local',
-    password: '1234',
+    password: 'rh-viewer',
     role: 'viewer',
     name: 'Visualizador RH'
   },
   {
     email: 'juan.perez@rhpagos.es',
-    password: '1234',
+    password: 'rh-worker',
     role: 'trabajador',
     name: 'Juan Pérez'
   },
   {
     email: 'maria.garcia@rhpagos.es',
-    password: '1234',
+    password: 'rh-worker',
     role: 'trabajador',
     name: 'María García'
   },
   {
     email: 'rosmery@rhpagos.es',
-    password: '1234',
+    password: 'rh-worker',
     role: 'trabajador',
     name: 'Rosmery'
   }

@@ -289,7 +289,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ user, onClose }) => {
                 </div>
                 <button
                   onClick={() => { setSent(true); }}
-                  disabled={newPwd.length < 4}
+                  disabled={newPwd.length < 8}
                   className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-sm font-medium transition"
                 >
                   Guardar contraseña

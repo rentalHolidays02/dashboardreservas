@@ -480,8 +480,8 @@ export const appsScriptApi = {
 
     // 2. Si no es admin/viewer, buscar en la BBDD de trabajadores
     try {
-      // Usamos el password '1234' por defecto para todos los trabajadores en este entorno
-      if (pass !== '1234') return null;
+      // Usamos el password 'rh-worker' por defecto para todos los trabajadores en este entorno
+      if (pass !== 'rh-worker') return null;
 
       const workers = await appsScriptApi.getWorkers();
       const worker = workers.find(w => 
