@@ -39,7 +39,9 @@ const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
 const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxX8IQ6wsfmnJt77UWCpR3Zt0ND0RDFXafIEgrzZtBC5QzMSeLLYipcYx3l6qRWvPA9LA/exec';
 const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:S";
 const ENTREGA_LLAVES_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbGhmFQLhv7ndi_pdnFLGgUTYKcygm1H3H8R0kpOGX_SyxHI2G3snlaDHkawH1DUneUA/exec';
-const SUGERENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz_REPLACE_WITH_YOUR_NEW_SCRIPT_URL/exec';
+const SUGERENCIAS_APPS_SCRIPT_URL = 
+  import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || 
+  'https://script.google.com/macros/s/AKfycbz9MwFzH_C0yQsW5F3_KDsZ23pd9dtOMCcW6jJmN-ON9H44l0EBd3DzatWTwzpK0mS2/exec';
 
 type AppsScriptJsonResponse = { ok: boolean; error?: string; [k: string]: any };
 
@@ -915,9 +917,8 @@ export const appsScriptApi = {
     }
   },
 
-  getSuggestions: async (limit = 20): Promise<Suggestion[]> => {
+  getSuggestions: async (limit = 40): Promise<Suggestion[]> => {
     try {
-      // Nota: El usuario deberá reemplazar SUGERENCIAS_APPS_SCRIPT_URL con la URL real desplegada
       const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=listSuggestions&limit=${limit}`;
       const response = await fetch(url);
       
@@ -929,28 +930,44 @@ export const appsScriptApi = {
       if (data.ok) return data.suggestions;
       return [];
     } catch (error) {
-      console.error('Error fetching suggestions:', error);
-      // Datos de ejemplo para desarrollo si la URL falla
-      return [
-        {
-          id: 'msg_1',
-          subject: 'Sugerencia: Nuevos uniformes',
-          from: 'Maria Garcia <maria@example.com>',
-          date: new Date().toISOString(),
-          snippet: 'Me gustaría sugerir que se revisen los uniformes de verano...',
-          body: 'Hola,\n\nMe gustaría sugerir que se revisen los uniformes de verano, ya que el material actual es muy caluroso.\n\nSaludos,\nMaria.',
-          isRead: false
-        },
-        {
-          id: 'msg_2',
-          subject: 'Mejora en el proceso de limpieza',
-          from: 'Juan Perez <juan@example.com>',
-          date: new Date(Date.now() - 86400000).toISOString(),
-          snippet: 'He notado que podríamos ahorrar tiempo si cambiamos el orden...',
-          body: 'Buenas tardes,\n\nHe notado que podríamos ahorrar tiempo si cambiamos el orden de limpieza de los baños.\n\nUn saludo.',
-          isRead: true
-        }
-      ];
+      console.error('[API Sugerencias] Error:', error);
+      return [];
+    }
+  },
+
+  markSuggestionAsRead: async (id: string): Promise<boolean> => {
+    try {
+      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=markAsRead&id=${id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.ok;
+    } catch (error) {
+      console.error('Error marking as read:', error);
+      return false;
+    }
+  },
+
+  markSuggestionAsUnread: async (id: string): Promise<boolean> => {
+    try {
+      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=markAsUnread&id=${id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.ok;
+    } catch (error) {
+      console.error('Error marking as unread:', error);
+      return false;
+    }
+  },
+
+  deleteSuggestion: async (id: string): Promise<boolean> => {
+    try {
+      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=delete&id=${id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.ok;
+    } catch (error) {
+      console.error('Error deleting suggestion:', error);
+      return false;
     }
   },
 
