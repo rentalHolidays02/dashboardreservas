@@ -9,6 +9,8 @@ export interface User {
 
 export interface Worker {
   id: string;
+  excelId?: string;
+  profileId?: string;
   fullName: string;
   telefono?: string;
   email?: string;
@@ -118,9 +120,6 @@ export const MOCK_WORKERS: Worker[] = [
   {
     id: '1',
     fullName: 'Juan Pérez',
-    telefono: '+34 600 111 222',
-    email: 'juan.perez@rhpagos.es',
-    dni: '12345678A',
     netMoneyMonth: 1250.50,
     owedMoney: 450.00,
     cleansCountMonth: 12,
@@ -132,9 +131,6 @@ export const MOCK_WORKERS: Worker[] = [
   {
     id: '2',
     fullName: 'María García',
-    telefono: '+34 600 333 444',
-    email: 'maria.garcia@rhpagos.es',
-    dni: '23456789B',
     netMoneyMonth: 980.20,
     owedMoney: 0,
     cleansCountMonth: 8,
@@ -146,9 +142,6 @@ export const MOCK_WORKERS: Worker[] = [
   {
     id: '3',
     fullName: 'Carlos Rodríguez',
-    telefono: '+34 600 555 666',
-    email: 'carlos.rodriguez@rhpagos.es',
-    dni: '34567890C',
     netMoneyMonth: 1560.00,
     owedMoney: 280.50,
     cleansCountMonth: 15,
@@ -160,9 +153,6 @@ export const MOCK_WORKERS: Worker[] = [
   {
     id: '4',
     fullName: 'Ana Martínez',
-    telefono: '+34 600 777 888',
-    email: 'ana.martinez@rhpagos.es',
-    dni: '45678901D',
     netMoneyMonth: 1100.00,
     owedMoney: 120.00,
     cleansCountMonth: 10,

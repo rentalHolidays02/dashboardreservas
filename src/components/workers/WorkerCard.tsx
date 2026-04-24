@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, MapPin, Edit2 } from 'lucide-react';
+import { Phone, MapPin, Edit2, AlertTriangle } from 'lucide-react';
 import { Worker } from '../../services/mockData';
 
 interface WorkerCardProps {
@@ -52,9 +52,22 @@ const WorkerCard: React.FC<WorkerCardProps> = ({ worker, onEdit, isReadOnly }) =
           </div>
 
           <div>
-            <h3 className="text-sm font-normal text-slate-800 dark:text-stone-100 leading-tight transition-colors">
-              {toTitleCase(worker.fullName)}
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-normal text-slate-800 dark:text-stone-100 leading-tight transition-colors">
+                {toTitleCase(worker.fullName)}
+              </h3>
+              {!worker.profileId && (
+                <div className="group/tooltip relative">
+                  <AlertTriangle 
+                    size={13} 
+                    className="text-amber-500 cursor-help" 
+                  />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                    Este trabajador aún no tiene una cuenta de usuario asignada
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-0.5">
               <span className="flex items-center gap-1 text-[11px] text-slate-400 dark:text-stone-500">
                 <Phone size={10} className="flex-shrink-0 text-orange-500" />

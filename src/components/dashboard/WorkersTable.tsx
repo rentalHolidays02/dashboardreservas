@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Pencil, Search, SlidersHorizontal, Info, X } from 'lucide-react';
+import { Pencil, Search, SlidersHorizontal, Info, X, AlertTriangle } from 'lucide-react';
 import { Worker } from '../../services/mockData';
 import { formatName } from '../../utils/formatters';
 
@@ -185,9 +185,22 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
                         </span>
                       )}
                     </div>
-                    <p className={`text-sm truncate transition-colors ${isSelected ? 'text-orange-500' : 'text-slate-800 dark:text-stone-200'}`}>
-                      {formattedName}
-                    </p>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className={`text-sm truncate transition-colors ${isSelected ? 'text-orange-500' : 'text-slate-800 dark:text-stone-200'}`}>
+                        {formattedName}
+                      </p>
+                      {!worker.profileId && (
+                        <div className="group/tooltip relative">
+                          <AlertTriangle 
+                            size={12} 
+                            className="text-amber-500 cursor-help flex-shrink-0" 
+                          />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[10px] rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
+                            Sin cuenta de usuario
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <AccommodationTags items={worker.accommodations} />
