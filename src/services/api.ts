@@ -29,7 +29,7 @@ const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; /
 const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; // INFORMES_OPERARIOS
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbytslXrXkhYiXObUjQygmyYGLtN1kuS0W3eKeK1A41VJh7B4tfhqfeG88ys1k0L-P2LHg/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyn0aV7aHQdvda8JWOw6YO2-dJKw4c8d3CxhffiesvbxRBBcSttLehXZ7di8yYMlkQqig/exec';
 const CLEANS_APPS_SCRIPT_URL =
   import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL ||
   'https://script.google.com/macros/s/AKfycbzm72ot1nECxcBf406o--XzL2jty55cxNRrG1Nbd64YAmYU4wl7kwi842jjlybE4ErVgw/exec';
@@ -576,15 +576,28 @@ export const appsScriptApi = {
   // --- Funciones de Administración (Supabase) ---
 
   getAllUsers: async (): Promise<User[]> => {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('profiles')
       .select('*')
       .order('full_name', { ascending: true });
 
-    if (error) {
-      console.error('Error al obtener usuarios:', error.message);
-      return [];
+    // Si RLS bloquea la consulta (devuelve 0 o da error), usamos el puente de Google como administradores
+    if (error || !data || data.length === 0) {
+      console.warn('Supabase RLS bloqueó getAllUsers. Obteniendo lista desde Google...');
+      try {
+        const url = new URL(APPS_SCRIPT_URL);
+        url.searchParams.append('action', 'getAllProfiles');
+        const response = await fetch(url.toString(), { method: 'GET' });
+        const gasData = await response.json();
+        if (gasData.ok && gasData.profiles) {
+          data = gasData.profiles;
+        }
+      } catch (e) {
+        console.error('Error al obtener perfiles desde Google:', e);
+      }
     }
+
+    if (!data) return [];
 
     return data.map(p => ({
       id: p.id,
