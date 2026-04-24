@@ -1,268 +1,77 @@
-function doPost(e) {
-  try {
-    if (!e || !e.postData || !e.postData.contents) {
-      return jsonResponse({ ok: false, error: 'Missing post data' });
-    }
-
-    var payload = JSON.parse(e.postData.contents);
-    var action = String(payload.action || '');
-    
-    // Auth simple opcional (si fuera necesaria)
-    
-    if (action === 'updateCleanStatus') return updateCleanStatus(payload);
-    if (action === 'createCheckout') return createCheckout(payload);
-    if (action === 'updateCheckout') return updateCheckout(payload);
-    if (action === 'deleteCheckout') return deleteCheckout(payload);
-    
-    return jsonResponse({ ok: false, error: 'Unsupported action: ' + action });
-  } catch (err) {
-    return jsonResponse({ ok: false, error: String(err && err.message ? err.message : err) });
-  }
-}
+/**
+ * Google Apps Script para gestionar las sugerencias desde Gmail.
+ * Este script debe publicarse como Aplicación Web.
+ */
 
 function doGet(e) {
   try {
     var params = (e && e.parameter) ? e.parameter : {};
-    var action = String(params.action || 'ping');
+    var action = String(params.action || 'listSuggestions');
 
-    if (action === 'ping') {
-      return jsonResponse({
-        ok: true,
-        action: 'ping',
-        version: '2026-04-22',
-        spreadsheetIdConfigured: !!getCleansSpreadsheetId_(),
-        spreadsheetId: getCleansSpreadsheetId_() || null
-      });
+    if (action === 'listSuggestions') {
+      return listSuggestions(params);
     }
 
-    if (action === 'listSheets') {
-      var spreadsheetId = getCleansSpreadsheetId_();
-      var ss = spreadsheetId
-        ? SpreadsheetApp.openById(spreadsheetId)
-        : SpreadsheetApp.getActiveSpreadsheet();
-      var names = ss.getSheets().map(function (s) { return s.getName(); });
-      return jsonResponse({
-        ok: true,
-        action: 'listSheets',
-        spreadsheetIdConfigured: !!spreadsheetId,
-        spreadsheetId: spreadsheetId || null,
-        sheets: names
-      });
-    }
-
-    return jsonResponse({ ok: false, error: 'Unsupported action: ' + action });
+    return jsonResponse({ ok: false, error: 'Acción no soportada: ' + action });
   } catch (err) {
-    return jsonResponse({ ok: false, error: String(err && err.message ? err.message : err) });
+    return jsonResponse({ ok: false, error: String(err.message || err) });
   }
 }
 
-function getCleansSpreadsheetId_() {
-  var props = PropertiesService.getScriptProperties();
-  var id = String(props.getProperty('CLEANS_SPREADSHEET_ID') || '').trim();
-  return id || '';
-}
-
-function getAllowedSheets() {
-  return {
-    'Checkout_Limpieza_Normal': true,
-    'Checkout_Limpieza_Inicial': true,
-    'Checkout_Manitas': true,
-    'Checkin_Limpieza_Normal': true,
-    'Checkin_Limpieza_Inicial': true,
-    'Checkin_Manitas': true
-  };
-}
-
-function getValidSheet(sheetName) {
-  var allowedSheets = getAllowedSheets();
-  if (!allowedSheets[sheetName]) return { error: 'Invalid sheetName: ' + sheetName };
-
-  var spreadsheetId = getCleansSpreadsheetId_();
-  var ss = spreadsheetId
-    ? SpreadsheetApp.openById(spreadsheetId)
-    : SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) return { error: 'Sheet not found: ' + sheetName };
-  return { sheet: sheet };
-}
-
-function getHeaders(sheet) {
-  var lastCol = sheet.getLastColumn();
-  if (lastCol < 1) return { error: 'Sheet has no columns: ' + sheet.getName() };
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  return { headers: headers };
+function doPost(e) {
+  // Por ahora solo lectura, pero se podría implementar marcar como leído, etc.
+  return doGet(e);
 }
 
 /**
- * Mapea un objeto record a un array de valores basándose en los encabezados de la hoja.
+ * Recupera los últimos hilos de correo que coincidan con la búsqueda de sugerencias.
  */
-function mapRecordToRow(headers, record) {
-  var row = [];
-  for (var i = 0; i < headers.length; i++) {
-    var header = String(headers[i] || '');
-    var found = getRecordValueByHeader(record, header);
-    row.push(found.found ? found.value : '');
-  }
-  return row;
-}
-
-function getRecordValueByHeader(record, header) {
-  var target = normalizeText(header);
-  for (var key in record) {
-    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
-    if (normalizeText(key) === target) {
-      return { found: true, value: normalizeCellValue(record[key]) };
+function listSuggestions(params) {
+  // Búsqueda flexible
+  var query = params.query || 'subject:"FEEDBACK APP"';
+  var limit = parseInt(params.limit || '20', 10);
+  
+  var threads = GmailApp.search(query, 0, limit);
+  var results = [];
+  
+  for (var i = 0; i < threads.length; i++) {
+    var messages = threads[i].getMessages();
+    var lastMessage = messages[messages.length - 1];
+    var body = lastMessage.getPlainBody();
+    var subject = threads[i].getFirstMessageSubject();
+    
+    // Extraer el nombre real
+    var fromName = lastMessage.getFrom();
+    var nameMatch = body.match(/De:\s*([^\n\r]+)/i);
+    if (nameMatch && nameMatch[1]) {
+      fromName = nameMatch[1].trim();
     }
+
+    // Extraer el correo real
+    var emailMatch = body.match(/Correo:\s*([^\n\r]+)/i);
+    if (emailMatch && emailMatch[1]) {
+      fromName += " <" + emailMatch[1].trim() + ">";
+    }
+    
+    results.push({
+      id: threads[i].getId(),
+      subject: subject,
+      from: fromName,
+      date: lastMessage.getDate().toISOString(),
+      // USAMOS EL CUERPO PARA EL SNIPPET PARA EVITAR EL ERROR
+      snippet: body.substring(0, 150).replace(/\n/g, ' ') + "...",
+      body: body,
+      isRead: !threads[i].isUnread()
+    });
   }
-  return { found: false, value: '' };
-}
-
-function normalizeCellValue(value) {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
-  return value;
-}
-
-/**
- * Acción: Actualizar solo el checkbox 'Checked'
- */
-function updateCleanStatus(payload) {
-  var sheetName = String(payload.sheetName || '');
-  var sheetResult = getValidSheet(sheetName);
-  if (sheetResult.error) return jsonResponse({ ok: false, error: sheetResult.error });
-  var sheet = sheetResult.sheet;
-
-  var rowIndex = Number(payload.rowIndex);
-  if (!rowIndex || rowIndex <= 1) {
-    return jsonResponse({ ok: false, error: 'Invalid rowIndex: ' + rowIndex });
-  }
-
-  var checked = !!payload.checked;
-  var headersResult = getHeaders(sheet);
-  if (headersResult.error) return jsonResponse({ ok: false, error: headersResult.error });
   
-  var headers = headersResult.headers;
-  var checkedColIndex = findHeaderIndex(headers, 'checked');
-  
-  if (checkedColIndex === -1) {
-    return jsonResponse({ ok: false, error: 'Column Checked not found in ' + sheetName });
-  }
-
-  if (rowIndex > sheet.getLastRow()) {
-    return jsonResponse({ ok: false, error: 'rowIndex out of range: ' + rowIndex });
-  }
-
-  sheet.getRange(rowIndex, checkedColIndex + 1).setValue(checked ? 'TRUE' : 'FALSE');
-
-  return jsonResponse({
-    ok: true,
-    sheetName: sheetName,
-    rowIndex: rowIndex,
-    checked: checked
+  return jsonResponse({ 
+    ok: true, 
+    suggestions: results,
+    count: results.length
   });
 }
 
-/**
- * Acción: Crear un nuevo registro al final de la hoja
- */
-function createCheckout(payload) {
-  var sheetName = String(payload.sheetName || '');
-  var sheetResult = getValidSheet(sheetName);
-  if (sheetResult.error) return jsonResponse({ ok: false, error: sheetResult.error });
-  var sheet = sheetResult.sheet;
-
-  var record = payload.record;
-  if (!record || typeof record !== 'object') {
-    return jsonResponse({ ok: false, error: 'Missing or invalid record payload' });
-  }
-
-  var headersResult = getHeaders(sheet);
-  if (headersResult.error) return jsonResponse({ ok: false, error: headersResult.error });
-  var headers = headersResult.headers;
-
-  var rowValues = mapRecordToRow(headers, record);
-  sheet.appendRow(rowValues);
-  var rowIndex = sheet.getLastRow();
-
-  return jsonResponse({ ok: true, sheetName: sheetName, rowIndex: rowIndex });
-}
-
-/**
- * Acción: Actualizar un registro existente (Optimizado con setValues)
- */
-function updateCheckout(payload) {
-  var sheetName = String(payload.sheetName || '');
-  var sheetResult = getValidSheet(sheetName);
-  if (sheetResult.error) return jsonResponse({ ok: false, error: sheetResult.error });
-  var sheet = sheetResult.sheet;
-
-  var rowIndex = Number(payload.rowIndex);
-  if (!rowIndex || rowIndex <= 1 || rowIndex > sheet.getLastRow()) {
-    return jsonResponse({ ok: false, error: 'Invalid rowIndex: ' + rowIndex });
-  }
-
-  var record = payload.record;
-  if (!record || typeof record !== 'object') {
-    return jsonResponse({ ok: false, error: 'Missing or invalid record payload' });
-  }
-
-  var headersResult = getHeaders(sheet);
-  if (headersResult.error) return jsonResponse({ ok: false, error: headersResult.error });
-  var headers = headersResult.headers;
-
-  // Obtener los valores actuales de la fila para editarlos en memoria
-  var range = sheet.getRange(rowIndex, 1, 1, headers.length);
-  var rowValues = range.getValues()[0];
-
-  var updatedCount = 0;
-  for (var i = 0; i < headers.length; i++) {
-    var found = getRecordValueByHeader(record, headers[i]);
-    if (found.found) {
-      rowValues[i] = found.value;
-      updatedCount++;
-    }
-  }
-
-  if (updatedCount > 0) {
-    range.setValues([rowValues]);
-  }
-
-  return jsonResponse({ ok: true, sheetName: sheetName, rowIndex: rowIndex, updatedColumns: updatedCount });
-}
-
-/**
- * Acción: Eliminar una fila
- */
-function deleteCheckout(payload) {
-  var sheetName = String(payload.sheetName || '');
-  var sheetResult = getValidSheet(sheetName);
-  if (sheetResult.error) return jsonResponse({ ok: false, error: sheetResult.error });
-  var sheet = sheetResult.sheet;
-
-  var rowIndex = Number(payload.rowIndex);
-  if (!rowIndex || rowIndex <= 1 || rowIndex > sheet.getLastRow()) {
-    return jsonResponse({ ok: false, error: 'Invalid rowIndex: ' + rowIndex });
-  }
-
-  sheet.deleteRow(rowIndex);
-  return jsonResponse({ ok: true, sheetName: sheetName, rowIndex: rowIndex });
-}
-
-function findHeaderIndex(headers, target) {
-  var normalizedTarget = normalizeText(target);
-  for (var i = 0; i < headers.length; i++) {
-    if (normalizeText(headers[i]) === normalizedTarget) return i;
-  }
-  return -1;
-}
-
-function normalizeText(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD') // Quitar acentos
-    .replace(/[\u0300-\u036f]/g, '');
-}
 
 function jsonResponse(data) {
   return ContentService
