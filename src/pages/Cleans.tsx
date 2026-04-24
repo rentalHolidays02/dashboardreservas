@@ -138,7 +138,7 @@ const formatDisplayDate = (value: unknown): string => {
 };
 
 interface CleansProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 const Cleans: React.FC<CleansProps> = ({ userRole }) => {

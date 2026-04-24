@@ -13,7 +13,7 @@ import { CheckoutContextModal } from '../components/dashboard/CheckoutContextMod
 type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
 
 interface DashboardProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {

@@ -3,11 +3,13 @@ import { Pencil, Search, SlidersHorizontal, Info, X } from 'lucide-react';
 import { Worker } from '../../services/mockData';
 import { formatName } from '../../utils/formatters';
 
+import { User } from '../../services/mockData';
+
 interface WorkersTableProps {
   workers: Worker[];
   selectedWorker?: Worker | null;
   onWorkerSelect?: (w: Worker | null) => void;
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: User['role'];
 }
 
 const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px]';

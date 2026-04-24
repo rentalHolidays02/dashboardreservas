@@ -26,12 +26,18 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setLoading(true);
     setError('');
 
+    if (password.length < 8) {
+      setError('La contraseña debe tener al menos 8 caracteres.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const user = await appsScriptApi.login(email, password);
       if (user) {
         onLoginSuccess(user);
       } else {
-        setError('Credenciales incorrectas. Prueba con admin@rh.local / 1234');
+        setError('Credenciales incorrectas.');
       }
     } catch {
       setError('Hubo un error al intentar iniciar sesión.');
@@ -130,7 +136,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
-                  placeholder="admin@rh.local"
+                  placeholder="rentalholidays.es@gmail.com"
                   required
                 />
               </div>
@@ -148,6 +154,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                     className="w-full px-4 py-3 pr-11 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
                     placeholder="••••••••"
                     required
+                    minLength={8}
                   />
                   <button
                     type="button"

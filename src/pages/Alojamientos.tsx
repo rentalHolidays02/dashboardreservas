@@ -11,7 +11,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
 
 interface AlojamientosProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {

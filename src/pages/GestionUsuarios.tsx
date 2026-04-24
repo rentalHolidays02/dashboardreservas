@@ -16,10 +16,12 @@ import {
   Users,
 } from 'lucide-react';
 import { useUndoToast } from '../context/UndoToastContext';
+import { appsScriptApi } from '../services/api';
+import { User } from '../services/mockData';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type UserRole = 'admin' | 'editor' | 'viewer';
+type UserRole = 'admin' | 'editor' | 'viewer' | 'trabajador';
 type UserStatus = 'active' | 'inactive' | 'pending';
 type OnlineStatus = 'online' | 'working' | 'away' | 'offline';
 
@@ -35,6 +37,11 @@ interface AppUser {
   onlineStatus: OnlineStatus;
   currentActivity?: string;
   sessionStart?: string;
+  telefono?: string;
+  // Campos sensibles (opcionales)
+  dni?: string;
+  home_address?: string;
+  bank_account?: string;
 }
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -85,6 +92,7 @@ const roleConfig: Record<UserRole, { label: string; color: string }> = {
   admin:  { label: 'Admin',  color: 'text-orange-600 dark:text-orange-400' },
   editor: { label: 'Editor', color: 'text-orange-400 dark:text-orange-300' },
   viewer: { label: 'Visor',  color: 'text-slate-400 dark:text-stone-500'   },
+  trabajador: { label: 'Operario', color: 'text-blue-500 dark:text-blue-400' },
 };
 
 const statusConfig: Record<UserStatus, { label: string; color: string; dot: string }> = {
@@ -124,9 +132,31 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
   const [form, setForm] = useState({
     name: user?.name ?? '',
     email: user?.email ?? '',
-    role: user?.role ?? 'viewer' as UserRole,
-    status: user?.status ?? 'active' as UserStatus,
+    role: (user?.role || 'viewer') as UserRole,
+    status: (user?.status || 'active') as UserStatus,
+    telefono: user?.telefono ?? '',
+    dni: '',
+    home_address: '',
+    bank_account: '',
   });
+
+  const [loadingSensitive, setLoadingSensitive] = useState(false);
+
+  useEffect(() => {
+    if (user?.id) {
+      setLoadingSensitive(true);
+      appsScriptApi.getSensitiveData(user.id).then(data => {
+        if (data) {
+          setForm(f => ({
+            ...f,
+            dni: data.dni || '',
+            home_address: data.home_address || '',
+            bank_account: data.bank_account || '',
+          }));
+        }
+      }).finally(() => setLoadingSensitive(false));
+    }
+  }, [user?.id]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
@@ -140,9 +170,9 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
 
   const handleSubmit = () => {
     if (!validate()) return;
-    const initials = form.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const initials = (form.name || 'U').split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || 'U';
     onSave({
-      id: user?.id ?? Date.now().toString(),
+      id: user?.id ?? '', // Si es vacío, handleSave sabrá que es nuevo
       createdAt: user?.createdAt ?? new Date().toISOString().slice(0, 10),
       lastLogin: user?.lastLogin ?? null,
       avatar: initials,
@@ -150,7 +180,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
       currentActivity: user?.currentActivity,
       sessionStart: user?.sessionStart,
       ...form,
-    });
+    } as AppUser);
     onClose();
   };
 
@@ -180,6 +210,67 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
             {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
           </div>
 
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Teléfono</label>
+            <input 
+              className={inputClass} 
+              value={form.telefono} 
+              onChange={e => {
+                let input = e.target.value;
+                let digits = input.replace(/\D/g, '');
+                
+                // Si el usuario borra todo, dejarlo vacío
+                if (input === '') {
+                  setForm(f => ({ ...f, telefono: '' }));
+                  return;
+                }
+
+                // Detectar si debe llevar el prefijo +34
+                let hasPrefix = input.startsWith('+34') || digits.startsWith('34');
+                let mainNumber = digits;
+                if (digits.startsWith('34')) mainNumber = digits.slice(2);
+                
+                // Limitar a 9 dígitos de número
+                mainNumber = mainNumber.slice(0, 9);
+                
+                // Formatear en bloques de 3
+                let formatted = '';
+                if (mainNumber.length > 0) {
+                  const parts = mainNumber.match(/.{1,3}/g) || [];
+                  formatted = parts.join(' ');
+                }
+
+                const finalValue = (hasPrefix ? '+34 ' : '') + formatted;
+                setForm(f => ({ ...f, telefono: finalValue }));
+              }} 
+              placeholder="+34 600 000 000" 
+            />
+          </div>
+
+          {form.role === 'trabajador' && (
+            <div className="border-t border-slate-100 dark:border-stone-800 pt-4 mt-2">
+              <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Datos Sensibles (Privado)</h3>
+              {loadingSensitive ? (
+                <div className="py-4 text-center text-xs text-slate-400">Cargando datos seguros...</div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">DNI / NIE</label>
+                    <input className={inputClass} value={form.dni} onChange={e => setForm(f => ({ ...f, dni: e.target.value }))} placeholder="12345678X" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Dirección de casa</label>
+                    <input className={inputClass} value={form.home_address} onChange={e => setForm(f => ({ ...f, home_address: e.target.value }))} placeholder="Calle Ejemplo, 12, Madrid" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Cuenta Bancaria (IBAN)</label>
+                    <input className={inputClass} value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="ES00 0000 0000..." />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Rol</label>
@@ -187,6 +278,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
                 <option value="admin">Admin</option>
                 <option value="editor">Editor</option>
                 <option value="viewer">Visor</option>
+                <option value="trabajador">Operario</option>
               </select>
             </div>
             <div>
@@ -289,7 +381,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ user, onClose }) => {
                 </div>
                 <button
                   onClick={() => { setSent(true); }}
-                  disabled={newPwd.length < 4}
+                  disabled={newPwd.length < 8}
                   className="w-full py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white text-sm font-medium transition"
                 >
                   Guardar contraseña
@@ -430,7 +522,24 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
 
 const GestionUsuarios: React.FC = () => {
   const { showUndoToast } = useUndoToast();
-  const [users, setUsers] = useState<AppUser[]>(MOCK_USERS);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    appsScriptApi.getAllUsers().then(supabaseUsers => {
+      // Mapear usuarios de Supabase al formato AppUser de la UI
+      const mapped = supabaseUsers.map(u => ({
+        ...u,
+        status: 'active' as UserStatus,
+        createdAt: new Date().toISOString(),
+        lastLogin: null,
+        avatar: u.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
+        onlineStatus: 'offline' as OnlineStatus,
+      }));
+      setUsers(mapped as AppUser[]);
+    }).finally(() => setLoading(false));
+  }, []);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
 
@@ -475,23 +584,60 @@ const GestionUsuarios: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
-  const handleSave = (u: AppUser) => {
-    setUsers(prev => {
-      const exists = prev.find(p => p.id === u.id);
-      if (exists) return prev.map(p => p.id === u.id ? u : p);
-      return [...prev, u];
-    });
-    showToast(u.id ? 'Usuario actualizado correctamente' : 'Usuario creado correctamente');
+  const handleSave = async (u: AppUser) => {
+    const isNew = !u.id;
+    try {
+      // Nota: Para usuarios nuevos reales se requiere supabase.auth.signUp
+      // Por ahora, gestionamos el perfil
+      const generateUUID = () => {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+      
+      const targetId = u.id || (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : generateUUID());
+      
+      // 1. Guardar Perfil (Público)
+      await appsScriptApi.updateProfile(targetId, {
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        telefono: u.telefono
+      });
+
+      // 2. Guardar Datos Sensibles
+      await appsScriptApi.updateSensitiveData(targetId, {
+        dni: u.dni,
+        home_address: u.home_address,
+        bank_account: u.bank_account
+      });
+
+      setUsers(prev => {
+        const exists = prev.find(p => p.id === u.id);
+        if (exists) return prev.map(p => p.id === u.id ? u : p);
+        return [{ ...u, id: targetId }, ...prev];
+      });
+      showToast(isNew ? 'Usuario creado (perfil)' : 'Usuario actualizado correctamente');
+    } catch (error: any) {
+      console.error('Error al guardar usuario:', error);
+      const errorMsg = error.message || 'Error al guardar los cambios';
+      showToast(errorMsg);
+    }
   };
 
-  const handleDelete = (u: AppUser) => {
-    setUsers(prev => prev.filter(p => p.id !== u.id));
-    showUndoToast(
-      `Usuario "${u.name}" eliminado`,
-      () => {
-        setUsers(prev => [u, ...prev.filter(p => p.id !== u.id)]);
-      }
-    );
+  const handleDelete = async (u: AppUser) => {
+    try {
+      await appsScriptApi.deleteProfile(u.id);
+      await appsScriptApi.deleteSensitiveData(u.id);
+      
+      setUsers(prev => prev.filter(p => p.id !== u.id));
+      showToast('Usuario eliminado permanentemente');
+    } catch (error) {
+      console.error('Error al eliminar usuario:', error);
+      showToast('Error al eliminar el usuario');
+    }
   };
 
   const handleToggleStatus = (u: AppUser) => {
@@ -543,6 +689,7 @@ const GestionUsuarios: React.FC = () => {
                 <option value="admin">Admin</option>
                 <option value="editor">Editor</option>
                 <option value="viewer">Visor</option>
+                <option value="trabajador">Operario</option>
               </select>
               <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
             </div>
@@ -664,6 +811,7 @@ const GestionUsuarios: React.FC = () => {
                 {key === 'admin' && 'Acceso total al sistema. Puede gestionar usuarios, configurar la plataforma y ver todos los datos.'}
                 {key === 'editor' && 'Puede añadir, editar y eliminar registros operativos. No puede gestionar usuarios ni configuración.'}
                 {key === 'viewer' && 'Solo lectura. Puede consultar datos pero no modificar ni exportar información sensible.'}
+                {key === 'trabajador' && 'Acceso limitado a sus propias tareas, check-ins e incidencias asignadas.'}
               </p>
             </div>
           ))}

@@ -5,12 +5,12 @@ import WorkerModal from '../components/workers/WorkerModal';
 import WorkerProfile from '../components/workers/WorkerProfile';
 import WorkerFilterModal, { WorkerFilters } from '../components/workers/WorkerFilterModal';
 import { appsScriptApi } from '../services/api';
-import { Worker } from '../services/mockData';
+import { Worker, User } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
 
 interface WorkersProps {
-  userRole?: 'admin' | 'viewer' | 'trabajador';
+  userRole?: User['role'];
 }
 
 const Workers: React.FC<WorkersProps> = ({ userRole }) => {

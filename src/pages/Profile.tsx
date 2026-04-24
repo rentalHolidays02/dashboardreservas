@@ -21,8 +21,10 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
+import type { User as AppUser } from '../services/mockData';
+
 interface ProfileProps {
-  user: { email: string; role: 'admin' | 'viewer'; name: string };
+  user: AppUser;
   onLogout: () => void;
 }
 
@@ -71,10 +73,12 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
 
   const initials = savedName
     .split(' ')
+    .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, '')) // Limpiar caracteres especiales
+    .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0])
     .join('')
-    .toUpperCase();
+    .toUpperCase() || 'U';
 
   const handleSaveName = () => {
     if (nameValue.trim()) {
