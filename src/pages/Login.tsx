@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { appsScriptApi } from '../services/api';
 import { Eye, EyeOff, Loader2, AlertCircle, Users, BarChart3, FileText } from 'lucide-react';
 import type { User } from '../services/mockData';
@@ -17,9 +18,36 @@ const features = [
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isInviteFlow, setIsInviteFlow] = useState(false);
+  const location = useLocation();
+
+  // Detectar si el usuario viene de un enlace de invitación
+  React.useEffect(() => {
+    const checkInvite = async () => {
+      // 1. Chequear la URL directamente
+      const hash = window.location.hash || location.hash;
+      if (hash && (hash.includes('access_token') || hash.includes('type=invite') || hash.includes('type=recovery'))) {
+        setIsInviteFlow(true);
+        return;
+      }
+      
+      // 2. Si Supabase ya ha limpiado la URL pero ha iniciado sesión temporalmente
+      const { supabase } = await import('../services/supabaseClient');
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Si hay sesión en Supabase pero estamos en la pantalla de Login (sin usuario en la App),
+      // significa que acabamos de entrar por un link de invitación.
+      if (session && session.user) {
+        setIsInviteFlow(true);
+      }
+    };
+    
+    checkInvite();
+  }, [location.hash]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,14 +61,41 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      const user = await appsScriptApi.login(email, password);
-      if (user) {
-        onLoginSuccess(user);
+      if (isInviteFlow) {
+        // Flujo de invitación: establecer contraseña
+        if (password !== confirmPassword) {
+          setError('Las contraseñas no coinciden.');
+          setLoading(false);
+          return;
+        }
+
+        const res = await appsScriptApi.updateUserPassword(password);
+        if (res.ok) {
+          // Una vez actualizada, intentamos obtener el perfil para entrar
+          const { data: { user } } = await (await import('../services/supabaseClient')).supabase.auth.getUser();
+          if (user && user.email) {
+            const appUser = await appsScriptApi.login(user.email, password);
+            if (appUser) onLoginSuccess(appUser);
+          } else {
+            // Si algo falla, recargar para login normal
+            window.location.hash = '';
+            setIsInviteFlow(false);
+            setError('Contraseña establecida. Por favor, inicia sesión normalmente.');
+          }
+        } else {
+          setError(res.error || 'Error al establecer la contraseña.');
+        }
       } else {
-        setError('Credenciales incorrectas.');
+        // Flujo normal de login
+        const user = await appsScriptApi.login(email, password);
+        if (user) {
+          onLoginSuccess(user);
+        } else {
+          setError('Credenciales incorrectas.');
+        }
       }
     } catch {
-      setError('Hubo un error al intentar iniciar sesión.');
+      setError('Hubo un error al intentar procesar la solicitud.');
     } finally {
       setLoading(false);
     }
@@ -118,33 +173,39 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div className="mb-8 text-center">
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-stone-100">Bienvenido</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-stone-100">
+                {isInviteFlow ? 'Configura tu cuenta' : 'Bienvenido'}
+              </h1>
               <p className="text-slate-500 dark:text-stone-400 mt-1 text-sm">
-                Introduce tus credenciales para acceder
+                {isInviteFlow 
+                  ? 'Establece tu contraseña para activar tu acceso' 
+                  : 'Introduce tus credenciales para acceder'}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
 
-              {/* Email */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
-                  Correo electrónico
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
-                  placeholder="rentalholidays.es@gmail.com"
-                  required
-                />
-              </div>
+              {/* Email (solo se muestra en login normal) */}
+              {!isInviteFlow && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
+                    Correo electrónico
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
+                    placeholder="tu@email.com"
+                    required
+                  />
+                </div>
+              )}
 
               {/* Password */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
-                  Contraseña
+                  {isInviteFlow ? 'Nueva Contraseña' : 'Contraseña'}
                 </label>
                 <div className="relative">
                   <input
@@ -165,6 +226,24 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   </button>
                 </div>
               </div>
+
+              {/* Confirm Password (solo en flujo de invitación) */}
+              {isInviteFlow && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
+                    Confirmar Contraseña
+                  </label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
+                    placeholder="••••••••"
+                    required
+                    minLength={8}
+                  />
+                </div>
+              )}
 
               {/* Error */}
               {error && (

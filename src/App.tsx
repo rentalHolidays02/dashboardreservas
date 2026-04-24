@@ -34,9 +34,12 @@ function App() {
     localStorage.setItem('rh_user', JSON.stringify(userData));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setUser(null);
     localStorage.removeItem('rh_user');
+    // Importante: Cerrar también la sesión real de Supabase para evitar cruce de cuentas
+    const { supabase } = await import('./services/supabaseClient');
+    await supabase.auth.signOut();
   };
 
   const handleRoleChange = (newRole: 'admin' | 'editor' | 'viewer' | 'trabajador') => {
@@ -242,7 +245,8 @@ function App() {
           }
         />
 
-        <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
+        <Route path="/" element={<Navigate to={user ? "/dashboard" : `/login${window.location.hash}`} />} />
+        <Route path="*" element={<Navigate to={user ? "/dashboard" : `/login${window.location.hash}`} />} />
       </Routes>
     </BrowserRouter>
     </NavigationGuardProvider>

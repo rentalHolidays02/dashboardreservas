@@ -29,7 +29,7 @@ const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; /
 const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; // INFORMES_OPERARIOS
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwS9BET8CqezxLGnoxC_E6FXOa6ZpRkAZ7jmDRvjRzR_0PIEazV7h1Ad1zTEhIWbeYKUQ/exec';
 const CLEANS_APPS_SCRIPT_URL =
   import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL ||
   'https://script.google.com/macros/s/AKfycbzm72ot1nECxcBf406o--XzL2jty55cxNRrG1Nbd64YAmYU4wl7kwi842jjlybE4ErVgw/exec';
@@ -486,20 +486,49 @@ export const appsScriptApi = {
         };
       }
 
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', sessionUser.id)
         .single();
 
       if (profileError) {
-        console.warn('No se encontró perfil para el usuario:', profileError.message);
-        // Retornar datos básicos de Auth si no hay perfil
-        return {
-          email: sessionUser.email || '',
-          role: 'viewer', // Rol por defecto
-          name: sessionUser.user_metadata?.full_name || 'Usuario'
-        };
+        // Intento 2: Buscar por email (para usuarios invitados con ID temporal)
+        const { data: profileByEmail } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', sessionUser.email)
+          .single();
+
+        if (profileByEmail) {
+          profile = profileByEmail;
+          profileError = null;
+
+          // Sincronizar el ID para futuras sesiones y relaciones en 'profiles'
+          await supabase.from('profiles').delete().eq('id', profileByEmail.id);
+          await supabase.from('profiles').insert({ ...profileByEmail, id: sessionUser.id });
+          
+          // Sincronizar también 'worker_sensitive_data' si existe
+          const { data: sensitiveData } = await supabase
+            .from('worker_sensitive_data')
+            .select('*')
+            .eq('id', profileByEmail.id)
+            .single();
+            
+          if (sensitiveData) {
+            await supabase.from('worker_sensitive_data').delete().eq('id', profileByEmail.id);
+            await supabase.from('worker_sensitive_data').insert({ ...sensitiveData, id: sessionUser.id });
+          }
+
+          profile.id = sessionUser.id;
+        } else {
+          console.warn('No se encontró perfil para el usuario:', profileError.message);
+          return {
+            email: sessionUser.email || '',
+            role: 'viewer',
+            name: sessionUser.user_metadata?.full_name || 'Usuario'
+          };
+        }
       }
 
       return {
@@ -511,6 +540,42 @@ export const appsScriptApi = {
     } catch (error) {
       console.error('Error durante el proceso de login:', error);
       return null;
+    }
+  },
+
+  updateUserPassword: async (password: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      return { ok: true };
+    } catch (error: any) {
+      console.error('Error al actualizar contraseña:', error);
+      return { ok: false, error: error.message };
+    }
+  },
+
+
+  inviteUser: async (email: string, userData: { name: string; role: string; telefono?: string; dni?: string; home_address?: string; bank_account?: string }): Promise<{ ok: boolean; id?: string; error?: string }> => {
+    try {
+      const url = new URL(APPS_SCRIPT_URL);
+      url.searchParams.append('action', 'inviteUser');
+      url.searchParams.append('email', email);
+      url.searchParams.append('userData', JSON.stringify(userData));
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+      });
+      
+      const data = await response.json();
+      
+      if (!data.ok) {
+        throw new Error(data.error || 'Error desconocido del script');
+      }
+
+      return { ok: true, id: data.id }; 
+    } catch (error: any) {
+      console.error('Error al invitar usuario:', error);
+      return { ok: false, error: String(error) };
     }
   },
 
