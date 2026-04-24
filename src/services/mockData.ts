@@ -408,6 +408,7 @@ export interface Suggestion {
   snippet: string;
   body: string;
   isRead: boolean;
+  category?: 'fallo' | 'sugerencia' | 'otro' | string;
 }
 
 export const MOCK_PAGOS: PagoRecord[] = [];
