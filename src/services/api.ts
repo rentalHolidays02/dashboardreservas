@@ -692,13 +692,33 @@ export const appsScriptApi = {
         };
       }).filter(w => w.full_name && w.phone);
 
-      // Upsert en Supabase
+      // Upsert en Supabase usando el teléfono como clave única
       const { error } = await supabase
         .from('workers')
         .upsert(workersToSync, { onConflict: 'phone' });
 
-      if (error) console.error('Error en sincronización Supabase:', error);
-      else console.log('✅ Sincronización Excel -> Supabase completada');
+      if (error) {
+        console.error('Error en sincronización Supabase:', error);
+      } else {
+        // --- SINCRONIZAR ELIMINACIONES DEL EXCEL ---
+        // Extraemos los teléfonos que están actualmente en el Excel
+        const activePhones = workersToSync.map(w => w.phone);
+        
+        // Consultamos qué teléfonos tenemos en Supabase
+        const { data: dbWorkers } = await supabase.from('workers').select('id, phone');
+        if (dbWorkers) {
+          const dbPhones = dbWorkers.map(w => w.phone);
+          // Los que están en Supabase pero ya NO están en Excel, los eliminamos
+          const phonesToDelete = dbPhones.filter(phone => !activePhones.includes(phone) && phone !== '');
+          
+          if (phonesToDelete.length > 0) {
+            await supabase.from('workers').delete().in('phone', phonesToDelete);
+            console.log(`Sincronización: Eliminados ${phonesToDelete.length} trabajadores que fueron borrados del Excel.`);
+          }
+        }
+        
+        console.log('✅ Sincronización Excel -> Supabase completada');
+      }
     } catch (error) {
       console.error('Error sincronizando trabajadores:', error);
     }
@@ -746,17 +766,18 @@ export const appsScriptApi = {
 
   updateWorker: async (workerData: Worker): Promise<Worker> => {
     try {
-      // 1. Buscar en tiempo real la fila en el Excel por teléfono
-      let targetExcelId = await appsScriptApi.getExcelIdByPhone(workerData.telefono || '');
-      // Fallback a excelId de BD si la red fallase, pero getExcelIdByPhone es la prioridad
-      targetExcelId = targetExcelId || workerData.excelId || ''; 
+      // 1. IMPORTANTE: Buscar en el Excel usando el teléfono ORIGINAL (por si lo acaba de cambiar)
+      const originalWorker = currentWorkers.find(w => w.id === workerData.id);
+      const searchPhone = originalWorker?.telefono || workerData.telefono;
+      
+      let targetExcelId = await appsScriptApi.getExcelIdByPhone(searchPhone || '');
       
       const excelPhone = appsScriptApi.formatPhoneForExcel(workerData.telefono);
       
       // 2. Escritura en Excel
       const payload = {
         ...workerData,
-        id: targetExcelId, 
+        id: targetExcelId || '', // Si es un update, debería tener targetExcelId
         OPERARIO: workerData.fullName,
         MOVIL: excelPhone,
         telefono: excelPhone,
@@ -795,7 +816,7 @@ export const appsScriptApi = {
       if (error) throw error;
 
       const updatedWorkers = currentWorkers.map(w => 
-        w.id === workerData.id ? { ...workerData, excelId: targetExcelId } : w
+        w.id === workerData.id ? { ...workerData } : w
       );
       saveWorkers(updatedWorkers);
       return workerData;
@@ -877,13 +898,16 @@ export const appsScriptApi = {
     try {
       const workerToDelete = currentWorkers.find(w => w.id === id);
       
-      // Enviar delete al Apps Script usando su ID original de Excel
+      // Encontrar la fila exacta en Excel usando el teléfono ANTES de borrarlo
+      const targetExcelId = await appsScriptApi.getExcelIdByPhone(workerToDelete?.telefono || '');
+      
+      // Enviar delete al Apps Script usando el ID de fila
       fetch(WORKERS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ 
-          id: workerToDelete?.excelId, 
+          id: targetExcelId, 
           action: 'delete' 
         })
       });
