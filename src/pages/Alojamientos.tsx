@@ -3,7 +3,7 @@ import { Search, Plus, Filter, Loader2, Home } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
-import WorkerSelectionModal from '../components/accommodations/WorkerSelectionModal';
+import WorkerSelectionModal, { WorkerAssignmentDetail } from '../components/accommodations/WorkerSelectionModal';
 import AccommodationFilterModal, { AccommodationFilters } from '../components/accommodations/AccommodationFilterModal';
 import { appsScriptApi } from '../services/api';
 import { Accommodation, Worker } from '../services/mockData';
@@ -64,35 +64,46 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
     setIsViewModalOpen(true);
   };
 
-  const handleSaveWorkersForAccommodation = async (selectedWorkerNames: string[]) => {
+  const handleSaveWorkersForAccommodation = async (assignmentDetails: WorkerAssignmentDetail[]) => {
     if (!viewingAccommodation) return;
-    
+
     try {
       const accName = viewingAccommodation.name;
+      const assignedNames = new Set(assignmentDetails.map(d => d.workerName));
+
       const workersToUpdate = workers.map(worker => {
         const isCurrentlyAssigned = worker.accommodations?.includes(accName);
-        const shouldBeAssigned = selectedWorkerNames.includes(worker.fullName);
+        const shouldBeAssigned = assignedNames.has(worker.fullName);
+        const detail = assignmentDetails.find(d => d.workerName === worker.fullName);
 
         if (isCurrentlyAssigned && !shouldBeAssigned) {
           // Eliminar asignación
-          return { 
-            ...worker, 
-            accommodations: worker.accommodations?.filter(name => name !== accName) 
+          const newDetails = (worker.accommodationDetails || []).filter(d => d.accommodationName !== accName);
+          return {
+            ...worker,
+            accommodationDetails: newDetails,
+            accommodations: newDetails.map(d => d.accommodationName),
           };
-        } else if (!isCurrentlyAssigned && shouldBeAssigned) {
-          // Añadir asignación
-          return { 
-            ...worker, 
-            accommodations: [...(worker.accommodations || []), accName] 
+        } else if (shouldBeAssigned && detail) {
+          // Añadir o actualizar asignación con detalles
+          const filtered = (worker.accommodationDetails || []).filter(d => d.accommodationName !== accName);
+          const newDetails = [...filtered, {
+            accommodationName: accName,
+            precio: detail.precio,
+            sabanasIncluidas: detail.sabanasIncluidas,
+            toallasIncluidas: detail.toallasIncluidas,
+          }];
+          return {
+            ...worker,
+            accommodationDetails: newDetails,
+            accommodations: newDetails.map(d => d.accommodationName),
           };
         }
         return null;
-      }).filter(w => w !== null) as Worker[];
+      }).filter((w): w is Worker => w !== null);
 
-      // Actualizar en el API
       await Promise.all(workersToUpdate.map(w => appsScriptApi.updateWorker(w)));
-      
-      // Actualizar estado local
+
       const updatedWorkers = workers.map(w => {
         const update = workersToUpdate.find(up => up.id === w.id);
         return update || w;

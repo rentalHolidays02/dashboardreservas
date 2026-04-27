@@ -3,7 +3,7 @@ import {
   X, MapPin, Building2, Users, Home, 
   Hash, FileText, Info, Plus
 } from 'lucide-react';
-import { Accommodation, Worker } from '../../services/mockData';
+import { Accommodation, Worker, WorkerAccommodationDetails } from '../../services/mockData';
 import defaultAccImage from '../../assets/default_accommodation.png';
 
 interface AccommodationDetailModalProps {
@@ -176,6 +176,61 @@ const AccommodationDetailModal: React.FC<AccommodationDetailModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Assigned workers with price/linen details */}
+            {assignedWorkers.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-widest flex items-center justify-between">
+                  <span>Limpiadores y condiciones</span>
+                  {!isReadOnly && (
+                    <button onClick={onManageWorkers} className="text-orange-500 hover:text-orange-600 normal-case tracking-normal font-normal text-[10px]">
+                      Gestionar
+                    </button>
+                  )}
+                </h3>
+                {assignedWorkers.map(worker => {
+                  const detail: WorkerAccommodationDetails | undefined = (worker.accommodationDetails || []).find(
+                    d => d.accommodationName === accommodation.name
+                  );
+                  return (
+                    <div key={worker.id} className="flex items-center gap-3 bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-100 dark:border-stone-800 px-3 py-2.5">
+                      {/* Avatar */}
+                      <div className="w-7 h-7 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden shrink-0">
+                        {worker.photo ? (
+                          <img src={worker.photo} alt={worker.fullName} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-stone-500 text-[10px] font-medium">
+                            {worker.fullName[0]?.toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      {/* Name */}
+                      <span className="text-xs font-normal text-slate-700 dark:text-stone-200 flex-1 truncate">
+                        {toTitleCase(worker.fullName)}
+                      </span>
+                      {/* Details badges */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {detail && detail.precio > 0 && (
+                          <span className="px-2 py-0.5 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-100 dark:border-orange-800 rounded-full text-[10px] font-normal tabular-nums">
+                            {detail.precio.toLocaleString('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} €
+                          </span>
+                        )}
+                        {detail?.sabanasIncluidas && (
+                          <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800 rounded-full text-[10px]">
+                            🛏 Sábanas
+                          </span>
+                        )}
+                        {detail?.toallasIncluidas && (
+                          <span className="px-2 py-0.5 bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border border-teal-100 dark:border-teal-800 rounded-full text-[10px]">
+                            🛁 Toallas
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Expanded Notes Content Transition (Accordion style) */}
             <div 

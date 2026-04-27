@@ -534,8 +534,12 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
     }
   };
 
-  const handleSaveAssignments = async (names: string[]) => {
-    const updated = { ...worker, accommodations: names };
+  const handleSaveAssignments = async (details: import('../../services/mockData').WorkerAccommodationDetails[]) => {
+    const updated = {
+      ...worker,
+      accommodationDetails: details,
+      accommodations: details.map(d => d.accommodationName),
+    };
     await appsScriptApi.updateWorker(updated);
     if (onSave) await onSave(updated);
   };
@@ -1482,7 +1486,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
         isOpen={isAssignModalOpen}
         onClose={() => setIsAssignModalOpen(false)}
         allAccommodations={allAccommodations}
-        selectedAccommodations={worker.accommodations}
+        selectedAccommodationDetails={worker.accommodationDetails || worker.accommodations.map(name => ({ accommodationName: name, precio: 0, sabanasIncluidas: false, toallasIncluidas: false }))}
         onSave={handleSaveAssignments}
         workerName={worker.fullName}
       />
