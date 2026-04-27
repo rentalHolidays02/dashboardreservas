@@ -42,6 +42,7 @@ const ENTREGA_LLAVES_APPS_SCRIPT_URL = import.meta.env.VITE_ENTREGA_LLAVES_APPS_
 const SUGERENCIAS_APPS_SCRIPT_URL = 
   import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || 
   'https://script.google.com/macros/s/AKfycbz9MwFzH_C0yQsW5F3_KDsZ23pd9dtOMCcW6jJmN-ON9H44l0EBd3DzatWTwzpK0mS2/exec';
+const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL || '';
 
 type AppsScriptJsonResponse = { ok: boolean; error?: string; [k: string]: any };
 
@@ -634,6 +635,37 @@ export const appsScriptApi = {
     } catch (error: any) {
       console.error('Error al actualizar contraseña:', error);
       return { ok: false, error: error.message };
+    }
+  },
+
+  uploadReportPDF: async (blob: Blob, filename: string): Promise<{ ok: boolean, error?: string }> => {
+    try {
+      if (!SAVE_PDF_APPS_SCRIPT_URL) {
+        throw new Error('La URL de SAVE_PDF_APPS_SCRIPT_URL no está configurada.');
+      }
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const response = await fetch(SAVE_PDF_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'uploadPDF',
+          filename,
+          base64,
+          folderId: '1oqpnFs26ig9rlbXM1ud2akXTu_3GA2Wu'
+        })
+      });
+      // no-cors no nos permite leer la respuesta, por lo que asumimos que está ok si no lanza excepción
+      return { ok: true };
+    } catch (e: any) {
+      console.error('Error al subir PDF:', e);
+      return { ok: false, error: e.message };
     }
   },
 

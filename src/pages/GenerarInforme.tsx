@@ -142,12 +142,28 @@ const GenerarInforme: React.FC = () => {
     await new Promise(r => setTimeout(r, 900));
     setExportStep('building');
     await new Promise(r => setTimeout(r, 700));
-    await generatePDF(
+    const result = await generatePDF(
       { pagos: fPagos, incidencias: fIncid, cleans: fCleans, handyman: fHandy },
       options,
       { periodo: selectedPeriod, workerName, accName },
       logoSrc,
+      true
     );
+    
+    if (result) {
+      const { blob, fileName } = result;
+
+      // Descargar en el equipo
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      // Subir a Drive
+      await appsScriptApi.uploadReportPDF(blob, fileName);
+    }
     setExportStep('done');
     setTimeout(() => setExportStep('idle'), 3000);
   };
