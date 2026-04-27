@@ -577,19 +577,29 @@ const GestionUsuarios: React.FC = () => {
   const handleSave = async (u: AppUser) => {
     const isNew = !u.id;
     try {
-      // Nota: Para usuarios nuevos reales se requiere supabase.auth.signUp
-      // Por ahora, gestionamos el perfil
-      const generateUUID = () => {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-          const r = Math.random() * 16 | 0;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
-          return v.toString(16);
+      let targetId = u.id;
+
+      if (isNew) {
+        // 1. Invitar al usuario vía Google Apps Script y obtener su ID real
+        const inviteResult = await appsScriptApi.inviteUser(u.email, {
+          name: u.name,
+          role: u.role,
+          telefono: u.telefono,
+          dni: u.dni,
+          home_address: u.home_address,
+          bank_account: u.bank_account
         });
-      };
+
+        if (!inviteResult.ok || !inviteResult.id) {
+          throw new Error('No se pudo enviar la invitación o no se obtuvo ID. ' + (inviteResult.error || ''));
+        }
+
+        // Usamos el ID real de Supabase Auth
+        targetId = inviteResult.id;
+        showToast('Invitación enviada. Creando perfil...');
+      } 
       
-      const targetId = u.id || (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : generateUUID());
-      
-      // 1. Guardar Perfil (Público)
+      // 2. Guardar/Actualizar Perfil DESDE LA APP (donde sabemos que funciona)
       await appsScriptApi.updateProfile(targetId, {
         email: u.email,
         name: u.name,
@@ -597,7 +607,7 @@ const GestionUsuarios: React.FC = () => {
         telefono: u.telefono
       });
 
-      // 2. Guardar Datos Sensibles
+      // 3. Guardar Datos Sensibles DESDE LA APP
       await appsScriptApi.updateSensitiveData(targetId, {
         dni: u.dni,
         home_address: u.home_address,
@@ -609,11 +619,10 @@ const GestionUsuarios: React.FC = () => {
         if (exists) return prev.map(p => p.id === u.id ? u : p);
         return [{ ...u, id: targetId }, ...prev];
       });
-      showToast(isNew ? 'Usuario creado (perfil)' : 'Usuario actualizado correctamente');
+      showToast(isNew ? 'Usuario creado y perfil guardado con éxito' : 'Usuario actualizado correctamente');
     } catch (error: any) {
       console.error('Error al guardar usuario:', error);
-      const errorMsg = error.message || 'Error al guardar los cambios';
-      showToast(errorMsg);
+      showToast(error.message || 'Error al guardar los cambios');
     }
   };
 
