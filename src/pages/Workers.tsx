@@ -48,8 +48,13 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
   };
 
   useEffect(() => {
-    fetchWorkers();
-    // Cargar nombres de alojamientos para el buscador
+    // 1. Sincronizar Excel -> Supabase en segundo plano
+    appsScriptApi.syncWorkersFromSheets().then(() => {
+      // 2. Una vez sincronizado, cargar los trabajadores de Supabase
+      fetchWorkers();
+    });
+
+    // 3. Cargar nombres de alojamientos
     appsScriptApi.getAccommodations().then(accs => {
       setAccommodations(accs.map(a => a.name).sort());
     }).catch(console.error);
@@ -97,14 +102,8 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
         await appsScriptApi.addWorker(workerData);
       }
       
+      // Solo recargamos la lista completa una vez
       await fetchWorkers();
-
-      // Refresh profileWorker if it's the one being edited
-      if (profileWorker && workerData.id === profileWorker.id) {
-        const updated = await appsScriptApi.getWorkers();
-        const fresh = updated.find(w => w.id === workerData.id);
-        if (fresh) setProfileWorker(fresh);
-      }
     } catch (error) {
       console.error('Error saving worker:', error);
       throw error;

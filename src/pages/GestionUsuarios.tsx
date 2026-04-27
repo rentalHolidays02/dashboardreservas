@@ -45,17 +45,7 @@ interface AppUser {
 }
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_USERS: AppUser[] = [
-  { id: '1', name: 'Adrián García',  email: 'admin@rh.local',        role: 'admin',  status: 'active',   lastLogin: '2026-04-09T08:30:00', createdAt: '2024-01-15', avatar: 'AG', onlineStatus: 'online',  currentActivity: 'Dashboard',         sessionStart: '2026-04-09T08:30:00' },
-  { id: '2', name: 'María López',    email: 'maria.lopez@rh.local',  role: 'editor', status: 'active',   lastLogin: '2026-04-09T09:05:00', createdAt: '2024-03-02', avatar: 'ML', onlineStatus: 'working', currentActivity: 'Editando pagos',    sessionStart: '2026-04-09T09:05:00' },
-  { id: '3', name: 'Carlos Martínez',email: 'carlos.m@rh.local',     role: 'viewer', status: 'active',   lastLogin: '2026-04-09T07:50:00', createdAt: '2024-05-20', avatar: 'CM', onlineStatus: 'away',    currentActivity: 'Inactivo 12 min',   sessionStart: '2026-04-09T07:50:00' },
-  { id: '4', name: 'Laura Sánchez',  email: 'laura.s@rh.local',      role: 'editor', status: 'inactive', lastLogin: '2025-12-01T14:00:00', createdAt: '2024-06-11', avatar: 'LS', onlineStatus: 'offline' },
-  { id: '5', name: 'Javier Ruiz',    email: 'javier.r@rh.local',     role: 'viewer', status: 'pending',  lastLogin: null,                  createdAt: '2026-04-01', avatar: 'JR', onlineStatus: 'offline' },
-  { id: '6', name: 'Sofía Torres',   email: 'sofia.t@rh.local',      role: 'viewer', status: 'active',   lastLogin: '2026-04-09T08:55:00', createdAt: '2025-01-09', avatar: 'ST', onlineStatus: 'working', currentActivity: 'Revisando informes', sessionStart: '2026-04-09T08:55:00' },
-  { id: '7', name: 'Pablo Navarro',  email: 'pablo.n@rh.local',      role: 'editor', status: 'active',   lastLogin: '2026-04-08T11:30:00', createdAt: '2025-02-14', avatar: 'PN', onlineStatus: 'offline' },
-  { id: '8', name: 'Elena Moreno',   email: 'elena.m@rh.local',      role: 'viewer', status: 'inactive', lastLogin: '2025-11-20T10:00:00', createdAt: '2024-08-22', avatar: 'EM', onlineStatus: 'offline' },
-];
+// Los usuarios se cargan en tiempo de ejecución desde Supabase (profiles table).
 
 // ─── Online status config ─────────────────────────────────────────────────────
 

@@ -23,22 +23,22 @@ import { supabase } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets API Configuration
-const GOOGLE_API_KEY = 'AIzaSyAU6iF2xDuxgrGv6q6Z8wQg0MkZVbFXc5M';
-const SPREADSHEET_ID = '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4'; // Alojamientos
-const WORKERS_SPREADSHEET_ID = '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; // Pagos Generales (Operarios)
-const CLEANS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; // INFORMES_OPERARIOS
+const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
+const SPREADSHEET_ID = import.meta.env.VITE_SPREADSHEET_ID || '1Z1qYQ2ykQG2Kq1hO9K2PdjES_OvOR2d1yKPv7MdyAa4'; // Alojamientos
+const WORKERS_SPREADSHEET_ID = import.meta.env.VITE_WORKERS_SPREADSHEET_ID || '1ntCYcUaUvsMWD7bOCaVmEzBqnHqf09MFd6SEjwv1OWM'; // Pagos Generales (Operarios)
+const CLEANS_SPREADSHEET_ID = import.meta.env.VITE_CLEANS_SPREADSHEET_ID || '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4'; // INFORMES_OPERARIOS
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyn0aV7aHQdvda8JWOw6YO2-dJKw4c8d3CxhffiesvbxRBBcSttLehXZ7di8yYMlkQqig/exec';
+const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbzMYYFUlgbqqfbVIGSKLO7LCDyg7aZpsIXamrq8F7eNcRqdtK9A1R8lVTI6OD0deeWr/exec';
 const CLEANS_APPS_SCRIPT_URL =
   import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL ||
   'https://script.google.com/macros/s/AKfycbzm72ot1nECxcBf406o--XzL2jty55cxNRrG1Nbd64YAmYU4wl7kwi842jjlybE4ErVgw/exec';
-const WORKERS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
-const INCIDENCIAS_SPREADSHEET_ID = '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
+const WORKERS_APPS_SCRIPT_URL = import.meta.env.VITE_WORKERS_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwhZWguaA9HkDCRKIeS5eAxoMR-u6hKA7FoJ2yn_mfBTA3IyCH1Xoey93SGh10CTc5uDA/exec';
+const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || '1xSeU9XyvZIWuifWNXgR99l6qftpsRT4hg55tsZn7IE4';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
-const INCIDENCIAS_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxX8IQ6wsfmnJt77UWCpR3Zt0ND0RDFXafIEgrzZtBC5QzMSeLLYipcYx3l6qRWvPA9LA/exec';
+const INCIDENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbxX8IQ6wsfmnJt77UWCpR3Zt0ND0RDFXafIEgrzZtBC5QzMSeLLYipcYx3l6qRWvPA9LA/exec';
 const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:S";
-const ENTREGA_LLAVES_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbGhmFQLhv7ndi_pdnFLGgUTYKcygm1H3H8R0kpOGX_SyxHI2G3snlaDHkawH1DUneUA/exec';
+const ENTREGA_LLAVES_APPS_SCRIPT_URL = import.meta.env.VITE_ENTREGA_LLAVES_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwbGhmFQLhv7ndi_pdnFLGgUTYKcygm1H3H8R0kpOGX_SyxHI2G3snlaDHkawH1DUneUA/exec';
 const SUGERENCIAS_APPS_SCRIPT_URL = 
   import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || 
   'https://script.google.com/macros/s/AKfycbz9MwFzH_C0yQsW5F3_KDsZ23pd9dtOMCcW6jJmN-ON9H44l0EBd3DzatWTwzpK0mS2/exec';
@@ -354,22 +354,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 type CleanSheetType = 'normal' | 'initial' | 'handyman';
 
-const buildWorkersSheetPayload = (workerData: Partial<Worker> & { fullName?: string; telefono?: string; telefonoBizum?: string }) => {
-  const fullName = String(workerData.fullName || '').trim();
-  const telefonoText = workerData.telefono ? `'${String(workerData.telefono).replace(/^'/, '')}` : '';
-  const telefonoBizumText = workerData.telefonoBizum ? `'${String(workerData.telefonoBizum).replace(/^'/, '')}` : '';
 
-  return {
-    ...workerData,
-    // Columnas del Excel (por compatibilidad, mandamos varias claves posibles)
-    OPERARIO: fullName,
-    OPERARIOS: fullName,
-    MOVIL: telefonoText,
-    Telefono: telefonoText,
-    telefono: telefonoText,
-    telefonoBizum: telefonoBizumText,
-  };
-};
 
 const getCleanSheetName = (type: CleanSheetType): string => {
   if (type === 'normal') return 'Checkout_Limpieza_Normal';
@@ -457,7 +442,7 @@ const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | 
 export const appsScriptApi = {
   login: async (email: string, pass: string): Promise<User | null> => {
     try {
-      // 1. Intentar login con Supabase Auth
+      // Autenticar exclusivamente con Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password: pass,
@@ -465,35 +450,24 @@ export const appsScriptApi = {
 
       if (authError) {
         console.error('Error de autenticación:', authError.message);
-        // Fallback para trabajadores que aún no están en Supabase (Opcional, según prefiera el usuario)
-        if (pass === 'rh-worker') {
-           const workers = await appsScriptApi.getWorkers();
-           const worker = workers.find(w => w.email?.toLowerCase() === email.toLowerCase());
-           if (worker) return { email: worker.email || email, role: 'trabajador', name: worker.fullName, telefono: worker.telefono };
-        }
         return null;
       }
 
       const sessionUser = authData.user;
       if (!sessionUser) return null;
 
-      // 2. Obtener datos del perfil (rol, nombre completo) desde la tabla 'profiles'
-      if (sessionUser.email === 'rentalholidays.es@gmail.com') {
-        return {
-          id: sessionUser.id,
-          email: sessionUser.email || '',
-          role: 'admin',
-          name: 'Cati (Admin)',
-          telefono: '+34 617 21 25 66'
-        };
-      }
-
-      let { data: profile, error: profileError } = await supabase
+      // Obtener rol y datos del perfil desde la tabla 'profiles' de Supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, email, full_name, role, phone')
         .eq('id', sessionUser.id)
         .single();
 
+      if (profileError || !profile) {
+        console.warn('No se encontró perfil para el usuario:', profileError?.message);
+        // Sin perfil, denegar acceso
+        await supabase.auth.signOut();
+        return null;
       if (profileError) {
         console.warn('Supabase bloqueó la lectura del perfil por RLS. Intentando a través del puente de Google...');
         // Si Supabase nos bloquea (RLS), le pedimos a Google que busque el perfil con su clave maestra
@@ -526,6 +500,7 @@ export const appsScriptApi = {
       }
 
       return {
+        id: profile.id,
         email: profile.email,
         role: profile.role as any,
         name: profile.full_name,
@@ -664,57 +639,72 @@ export const appsScriptApi = {
 
   getWorkers: async (): Promise<Worker[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetchWithRetry(url);
+      // 1. Fetch from Supabase 'workers' table
+      const { data: dbWorkers, error: dbError } = await supabase
+        .from('workers')
+        .select(`
+          *,
+          profile:profile_id (
+            id,
+            email,
+            full_name,
+            phone
+          )
+        `)
+        .order('full_name', { ascending: true });
 
-      if (!response.ok) {
-        throw new Error(`Error en la API de Google Sheets (Operarios): ${response.statusText}`);
+      if (dbError) throw dbError;
+
+      // 2. Fetch sensitive data if available (DNI/IBAN)
+      // Note: We'll fetch all sensitive data for linked profiles to merge it
+      const profileIds = dbWorkers.filter(w => w.profile_id).map(w => w.profile_id);
+      let sensitiveMap: Record<string, any> = {};
+      
+      if (profileIds.length > 0) {
+        const { data: sensitiveData } = await supabase
+          .from('worker_sensitive_data')
+          .select('*')
+          .in('id', profileIds);
+        
+        if (sensitiveData) {
+          sensitiveMap = sensitiveData.reduce((acc, curr) => ({
+            ...acc,
+            [curr.id]: curr
+          }), {});
+        }
       }
 
-      const data = await response.json();
-      if (!data.values || data.values.length === 0) {
-        return currentWorkers;
-      }
+      // 3. Map to Worker interface
+      const baseWorkers: Worker[] = dbWorkers.map((w: any): Worker => {
+        const sensitive = w.profile_id ? sensitiveMap[w.profile_id] : null;
+        
+        return {
+          id: w.id,
+          excelId: w.excel_id,
+          profileId: w.profile_id,
+          fullName: w.full_name,
+          telefono: w.phone || '',
+          email: w.email || '',
+          dni: sensitive?.dni || w.dni || '',
+          iban: sensitive?.bank_account || w.iban || '',
+          tipoPago: w.payment_method as Worker['tipoPago'],
+          pagoPorReserva: Number(w.pay_per_reservation || 0),
+          precioPorKm: Number(w.price_per_km || 0),
+          notes: w.notes || '',
+          netMoneyMonth: 0,
+          owedMoney: Number(w.pending_balance || 0),
+          efectivoRetenido: Number(w.retained_cash || 0),
+          cleansCountMonth: 0,
+          kmsMonth: 0,
+          extraHoursMonth: 0,
+          accommodations: [],
+          tipoTrabajador: w.worker_type,
+          telefonoBizum: w.bizum_phone,
+          photo: w.photo_url
+        } as any; // Cast for now due to additional fields
+      });
 
-      const allValues = data.values as any[][];
-      const headers = allValues[0] as string[];
-      const rows = allValues.slice(1);
-
-      const baseWorkers: Worker[] = rows
-        .map((row: any[], index: number): Worker => {
-          const getVal = (headerName: string) => {
-            const norm = normalizeHeader(headerName);
-            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-            return idx !== -1 ? row[idx] : undefined;
-          };
-
-          const medioPago = String(getVal('MEDIO DE PAGO') || '').toLowerCase();
-          const tipoPago: Worker['tipoPago'] = medioPago.includes('bizum') ? 'bizum' :
-                                               medioPago.includes('tarjeta') ? 'tarjeta' :
-                                               'efectivo';
-
-          return {
-            id: `real_worker_${index + 2}`,
-            fullName: String(getVal('OPERARIO') || 'Sin nombre'),
-            telefono: String(getVal('MOVIL') || ''),
-            iban: String(getVal('CUENTA BANCARIA') || ''),
-            tipoPago,
-            pagoPorReserva: parseExcelNumber(getVal('PAGO POR RESERVA')),
-            precioPorKm: parseExcelNumber(getVal('KILOMETRAJE')),
-            notes: String(getVal('OBSERVACIONES') || ''),
-            netMoneyMonth: 0,
-            owedMoney: parseExcelNumber(getVal('SALDO PENDIENTE')),
-            efectivoRetenido: parseExcelNumber(getVal('EFECTIVO RETENIDO')),
-            cleansCountMonth: 0,
-            kmsMonth: 0,
-            extraHoursMonth: 0,
-            accommodations: []
-          };
-        })
-        .filter((w: Worker) => w.fullName && w.fullName.trim() !== '' && w.fullName !== 'Sin nombre');
-
-      // Calcular valores derivados cruzando con registros de limpieza y entrega de llaves.
-      // Si alguna llamada falla, se continúa con arrays vacíos para no romper la carga.
+      // 4. Compute derived values (same as before)
       const [normalCleans, initialCleans, handymanRecords, entregaLlaves] = await Promise.all([
         appsScriptApi.getNormalCleans().catch(() => []),
         appsScriptApi.getInitialCleans().catch(() => []),
@@ -730,33 +720,178 @@ export const appsScriptApi = {
           kmsMonth: Math.round(earnings.kms * 100) / 100,
           extraHoursMonth: Math.round(earnings.extraHours * 100) / 100,
           netMoneyMonth: Math.round(earnings.totalOwed * 100) / 100,
-          // Mantenemos owedMoney y efectivoRetenido que vienen de las columnas estáticas del Excel
         };
       });
 
       saveWorkers(workers);
       return workers;
     } catch (error) {
-      console.error('Error fetching workers from Sheets:', error);
+      console.error('Error fetching workers from Supabase:', error);
       return currentWorkers;
+    }
+  },
+
+  // --- Sincronización Excel -> Supabase ---
+  syncWorkersFromSheets: async (): Promise<void> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetchWithRetry(url);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (!data.values || data.values.length < 2) return;
+
+      const headers = data.values[0];
+      const rows = data.values.slice(1);
+
+      const workersToSync = rows.map((row: any[], index: number) => {
+        const getVal = (headerName: string) => {
+          const norm = normalizeHeader(headerName);
+          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+          return idx !== -1 ? row[idx] : undefined;
+        };
+
+        const medioPago = String(getVal('MEDIO DE PAGO') || '').toLowerCase();
+        const tipoPago = medioPago.includes('bizum') ? 'bizum' :
+                         medioPago.includes('tarjeta') ? 'tarjeta' :
+                         'efectivo';
+
+        return {
+          full_name: String(getVal('OPERARIO') || ''),
+          phone: String(getVal('MOVIL') || ''),
+          iban: String(getVal('CUENTA BANCARIA') || ''),
+          payment_method: tipoPago,
+          pay_per_reservation: parseExcelNumber(getVal('PAGO POR RESERVA')),
+          price_per_km: parseExcelNumber(getVal('KILOMETRAJE')),
+          notes: String(getVal('OBSERVACIONES') || ''),
+          pending_balance: parseExcelNumber(getVal('SALDO PENDIENTE')),
+          retained_cash: parseExcelNumber(getVal('EFECTIVO RETENIDO')),
+          active: true
+        };
+      }).filter(w => w.full_name && w.phone);
+
+      // Upsert en Supabase usando el teléfono como clave única
+      const { error } = await supabase
+        .from('workers')
+        .upsert(workersToSync, { onConflict: 'phone' });
+
+      if (error) {
+        console.error('Error en sincronización Supabase:', error);
+      } else {
+        // --- SINCRONIZAR ELIMINACIONES DEL EXCEL ---
+        // Extraemos los teléfonos que están actualmente en el Excel
+        const activePhones = workersToSync.map(w => w.phone);
+        
+        // Consultamos qué teléfonos tenemos en Supabase
+        const { data: dbWorkers } = await supabase.from('workers').select('id, phone');
+        if (dbWorkers) {
+          const dbPhones = dbWorkers.map(w => w.phone);
+          // Los que están en Supabase pero ya NO están en Excel, los eliminamos
+          const phonesToDelete = dbPhones.filter(phone => !activePhones.includes(phone) && phone !== '');
+          
+          if (phonesToDelete.length > 0) {
+            await supabase.from('workers').delete().in('phone', phonesToDelete);
+            console.log(`Sincronización: Eliminados ${phonesToDelete.length} trabajadores que fueron borrados del Excel.`);
+          }
+        }
+        
+        console.log('✅ Sincronización Excel -> Supabase completada');
+      }
+    } catch (error) {
+      console.error('Error sincronizando trabajadores:', error);
+    }
+  },
+
+  // --- Helper para formatear el teléfono como quiere el Excel ---
+  formatPhoneForExcel: (phone: string = ''): string => {
+    let cleaned = phone.replace(/\s+/g, '').replace(/'/g, '');
+    if (!cleaned) return '';
+    if (!cleaned.startsWith('+')) cleaned = '+34' + cleaned;
+    const prefix = cleaned.slice(0, 3);
+    const rest = cleaned.slice(3);
+    const formatted = `${prefix} ${rest.slice(0,3)} ${rest.slice(3,5)} ${rest.slice(5,7)} ${rest.slice(7,9)}`.trim();
+    return `'${formatted}`;
+  },
+
+  // --- Helper para buscar el ID real del Excel por Teléfono en tiempo real ---
+  getExcelIdByPhone: async (phone: string): Promise<string | null> => {
+    if (!phone) return null;
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetchWithRetry(url);
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data.values || data.values.length === 0) return null;
+      
+      const headers = data.values[0] || [];
+      const movilIdx = headers.findIndex((h: string) => String(h).toUpperCase().includes('MOVIL'));
+      if (movilIdx === -1) return null;
+      
+      const searchPhone = phone.replace(/\s+/g, '').replace(/'/g, '');
+      
+      for (let i = 1; i < data.values.length; i++) {
+        const cellPhone = String(data.values[i][movilIdx] || '').replace(/\s+/g, '').replace(/'/g, '');
+        if (cellPhone === searchPhone) {
+           return `real_worker_${i + 1}`; // i=1 es la fila 2 del excel
+        }
+      }
+      return null;
+    } catch (e) {
+      console.error('Error buscando ID en Excel:', e);
+      return null;
     }
   },
 
   updateWorker: async (workerData: Worker): Promise<Worker> => {
     try {
+      // 1. IMPORTANTE: Buscar en el Excel usando el teléfono ORIGINAL (por si lo acaba de cambiar)
+      const originalWorker = currentWorkers.find(w => w.id === workerData.id);
+      const searchPhone = originalWorker?.telefono || workerData.telefono;
+      
+      let targetExcelId = await appsScriptApi.getExcelIdByPhone(searchPhone || '');
+      
+      const excelPhone = appsScriptApi.formatPhoneForExcel(workerData.telefono);
+      
+      // 2. Escritura en Excel
       const payload = {
-        ...buildWorkersSheetPayload(workerData),
+        ...workerData,
+        id: targetExcelId || '', // Si es un update, debería tener targetExcelId
+        OPERARIO: workerData.fullName,
+        MOVIL: excelPhone,
+        telefono: excelPhone,
+        Telefono: excelPhone,
         action: 'update'
       };
       
       fetch(WORKERS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
+
+      // 3. Escritura en Supabase
+      const { error } = await supabase
+        .from('workers')
+        .update({
+          full_name: workerData.fullName,
+          phone: workerData.telefono,
+          email: workerData.email,
+          payment_method: workerData.tipoPago,
+          pay_per_reservation: workerData.pagoPorReserva,
+          price_per_km: workerData.precioPorKm,
+          notes: workerData.notes,
+          pending_balance: workerData.owedMoney,
+          retained_cash: workerData.efectivoRetenido,
+          bizum_phone: workerData.telefonoBizum,
+          worker_type: workerData.tipoTrabajador,
+          photo_url: workerData.photo,
+          iban: workerData.iban,
+          dni: workerData.dni
+        })
+        .eq('id', workerData.id);
+
+      if (error) throw error;
 
       const updatedWorkers = currentWorkers.map(w => 
         w.id === workerData.id ? { ...workerData } : w
@@ -764,83 +899,155 @@ export const appsScriptApi = {
       saveWorkers(updatedWorkers);
       return workerData;
     } catch (error) {
-      console.error('Error updating worker in Sheets:', error);
+      console.error('Error updating worker (Dual Write):', error);
       throw error;
     }
   },
 
   addWorker: async (workerData: Omit<Worker, 'id'>): Promise<Worker> => {
     try {
-      const payload = buildWorkersSheetPayload(workerData);
+      // 1. OBLIGATORIO: Revisar el Excel en tiempo real para evitar duplicados absolutos
+      const existingExcelId = await appsScriptApi.getExcelIdByPhone(workerData.telefono || '');
+      
+      if (existingExcelId) {
+        console.warn('El trabajador ya existe en el Excel con este teléfono. Transformando en UPDATE...');
+        // Buscar el UUID correspondiente en BD para poder hacer el update
+        const existingBD = currentWorkers.find(w => w.telefono === workerData.telefono);
+        if (existingBD) {
+           return appsScriptApi.updateWorker({ ...workerData, id: existingBD.id, excelId: existingExcelId } as Worker);
+        }
+      }
 
-      // Intentamos sincronizar con Google Sheets
+      const excelPhone = appsScriptApi.formatPhoneForExcel(workerData.telefono);
+
+      // 2. Escritura en Excel (Como no existe, enviamos string vacío para que el Script haga AppendRow)
+      const payload = {
+        ...workerData,
+        id: '', 
+        OPERARIO: workerData.fullName,
+        MOVIL: excelPhone,
+        telefono: excelPhone,
+        Telefono: excelPhone,
+        action: 'add'
+      };
+
       fetch(WORKERS_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(payload)
       });
 
-      // Generar ID temporal local hasta la próxima recarga del Excel
-      const tempId = `temp_${Date.now()}`;
-      const newWorker: Worker = {
-        ...workerData,
-        id: tempId
-      };
-      
+      // 3. Escritura en Supabase
+      const { data, error } = await supabase
+        .from('workers')
+        .insert([{
+          full_name: workerData.fullName,
+          phone: workerData.telefono,
+          email: workerData.email,
+          payment_method: workerData.tipoPago,
+          pay_per_reservation: workerData.pagoPorReserva,
+          price_per_km: workerData.precioPorKm,
+          notes: workerData.notes,
+          pending_balance: workerData.owedMoney,
+          retained_cash: workerData.efectivoRetenido,
+          bizum_phone: workerData.telefonoBizum,
+          worker_type: workerData.tipoTrabajador,
+          photo_url: workerData.photo,
+          iban: workerData.iban,
+          dni: workerData.dni
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newWorker: Worker = { ...workerData, id: data.id } as Worker;
       const updatedWorkers = [...currentWorkers, newWorker];
       saveWorkers(updatedWorkers);
       return newWorker;
     } catch (error) {
-      console.error('Error adding worker to Sheets:', error);
+      console.error('Error adding worker (Dual Write):', error);
       throw error;
     }
   },
 
   deleteWorker: async (id: string): Promise<boolean> => {
     try {
-      // Solo enviar al Apps Script si el ID viene del Excel real
-      // Los IDs temporales (temp_*) no tienen fila real y enviarles delete podría romper el Excel
-      const isRealExcelRow = id.startsWith('real_worker_');
-      if (isRealExcelRow) {
-        await fetch(WORKERS_APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ id, action: 'delete' })
-        });
-      }
+      const workerToDelete = currentWorkers.find(w => w.id === id);
+      
+      // Encontrar la fila exacta en Excel usando el teléfono ANTES de borrarlo
+      const targetExcelId = await appsScriptApi.getExcelIdByPhone(workerToDelete?.telefono || '');
+      
+      // Enviar delete al Apps Script usando el ID de fila
+      fetch(WORKERS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ 
+          id: targetExcelId, 
+          action: 'delete' 
+        })
+      });
+
+      const { error } = await supabase
+        .from('workers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
 
       const updatedWorkers = currentWorkers.filter(w => w.id !== id);
       saveWorkers(updatedWorkers);
       return true;
     } catch (error) {
-      console.error('Error deleting worker from Sheets:', error);
+      console.error('Error deleting worker from Supabase:', error);
       throw error;
     }
   },
 
   restoreWorker: async (worker: Worker): Promise<void> => {
     try {
-      const isRealExcelRow = worker.id.startsWith('real_worker_');
-      if (isRealExcelRow) {
-        const payload = {
-          ...buildWorkersSheetPayload(worker),
-          action: 'restore',
-        };
-        fetch(WORKERS_APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(payload),
-        });
-      }
+      // Restaurar en Excel
+      const payload = {
+        ...worker,
+        OPERARIO: worker.fullName,
+        MOVIL: `'${worker.telefono}`,
+        action: 'restore',
+      };
+      fetch(WORKERS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+      });
+
+      const { error } = await supabase
+        .from('workers')
+        .insert([{
+          id: worker.id,
+          full_name: worker.fullName,
+          phone: worker.telefono,
+          email: worker.email,
+          payment_method: worker.tipoPago,
+          pay_per_reservation: worker.pagoPorReserva,
+          price_per_km: worker.precioPorKm,
+          notes: worker.notes,
+          pending_balance: worker.owedMoney,
+          retained_cash: worker.efectivoRetenido,
+          bizum_phone: worker.telefonoBizum,
+          worker_type: worker.tipoTrabajador,
+          photo_url: worker.photo,
+          iban: worker.iban,
+          dni: worker.dni
+        }]);
+
+      if (error) throw error;
+      
       const updatedWorkers = [worker, ...currentWorkers.filter(w => w.id !== worker.id)];
       saveWorkers(updatedWorkers);
     } catch (error) {
-      console.error('Error restoring worker:', error);
+      console.error('Error restoring worker in Supabase:', error);
       throw error;
     }
   },
