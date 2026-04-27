@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { NavigationGuardProvider } from './context/NavigationGuardContext';
@@ -49,6 +49,50 @@ function App() {
       localStorage.setItem('rh_user', JSON.stringify(updatedUser));
     }
   };
+
+  // Verificación de integridad del perfil al cargar
+  useEffect(() => {
+    const verifyProfile = async () => {
+      // Solo verificamos si ya hay un usuario cargado de localStorage
+      if (user && (user.role === 'viewer' || user.name === 'Usuario' || !user.id)) {
+        console.log('🔍 Verificando integridad del perfil...');
+        try {
+          const { supabase } = await import('./services/supabaseClient');
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (session && session.user) {
+            const { appsScriptApi } = await import('./services/api');
+            // Intentamos un login silencioso (re-obtener perfil)
+            const freshUser = await appsScriptApi.getProfileByEmail(session.user.email || '');
+
+            if (freshUser && (freshUser.role !== user.role || freshUser.name !== user.name)) {
+              console.log('✅ Perfil actualizado detectado:', freshUser.role);
+              handleLoginSuccess(freshUser);
+            }
+          }
+        } catch (e) {
+          console.error('Error verificando perfil:', e);
+        }
+      }
+    };
+    verifyProfile();
+  }, [user]);
+
+  // Registro de actividad (Última conexión)
+  useEffect(() => {
+    if (user && user.id) {
+      const updateActivity = async () => {
+        const { supabase: sb } = await import('./services/supabaseClient');
+        await sb.from('profiles').update({ 
+          last_seen: new Date().toISOString() 
+        }).eq('id', user.id);
+      };
+      updateActivity();
+      // Actualizar cada 2 minutos mientras la pestaña esté abierta
+      const interval = setInterval(updateActivity, 120000);
+      return () => clearInterval(interval);
+    }
+  }, [user?.id]);
 
   return (
     <ThemeProvider>

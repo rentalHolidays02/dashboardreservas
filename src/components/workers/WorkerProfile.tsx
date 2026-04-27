@@ -839,7 +839,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                   >
                     <Pencil size={11} />
                   </button>
-                  {worker.efectivoRetenido > 0 && (
+                  {(worker.efectivoRetenido ?? 0) > 0 && (
                     <button
                       onClick={handlePaidRetenido}
                       className="ml-auto text-[10px] text-orange-500 hover:text-orange-600 font-normal underline underline-offset-4"
@@ -928,8 +928,8 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
               <EditableRow icon={<Hash size={12} />} label="DNI / NIE" value={draft.dni} mono isEditing={isEditing} onChange={v => setDraftField('dni', v)} />
               <EditableRow icon={<Phone size={12} />} label="Teléfono" value={draft.telefono} isEditing={isEditing} onChange={v => setDraftField('telefono', v)} type="tel" />
               <EditableRow icon={<Mail size={12} />} label="Email" value={draft.email} isEditing={isEditing} onChange={v => setDraftField('email', v)} type="email" />
-              <EditableRow icon={<MapPin size={12} />} label="Dirección" value={draft.direccion} isEditing={isEditing} onChange={v => setDraftField('direccion', v)} />
-              <EditableRow icon={<Smartphone size={12} />} label="Ubicación real-time" value={draft.location} isEditing={isEditing} onChange={v => setDraftField('location', v)} />
+              <EditableRow icon={<MapPin size={12} />} label="Dirección" value={(draft as any).direccion} isEditing={isEditing} onChange={v => setDraftField('direccion' as any, v)} />
+              <EditableRow icon={<Smartphone size={12} />} label="Ubicación real-time" value={(draft as any).location} isEditing={isEditing} onChange={v => setDraftField('location' as any, v)} />
             </div>
 
             <SectionTitle>Configuración de pagos</SectionTitle>
@@ -1064,7 +1064,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 dark:text-stone-500">
                       <CalendarRange size={10} />{fmtDatetime(r.checkinFecha)}
                       <span className="mx-1 opacity-30">|</span>
-                      <Euro size={10} />{fmtCurrency(r.cobro)}
+                      <Euro size={10} />{fmtCurrency((r as any).cobro ?? 0)}
                     </div>
                   </div>
                 ))
@@ -1082,7 +1082,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 dark:text-stone-500">
                       <CalendarRange size={10} />{fmtDatetime(r.checkinFecha)}
                       <span className="mx-1 opacity-30">|</span>
-                      <Euro size={10} />{fmtCurrency(r.cobro)}
+                      <Euro size={10} />{fmtCurrency((r as any).cobro ?? 0)}
                     </div>
                   </div>
                 ))
@@ -1100,7 +1100,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 dark:text-stone-500">
                       <CalendarRange size={10} />{fmtDate(r.fechaLlegada)}
                       <span className="mx-1 opacity-30">|</span>
-                      <Clock size={10} />{r.tiempoDuracion} min
+                      <Clock size={10} />{(r as any).cantidadMinutos ?? (r as any).tiempoDuracion ?? 0} min
                     </div>
                   </div>
                 ))
@@ -1284,7 +1284,7 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
                     },
                     {
                       label: 'Tiempo total',
-                      value: `${handymanRecords.reduce((a, r) => a + r.tiempoDuracion, 0)} min`,
+                      value: `${handymanRecords.reduce((a, r) => a + ((r as any).cantidadMinutos ?? (r as any).tiempoDuracion ?? 0), 0)} min`,
                       sub: 'solo manitas',
                       icon: <Clock size={14} />,
                       bg: 'bg-purple-50 dark:bg-purple-900/10',

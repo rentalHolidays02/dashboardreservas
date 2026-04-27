@@ -515,10 +515,10 @@ const GestionUsuarios: React.FC = () => {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadUsers = async () => {
     setLoading(true);
-    appsScriptApi.getAllUsers().then(supabaseUsers => {
-      // Mapear usuarios de Supabase al formato AppUser de la UI
+    try {
+      const supabaseUsers = await appsScriptApi.getAllUsers();
       const mapped = supabaseUsers.map(u => ({
         ...u,
         status: 'active' as UserStatus,
@@ -528,7 +528,13 @@ const GestionUsuarios: React.FC = () => {
         onlineStatus: 'offline' as OnlineStatus,
       }));
       setUsers(mapped as AppUser[]);
-    }).finally(() => setLoading(false));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
   }, []);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
@@ -580,46 +586,52 @@ const GestionUsuarios: React.FC = () => {
       let targetId = u.id;
 
       if (isNew) {
-        // 1. Invitar al usuario vía Google Apps Script y obtener su ID real
+        // 1. Invitar al usuario vía Google Apps Script
         const inviteResult = await appsScriptApi.inviteUser(u.email, {
+          full_name: u.name,
+          role: u.role,
+          phone: u.telefono || '',
+          dni: u.dni || '',
+          home_address: u.home_address || '',
+          bank_account: u.bank_account || ''
+        } as any);
+
+        if (!inviteResult.ok) {
+          throw new Error('No se pudo enviar la invitación. ' + (inviteResult.error || ''));
+        }
+
+        showToast('Invitación enviada con éxito');
+        
+        // 2. Recargar la lista completa desde Supabase
+        setTimeout(() => {
+          loadUsers();
+          setModalUser(undefined);
+        }, 1500);
+        
+        return;
+      } 
+      
+      // MODO EDICIÓN
+      // Usar targetId (u.id) para asegurar que no sea undefined
+      if (targetId) {
+        // 2. Guardar/Actualizar Perfil
+        await appsScriptApi.updateProfile(targetId, {
+          email: u.email,
           name: u.name,
           role: u.role,
-          telefono: u.telefono,
+          telefono: u.telefono
+        });
+
+        // 3. Guardar Datos Sensibles
+        await appsScriptApi.updateSensitiveData(targetId, {
           dni: u.dni,
           home_address: u.home_address,
           bank_account: u.bank_account
         });
 
-        if (!inviteResult.ok || !inviteResult.id) {
-          throw new Error('No se pudo enviar la invitación o no se obtuvo ID. ' + (inviteResult.error || ''));
-        }
-
-        // Usamos el ID real de Supabase Auth
-        targetId = inviteResult.id;
-        showToast('Invitación enviada. Creando perfil...');
-      } 
-      
-      // 2. Guardar/Actualizar Perfil DESDE LA APP (donde sabemos que funciona)
-      await appsScriptApi.updateProfile(targetId, {
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        telefono: u.telefono
-      });
-
-      // 3. Guardar Datos Sensibles DESDE LA APP
-      await appsScriptApi.updateSensitiveData(targetId, {
-        dni: u.dni,
-        home_address: u.home_address,
-        bank_account: u.bank_account
-      });
-
-      setUsers(prev => {
-        const exists = prev.find(p => p.id === u.id);
-        if (exists) return prev.map(p => p.id === u.id ? u : p);
-        return [{ ...u, id: targetId }, ...prev];
-      });
-      showToast(isNew ? 'Usuario creado y perfil guardado con éxito' : 'Usuario actualizado correctamente');
+        setUsers(prev => prev.map(p => p.id === targetId ? u : p));
+        showToast('Usuario actualizado correctamente');
+      }
     } catch (error: any) {
       console.error('Error al guardar usuario:', error);
       showToast(error.message || 'Error al guardar los cambios');
