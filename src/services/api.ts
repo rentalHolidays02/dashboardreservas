@@ -463,11 +463,6 @@ export const appsScriptApi = {
         .eq('id', sessionUser.id)
         .single();
 
-      if (profileError || !profile) {
-        console.warn('No se encontró perfil para el usuario:', profileError?.message);
-        // Sin perfil, denegar acceso
-        await supabase.auth.signOut();
-        return null;
       if (profileError) {
         console.warn('Supabase bloqueó la lectura del perfil por RLS. Intentando a través del puente de Google...');
         // Si Supabase nos bloquea (RLS), le pedimos a Google que busque el perfil con su clave maestra
