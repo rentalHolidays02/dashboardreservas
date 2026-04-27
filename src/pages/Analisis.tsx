@@ -3,12 +3,13 @@ import { Loader2, Calendar, Filter, Search, Download } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { Worker, CheckInOut, Accommodation, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import MainLayout from '../components/layout/MainLayout';
-import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
+import DashboardFilterModal, { Period, Metric } from '../components/dashboard/DashboardFilterModal';
 import StatsGrid from '../components/analytics/StatsGrid';
 import PerformanceChart from '../components/analytics/PerformanceChart';
 import RankingsGrid from '../components/analytics/RankingsGrid';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { aggregateDailyData } from '../utils/analytics';
+import { computeWorkerEarningsInRange } from '../utils/payments';
 
 const Analisis: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -21,6 +22,7 @@ const Analisis: React.FC = () => {
 
   // Period state
   const [period, setPeriod] = useState<Period>('mensual');
+  const [metric, setMetric] = useState<Metric>('dinero');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -76,22 +78,69 @@ const Analisis: React.FC = () => {
 
   // Rankings Calculation
   const rankings = useMemo(() => {
-    // Workers Ranking (derived from netMoneyMonth and real checkins)
+    // Workers Ranking (derived from computeWorkerEarningsInRange)
     const workerRankings = workers
-      .map(w => ({
-        id: w.id,
-        name: w.fullName,
-        value: w.netMoneyMonth,
-        secondaryValue: `${w.cleansCountMonth} limpiezas`,
-        photo: w.photo
-      }))
+      .map(w => {
+        const earnings = computeWorkerEarningsInRange(
+          w, normalCleans, initialCleans, handymanRecords, [],
+          period, customDesde, customHasta
+        );
+        return {
+          id: w.id,
+          name: w.fullName,
+          value: earnings.cleanCount,
+          secondaryValue: `${earnings.cleanCount} trabajos`,
+          photo: w.photo
+        };
+      })
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
-    // Accommodations Ranking (derived from checkins)
+    // Filter Helper for Accommodations
+    const isDateInPeriod = (dateStr: string) => {
+      if (!dateStr) return false;
+      const recordDate = new Date(dateStr.split(' ')[0].split('T')[0]);
+      recordDate.setHours(0,0,0,0);
+      
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      let startDate = new Date(today);
+      let endDate = new Date(today);
+
+      if (period === 'semanal') {
+        startDate.setDate(today.getDate() - 7);
+      } else if (period === 'mensual') {
+        startDate.setDate(today.getDate() - 30);
+      } else if (period === 'trimestral') {
+        startDate.setDate(today.getDate() - 90);
+      } else if (period === 'personalizado' && customDesde && customHasta) {
+        startDate = new Date(customDesde);
+        endDate = new Date(customHasta);
+        startDate.setHours(0,0,0,0);
+        endDate.setHours(0,0,0,0);
+      }
+
+      return recordDate >= startDate && recordDate <= endDate;
+    };
+
+    // Accommodations Ranking (derived from real records)
     const accCounts: Record<string, number> = {};
-    checkIns.forEach(c => {
-      accCounts[c.accommodation] = (accCounts[c.accommodation] || 0) + 1;
+    
+    normalCleans.forEach(r => {
+      if (isDateInPeriod(r.checkinFecha)) {
+        accCounts[r.apartamento] = (accCounts[r.apartamento] || 0) + 1;
+      }
+    });
+    initialCleans.forEach(r => {
+      if (isDateInPeriod(r.checkinFecha)) {
+        accCounts[r.apartamento] = (accCounts[r.apartamento] || 0) + 1;
+      }
+    });
+    handymanRecords.forEach(r => {
+      if (isDateInPeriod(r.fechaLlegada)) {
+        accCounts[r.alojamiento] = (accCounts[r.alojamiento] || 0) + 1;
+      }
     });
 
     const accommodationRankings = Object.entries(accCounts)
@@ -99,26 +148,26 @@ const Analisis: React.FC = () => {
         id: name,
         name: name,
         value: count,
-        secondaryValue: `${count} visitas`
+        secondaryValue: `${count} trabajos`
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
 
-    // If no checkins for rankings, fill with accommodations list
+    // If no checkins for rankings, fill with accommodations list (fallback)
     if (accommodationRankings.length === 0) {
         accommodations.slice(0, 5).forEach(a => {
             accommodationRankings.push({
                 id: a.id,
                 name: a.name,
-                value: Math.floor(Math.random() * 20) + 5,
-                secondaryValue: `${Math.floor(Math.random() * 20) + 5} visitas`
+                value: 0,
+                secondaryValue: `0 trabajos`
             });
         });
         accommodationRankings.sort((a,b) => b.value - a.value);
     }
 
     return { workerRankings, accommodationRankings };
-  }, [workers, checkIns, accommodations]);
+  }, [workers, accommodations, normalCleans, initialCleans, handymanRecords, period, customDesde, customHasta]);
 
   if (loading) {
     return <LoadingSpinner message="Generando analíticas detalladas..." />;
@@ -137,12 +186,6 @@ const Analisis: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 hover:bg-white/80 dark:hover:bg-stone-800/60 transition-all active:scale-[0.98]"
-          >
-            <Download size={14} />
-            <span className="hidden sm:inline">Exportar Informe</span>
-          </button>
           
           <div className="relative">
             <button 
@@ -159,10 +202,12 @@ const Analisis: React.FC = () => {
               isOpen={isFilterModalOpen}
               onClose={() => setIsFilterModalOpen(false)}
               period={period}
+              metric={metric}
               customDesde={customDesde}
               customHasta={customHasta}
               onApply={(updates) => {
                 if (updates.period) setPeriod(updates.period);
+                if (updates.metric) setMetric(updates.metric);
                 if (updates.customDesde !== undefined) setCustomDesde(updates.customDesde);
                 if (updates.customHasta !== undefined) setCustomHasta(updates.customHasta);
               }}

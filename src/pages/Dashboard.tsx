@@ -4,7 +4,7 @@ import WorkersTable from '../components/dashboard/WorkersTable';
 import { appsScriptApi } from '../services/api';
 import { Worker, CheckInOut, NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves } from '../services/mockData';
 import { Loader2, Search, Filter } from 'lucide-react';
-import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
+import DashboardFilterModal, { Period, Metric } from '../components/dashboard/DashboardFilterModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { computeWorkerEarningsInRange } from '../utils/payments';
 import CleanCheckoutFormModal, { CheckoutTabType } from '../components/cleans/CleanCheckoutFormModal';
@@ -33,6 +33,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
   // Period state
   const [period, setPeriod] = useState<Period>('mensual');
+  const [metric, setMetric] = useState<Metric>('dinero');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -269,10 +270,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
               isOpen={isFilterModalOpen}
               onClose={() => setIsFilterModalOpen(false)}
               period={period}
+              metric={metric}
               customDesde={customDesde}
               customHasta={customHasta}
               onApply={(updates) => {
                 if (updates.period) setPeriod(updates.period);
+                if (updates.metric) setMetric(updates.metric);
                 if (updates.customDesde !== undefined) setCustomDesde(updates.customDesde);
                 if (updates.customHasta !== undefined) setCustomHasta(updates.customHasta);
               }}

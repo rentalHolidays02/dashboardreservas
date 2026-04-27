@@ -395,6 +395,7 @@ export interface Suggestion {
   snippet: string;
   body: string;
   isRead: boolean;
+  isStarred: boolean;
   category?: 'fallo' | 'sugerencia' | 'otro' | string;
 }
 

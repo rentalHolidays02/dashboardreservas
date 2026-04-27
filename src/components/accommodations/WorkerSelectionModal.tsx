@@ -63,8 +63,8 @@ const WorkerSelectionModal: React.FC<WorkerSelectionModalProps> = ({
   const filteredWorkers = useMemo(() => {
     const search = searchTerm.toLowerCase();
     return allWorkers
-      .filter(w =>
-        w.fullName.toLowerCase().includes(search) ||
+      .filter(w => 
+        w.fullName.toLowerCase().includes(search) || 
         (w.telefono || '').includes(search)
       )
       .sort((a, b) => {

@@ -24,7 +24,7 @@ interface WorkerRecordsProps {
   user: User;
 }
 
-type RecordType = 'Normal' | 'Inicial' | 'Manitas';
+export type RecordType = 'Normal' | 'Inicial' | 'Manitas';
 
 interface UnifiedRecord {
   id: string;

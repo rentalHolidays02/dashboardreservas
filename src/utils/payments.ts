@@ -132,9 +132,10 @@ export const computeWorkerEarnings = (
     }
   });
 
-  // Manitas: aporta km pero no reserva
+  // Manitas: aporta km pero no reserva, pero sí cuenta como trabajo
   handymanRecords.forEach(r => {
     if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
+      cleanCount += 1;
       kms += r.cantidadMinutos || 0; // el campo "Km" está en cantidadMinutos por historial del parser
     }
   });

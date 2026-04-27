@@ -128,7 +128,7 @@ const CleanFilterModal: React.FC<CleanFilterModalProps> = ({ isOpen, onClose, fi
                 return (
                   <button
                     key={s}
-                    onClick={() => updateFilters({ status: s })}
+                    onClick={() => updateFilters({ timeStatus: s })}
                     className={`px-4 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] border ${
                       isActive
                         ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
