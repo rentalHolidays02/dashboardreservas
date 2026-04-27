@@ -313,6 +313,51 @@ const saveAccommodations = (accommodations: Accommodation[]) => {
   localStorage.setItem('rh_accommodations', JSON.stringify(accommodations));
 };
 
+// Reemplaza todas las asignaciones de alojamiento de un trabajador en la tabla pivote
+const setWorkerAccommodations = async (workerId: string, accommodationNames: string[]): Promise<void> => {
+  if (!accommodationNames || accommodationNames.length === 0) {
+    await supabase.from('worker_accommodations').delete().eq('worker_id', workerId);
+    return;
+  }
+
+  // Buscar IDs de los alojamientos por nombre
+  const { data: existing } = await supabase
+    .from('accommodations')
+    .select('id, name')
+    .in('name', accommodationNames);
+
+  const nameToId = new Map<string, string>((existing || []).map((a: any) => [a.name, a.id]));
+
+  // Crear los que no existan aún
+  const missingNames = accommodationNames.filter(n => !nameToId.has(n));
+  if (missingNames.length > 0) {
+    const { data: created } = await supabase
+      .from('accommodations')
+      .insert(missingNames.map(name => ({
+        name,
+        active: true,
+        address: '',
+        city: '',
+        zip_code: '',
+        notes: 'Registrado automáticamente desde Operarios',
+      })))
+      .select('id, name');
+    (created || []).forEach((a: any) => nameToId.set(a.name, a.id));
+  }
+
+  const accommodationIds = accommodationNames
+    .map(n => nameToId.get(n))
+    .filter((id): id is string => !!id);
+
+  // Reemplazar todas las entradas del trabajador
+  await supabase.from('worker_accommodations').delete().eq('worker_id', workerId);
+  if (accommodationIds.length > 0) {
+    await supabase.from('worker_accommodations').insert(
+      accommodationIds.map(accommodation_id => ({ worker_id: workerId, accommodation_id }))
+    );
+  }
+};
+
 // Pagos persistence
 const getStoredPagos = (): PagoRecord[] => {
   try {
@@ -669,10 +714,30 @@ export const appsScriptApi = {
         }
       }
 
-      // 3. Map to Worker interface
+      // 3. Fetch accommodation assignments from pivot table
+      const workerIds = dbWorkers.map((w: any) => w.id);
+      const workerAccMap: Record<string, string[]> = {};
+
+      if (workerIds.length > 0) {
+        const { data: waData } = await supabase
+          .from('worker_accommodations')
+          .select('worker_id, accommodations(name)')
+          .in('worker_id', workerIds);
+
+        if (waData) {
+          waData.forEach((entry: any) => {
+            if (!workerAccMap[entry.worker_id]) workerAccMap[entry.worker_id] = [];
+            if (entry.accommodations?.name) {
+              workerAccMap[entry.worker_id].push(entry.accommodations.name);
+            }
+          });
+        }
+      }
+
+      // 4. Map to Worker interface
       const baseWorkers: Worker[] = dbWorkers.map((w: any): Worker => {
         const sensitive = w.profile_id ? sensitiveMap[w.profile_id] : null;
-        
+
         return {
           id: w.id,
           excelId: w.excel_id,
@@ -692,11 +757,11 @@ export const appsScriptApi = {
           cleansCountMonth: 0,
           kmsMonth: 0,
           extraHoursMonth: 0,
-          accommodations: [],
+          accommodations: workerAccMap[w.id] || [],
           tipoTrabajador: w.worker_type,
           telefonoBizum: w.bizum_phone,
           photo: w.photo_url
-        } as any; // Cast for now due to additional fields
+        } as any;
       });
 
       // 4. Compute derived values (same as before)
@@ -797,6 +862,62 @@ export const appsScriptApi = {
     }
   },
 
+  // --- Sincronización Alojamientos: Sheets -> Supabase ---
+  syncAccommodationsFromSheets: async (): Promise<void> => {
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const response = await fetchWithRetry(url);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (!data.values || data.values.length < 2) return;
+
+      const headers = data.values[0] as string[];
+      const rows = data.values.slice(1) as any[][];
+
+      const toSync = rows
+        .map((row) => {
+          const getVal = (headerName: string) => {
+            const norm = normalizeHeader(headerName);
+            const idx = headers.findIndex((h: string) => h && normalizeHeader(h) === norm);
+            return idx !== -1 ? row[idx] : undefined;
+          };
+
+          const name = String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || '').trim();
+          if (!name) return null;
+
+          const touristAddress = String(getVal('DIRECCIÓN ALOJAMIENTO TURÍSTICO') || getVal('DIRECCION ALOJAMIENTO TURISTICO') || '').trim();
+          const ownerAddress  = String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim();
+
+          return {
+            name,
+            ref:       String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
+            address:   touristAddress || ownerAddress,
+            city:      row[27] ? String(row[27]).trim() : String(getVal('POBLACIÓN') || ''),
+            zip_code:  row[26] ? String(row[26]).trim() : String(getVal('CP') || '').trim(),
+            provincia: row[28] ? String(row[28]).trim() : String(getVal('PROVINCIA') || ''),
+            notes:     String(getVal('OBSERVACIONES') || '').trim(),
+            active:    true,
+          };
+        })
+        .filter(Boolean) as Record<string, any>[];
+
+      if (toSync.length === 0) return;
+
+      const { error } = await supabase
+        .from('accommodations')
+        .upsert(toSync, { onConflict: 'name' });
+
+      if (error) {
+        console.error('Error sincronizando alojamientos a Supabase:', error);
+      } else {
+        console.log(`✅ Alojamientos sincronizados a Supabase: ${toSync.length} registros`);
+      }
+    } catch (error) {
+      console.error('Error en syncAccommodationsFromSheets:', error);
+    }
+  },
+
   // --- Helper para formatear el teléfono como quiere el Excel ---
   formatPhoneForExcel: (phone: string = ''): string => {
     let cleaned = phone.replace(/\s+/g, '').replace(/'/g, '');
@@ -888,7 +1009,12 @@ export const appsScriptApi = {
 
       if (error) throw error;
 
-      const updatedWorkers = currentWorkers.map(w => 
+      // 4. Guardar asignaciones de alojamiento en tabla pivote
+      if (Array.isArray(workerData.accommodations)) {
+        await setWorkerAccommodations(workerData.id, workerData.accommodations);
+      }
+
+      const updatedWorkers = currentWorkers.map(w =>
         w.id === workerData.id ? { ...workerData } : w
       );
       saveWorkers(updatedWorkers);
@@ -956,6 +1082,11 @@ export const appsScriptApi = {
         .single();
 
       if (error) throw error;
+
+      // 4. Guardar asignaciones de alojamiento en tabla pivote
+      if (Array.isArray(workerData.accommodations) && workerData.accommodations.length > 0) {
+        await setWorkerAccommodations(data.id, workerData.accommodations);
+      }
 
       const newWorker: Worker = { ...workerData, id: data.id } as Worker;
       const updatedWorkers = [...currentWorkers, newWorker];
@@ -1366,138 +1497,169 @@ export const appsScriptApi = {
   },
 
   getAccommodations: async (): Promise<Accommodation[]> => {
+    const mapDbRow = (a: any): Accommodation => ({
+      id:       a.id,
+      name:     a.name,
+      ref:      a.ref      || '',
+      address:  a.address  || '',
+      city:     a.city     || '',
+      zipCode:  a.zip_code || '',
+      provincia: a.provincia || '',
+      notes:    a.notes    || '',
+      active:   a.active   ?? true,
+      image:    a.image_url || undefined,
+    });
+
+    try {
+      // 1. Intentar Supabase primero
+      const { data: dbAccs, error } = await supabase
+        .from('accommodations')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (!error && dbAccs) {
+        if (dbAccs.length > 0) {
+          const accommodations = dbAccs.map(mapDbRow);
+          saveAccommodations(accommodations);
+          return accommodations;
+        }
+        // 2. Supabase vacío: sincronizar desde Sheets y volver a leer
+        await appsScriptApi.syncAccommodationsFromSheets();
+        const { data: synced } = await supabase
+          .from('accommodations')
+          .select('*')
+          .order('name', { ascending: true });
+        if (synced && synced.length > 0) {
+          const accommodations = synced.map(mapDbRow);
+          saveAccommodations(accommodations);
+          return accommodations;
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase no disponible, usando caché local:', err);
+    }
+
+    // 3. Fallback directo a Sheets (comportamiento original)
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
       const response = await fetchWithRetry(url);
-      
-      if (!response.ok) {
-        throw new Error(`Error en la API de Google Sheets: ${response.statusText}`);
-      }
+      if (!response.ok) return currentAccommodations;
 
       const data = await response.json();
-      if (!data.values || data.values.length === 0) {
-        return currentAccommodations;
-      }
+      if (!data.values || data.values.length === 0) return currentAccommodations;
 
-      const allValues = data.values as any[][];
-      const headers = allValues[0] as string[];
-      const rows = allValues.slice(1);
+      const headers = data.values[0] as string[];
+      const rows    = data.values.slice(1) as any[][];
 
-      // Mapeo dinámico de columnas con tipado fuerte
       const accommodations: Accommodation[] = rows
         .map((row: any[], index: number): Accommodation => {
-          const getVal = (headerName: string) => {
-            const norm = normalizeHeader(headerName);
-            const idx = headers.findIndex((h: string) => h && normalizeHeader(h) === norm);
+          const getVal = (h: string) => {
+            const norm = normalizeHeader(h);
+            const idx  = headers.findIndex((hh: string) => hh && normalizeHeader(hh) === norm);
             return idx !== -1 ? row[idx] : undefined;
           };
-
-          // Priorizar dirección del alojamiento turístico sobre dirección del propietario
           const touristAddress = String(getVal('DIRECCIÓN ALOJAMIENTO TURÍSTICO') || getVal('DIRECCION ALOJAMIENTO TURISTICO') || '').trim();
-          const ownerAddress = String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim();
-
-          // Las columnas 27-29 corresponden al CP, POBLACIÓN y PROVINCIA del apartamento turístico
-          // (después de la columna 26 "PARKINGS")
-          // Buscamos por posición ya que tienen el mismo nombre que las del propietario
-          const touristZipCode = row[26] ? String(row[26]).trim() : '';
-          const touristCity = row[27] ? String(row[27]).trim() : '';
-          const touristProvincia = row[28] ? String(row[28]).trim() : '';
-
           return {
-            id: `real_${index + 2}`,
-            name: String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || 'Sin nombre').trim(),
-            ref: String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
-            address: touristAddress || ownerAddress,
-            city: touristCity || String(getVal('POBLACIÓN') || ''),
-            zipCode: touristZipCode || String(getVal('CP') || '').trim(),
-            provincia: touristProvincia || String(getVal('PROVINCIA') || ''),
-            notes: String(getVal('OBSERVACIONES') || '').trim(),
-            active: true
+            id:       `real_${index + 2}`,
+            name:     String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || 'Sin nombre').trim(),
+            ref:      String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
+            address:  touristAddress || String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim(),
+            city:     row[27] ? String(row[27]).trim() : String(getVal('POBLACIÓN') || ''),
+            zipCode:  row[26] ? String(row[26]).trim() : String(getVal('CP') || '').trim(),
+            provincia: row[28] ? String(row[28]).trim() : String(getVal('PROVINCIA') || ''),
+            notes:    String(getVal('OBSERVACIONES') || '').trim(),
+            active:   true,
           };
         })
-        .filter((acc: Accommodation) => acc.name && acc.name.trim() !== '' && acc.name !== 'Sin nombre');
+        .filter((acc) => acc.name && acc.name.trim() !== '' && acc.name !== 'Sin nombre');
 
-      // Actualizamos la caché local con la realidad del Excel
       saveAccommodations(accommodations);
       return accommodations;
     } catch (error) {
       console.error('Error fetching accommodations from Sheets:', error);
-      // fallback a mock data si falla la red
       return currentAccommodations;
     }
   },
 
   updateAccommodation: async (accommodationData: Accommodation): Promise<Accommodation> => {
     try {
-      const payload = {
-        ...accommodationData,
-        action: 'update'
-      };
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify(payload),
-      });
+      const { error } = await supabase
+        .from('accommodations')
+        .update({
+          name:      accommodationData.name,
+          ref:       accommodationData.ref       || '',
+          address:   accommodationData.address   || '',
+          city:      accommodationData.city      || '',
+          zip_code:  accommodationData.zipCode   || '',
+          provincia: accommodationData.provincia || '',
+          notes:     accommodationData.notes     || '',
+          active:    accommodationData.active    ?? true,
+          image_url: accommodationData.image     || null,
+        })
+        .eq('id', accommodationData.id);
 
-      // Actualizamos localmente
-      const updatedAccommodations = currentAccommodations.map(a => 
-        a.id === accommodationData.id ? { ...accommodationData } : a
-      );
-      saveAccommodations(updatedAccommodations);
-      
-      return accommodationData;
+      if (error) throw error;
     } catch (error) {
-      console.error('Error updating accommodation in Sheets:', error);
-      // Fallback
-      const updatedAccommodations = currentAccommodations.map(a => 
-        a.id === accommodationData.id ? { ...accommodationData } : a
-      );
-      saveAccommodations(updatedAccommodations);
-      return accommodationData;
+      console.error('Error updating accommodation in Supabase:', error);
     }
+
+    // Fire & forget al Apps Script para mantener el Sheets sincronizado
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ ...accommodationData, action: 'update' }),
+    });
+
+    const updated = currentAccommodations.map(a =>
+      a.id === accommodationData.id ? { ...accommodationData } : a
+    );
+    saveAccommodations(updated);
+    return accommodationData;
   },
 
   addAccommodation: async (accommodationData: Omit<Accommodation, 'id'>): Promise<Accommodation> => {
     try {
+      const { data, error } = await supabase
+        .from('accommodations')
+        .insert([{
+          name:      accommodationData.name,
+          ref:       accommodationData.ref       || '',
+          address:   accommodationData.address   || '',
+          city:      accommodationData.city      || '',
+          zip_code:  accommodationData.zipCode   || '',
+          provincia: accommodationData.provincia || '',
+          notes:     accommodationData.notes     || '',
+          active:    accommodationData.active    ?? true,
+          image_url: accommodationData.image     || null,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify(accommodationData),
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ ...accommodationData, action: 'add' }),
       });
 
-      // Nota: Con 'no-cors' no podemos leer la respuesta, pero el envío se realiza.
-      // Generamos un ID temporal para la UI
       const newAccommodation: Accommodation = {
         ...accommodationData,
-        id: `real_new_${Date.now()}`
+        id: data.id,
       };
-      
-      // Actualizamos caché local
       currentAccommodations = [newAccommodation, ...currentAccommodations];
       saveAccommodations(currentAccommodations);
-      
       return newAccommodation;
     } catch (error) {
-      console.error('Error adding accommodation to Sheets:', error);
-      // Fallback a localStorage si falla la red
-      await delay(1000);
-      const lastId = currentAccommodations.length > 0 
-        ? Math.max(...currentAccommodations.map(a => {
-            const numericPart = a.id.startsWith('a') ? a.id.slice(1) : a.id;
-            return parseInt(numericPart) || 0;
-          }))
-        : 0;
+      console.error('Error adding accommodation to Supabase:', error);
+      // Fallback local si falla Supabase
       const newAccommodation: Accommodation = {
         ...accommodationData,
-        id: `a${lastId + 1}`
+        id: `real_new_${Date.now()}`,
       };
-      currentAccommodations = [...currentAccommodations, newAccommodation];
+      currentAccommodations = [newAccommodation, ...currentAccommodations];
       saveAccommodations(currentAccommodations);
       return newAccommodation;
     }
@@ -1505,44 +1667,60 @@ export const appsScriptApi = {
 
   deleteAccommodation: async (id: string): Promise<boolean> => {
     try {
-      // Solo enviar al Apps Script si el ID viene del Excel real (empieza por "real_" pero NO por "real_new_")
-      // Los IDs locales (real_new_*, a*) no tienen fila real en el Excel y enviarles delete rompería las cabeceras
-      const isRealExcelRow = id.startsWith('real_') && !id.startsWith('real_new_');
-      if (isRealExcelRow) {
-        await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ id, action: 'delete' })
-        });
-      }
+      const { error } = await supabase
+        .from('accommodations')
+        .delete()
+        .eq('id', id);
 
-      const updatedAccommodations = currentAccommodations.filter(a => a.id !== id);
-      saveAccommodations(updatedAccommodations);
-      return true;
+      if (error) console.warn('Supabase delete accommodation warning:', error);
     } catch (error) {
-      console.error('Error deleting accommodation from Sheets:', error);
-      throw error;
+      console.error('Error deleting accommodation from Supabase:', error);
     }
+
+    // Fire & forget al Apps Script (best effort)
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ id, action: 'delete' }),
+    });
+
+    const updated = currentAccommodations.filter(a => a.id !== id);
+    saveAccommodations(updated);
+    return true;
   },
 
   restoreAccommodation: async (accommodation: Accommodation): Promise<void> => {
     try {
-      const isRealExcelRow = accommodation.id.startsWith('real_') && !accommodation.id.startsWith('real_new_');
-      if (isRealExcelRow) {
-        fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ ...accommodation, action: 'restore' }),
+      const { error } = await supabase
+        .from('accommodations')
+        .upsert({
+          id:        accommodation.id,
+          name:      accommodation.name,
+          ref:       accommodation.ref       || '',
+          address:   accommodation.address   || '',
+          city:      accommodation.city      || '',
+          zip_code:  accommodation.zipCode   || '',
+          provincia: accommodation.provincia || '',
+          notes:     accommodation.notes     || '',
+          active:    accommodation.active    ?? true,
+          image_url: accommodation.image     || null,
         });
-      }
-      const updatedAccommodations = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
-      saveAccommodations(updatedAccommodations);
+
+      if (error) throw error;
     } catch (error) {
-      console.error('Error restoring accommodation:', error);
-      throw error;
+      console.error('Error restoring accommodation in Supabase:', error);
     }
+
+    fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ ...accommodation, action: 'restore' }),
+    });
+
+    const updated = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
+    saveAccommodations(updated);
   },
 
   getNormalCleansResult: async (): Promise<CleansFetchResult<NormalCleanRecord>> => {
