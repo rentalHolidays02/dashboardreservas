@@ -3,7 +3,7 @@ import { Loader2, Calendar, Filter, Search, Download } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
 import { Worker, CheckInOut, Accommodation, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import MainLayout from '../components/layout/MainLayout';
-import DashboardFilterModal, { Period } from '../components/dashboard/DashboardFilterModal';
+import DashboardFilterModal, { Period, Metric } from '../components/dashboard/DashboardFilterModal';
 import StatsGrid from '../components/analytics/StatsGrid';
 import PerformanceChart from '../components/analytics/PerformanceChart';
 import RankingsGrid from '../components/analytics/RankingsGrid';
@@ -21,6 +21,7 @@ const Analisis: React.FC = () => {
 
   // Period state
   const [period, setPeriod] = useState<Period>('mensual');
+  const [metric, setMetric] = useState<Metric>('dinero');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -159,10 +160,12 @@ const Analisis: React.FC = () => {
               isOpen={isFilterModalOpen}
               onClose={() => setIsFilterModalOpen(false)}
               period={period}
+              metric={metric}
               customDesde={customDesde}
               customHasta={customHasta}
               onApply={(updates) => {
                 if (updates.period) setPeriod(updates.period);
+                if (updates.metric) setMetric(updates.metric);
                 if (updates.customDesde !== undefined) setCustomDesde(updates.customDesde);
                 if (updates.customHasta !== undefined) setCustomHasta(updates.customHasta);
               }}

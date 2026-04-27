@@ -503,7 +503,7 @@ export const appsScriptApi = {
       if (!sessionUser) return null;
 
       // Obtener rol y datos del perfil desde la tabla 'profiles' de Supabase
-      const { data: profile, error: profileError } = await supabase
+      let { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id, email, full_name, role, phone')
         .eq('id', sessionUser.id)
@@ -541,11 +541,11 @@ export const appsScriptApi = {
       }
 
       return {
-        id: profile.id,
-        email: profile.email,
-        role: profile.role as any,
-        name: profile.full_name,
-        telefono: profile.phone || undefined
+        id: profile!.id,
+        email: profile!.email,
+        role: profile!.role as any,
+        name: profile!.full_name,
+        telefono: profile!.phone || undefined
       };
     } catch (error) {
       console.error('Error durante el proceso de login:', error);
@@ -860,7 +860,7 @@ export const appsScriptApi = {
           retained_cash: parseExcelNumber(getVal('EFECTIVO RETENIDO')),
           active: true
         };
-      }).filter(w => w.full_name && w.phone);
+      }).filter((w: any) => w.full_name && w.phone);
 
       // Upsert en Supabase usando el teléfono como clave única
       const { error } = await supabase
@@ -872,7 +872,7 @@ export const appsScriptApi = {
       } else {
         // --- SINCRONIZAR ELIMINACIONES DEL EXCEL ---
         // Extraemos los teléfonos que están actualmente en el Excel
-        const activePhones = workersToSync.map(w => w.phone);
+        const activePhones = workersToSync.map((w: any) => w.phone);
         
         // Consultamos qué teléfonos tenemos en Supabase
         const { data: dbWorkers } = await supabase.from('workers').select('id, phone');
