@@ -3,7 +3,7 @@ import {
   X, Save, User as UserIcon, Phone, CreditCard, Home,
   Loader2, UserPlus, Camera, Mail, Hash, Car, Building2, Landmark, Trash2, Plus, MapPin
 } from 'lucide-react';
-import { Worker } from '../../services/mockData';
+import { Worker, WorkerAccommodationDetails } from '../../services/mockData';
 
 interface WorkerModalProps {
   worker?: Worker | null;
@@ -40,6 +40,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
     banco: '',
     titularCuenta: '',
     accommodations: [] as string[],
+    accommodationDetails: [] as WorkerAccommodationDetails[],
     netMoneyMonth: 0,
     owedMoney: 0,
     cleansCountMonth: 0,
@@ -56,7 +57,14 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setFormData(isEditMode && worker ? { ...worker } : initialData);
+      if (isEditMode && worker) {
+        const details: WorkerAccommodationDetails[] = worker.accommodationDetails?.length
+          ? worker.accommodationDetails
+          : (worker.accommodations || []).map(name => ({ accommodationName: name, precio: 0, sabanasIncluidas: false, toallasIncluidas: false }));
+        setFormData({ ...worker, accommodationDetails: details, accommodations: details.map(d => d.accommodationName) });
+      } else {
+        setFormData(initialData);
+      }
       setNewAccommodation('');
     }
   }, [isOpen, worker, isEditMode]);
@@ -187,20 +195,33 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
 
   const addAccommodation = (value?: string) => {
     const accToAdd = (value || newAccommodation).trim();
-    if (accToAdd && !formData.accommodations.includes(accToAdd)) {
+    const currentNames = (formData.accommodationDetails as WorkerAccommodationDetails[]).map(d => d.accommodationName);
+    if (accToAdd && !currentNames.includes(accToAdd)) {
+      const newDetail: WorkerAccommodationDetails = { accommodationName: accToAdd, precio: 0, sabanasIncluidas: false, toallasIncluidas: false };
       setFormData((prev: any) => ({
         ...prev,
-        accommodations: [...prev.accommodations, accToAdd]
+        accommodationDetails: [...(prev.accommodationDetails || []), newDetail],
+        accommodations: [...(prev.accommodations || []), accToAdd],
       }));
       setNewAccommodation('');
       setShowAccSuggestions(false);
     }
   };
 
-  const removeAccommodation = (acc: string) => {
+  const removeAccommodation = (name: string) => {
     setFormData((prev: any) => ({
       ...prev,
-      accommodations: prev.accommodations.filter((a: string) => a !== acc),
+      accommodationDetails: (prev.accommodationDetails as WorkerAccommodationDetails[]).filter(d => d.accommodationName !== name),
+      accommodations: (prev.accommodations as string[]).filter((a: string) => a !== name),
+    }));
+  };
+
+  const updateAccommodationDetail = (name: string, field: keyof Omit<WorkerAccommodationDetails, 'accommodationName'>, value: number | boolean) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      accommodationDetails: (prev.accommodationDetails as WorkerAccommodationDetails[]).map(d =>
+        d.accommodationName === name ? { ...d, [field]: value } : d
+      ),
     }));
   };
 
@@ -400,16 +421,16 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
             <div className="relative">
               <div className="flex gap-2 mb-3">
                 <div className="relative flex-1">
-                  <input 
-                    type="text" 
-                    value={newAccommodation} 
+                  <input
+                    type="text"
+                    value={newAccommodation}
                     onChange={(e) => {
                       setNewAccommodation(e.target.value);
                       setShowAccSuggestions(true);
                     }}
                     onFocus={() => setShowAccSuggestions(true)}
-                    placeholder="Busca o escribe un alojamiento..." 
-                    className={inputClass} 
+                    placeholder="Busca o escribe un alojamiento..."
+                    className={inputClass}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -418,14 +439,14 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
                     }}
                   />
                   {showAccSuggestions && newAccommodation.trim() && (
-                    <div 
+                    <div
                       ref={suggestionRef}
                       className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-xl shadow-xl max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
                     >
                       {(allAccommodations || [])
-                        .filter(acc => 
-                          acc.toLowerCase().includes(newAccommodation.toLowerCase()) && 
-                          !(formData.accommodations || []).includes(acc)
+                        .filter(acc =>
+                          acc.toLowerCase().includes(newAccommodation.toLowerCase()) &&
+                          !(formData.accommodationDetails as WorkerAccommodationDetails[]).some(d => d.accommodationName === acc)
                         )
                         .map((acc, index) => (
                           <button
@@ -449,28 +470,75 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
                     </div>
                   )}
                 </div>
-                <button 
-                  type="button" 
-                  onClick={() => addAccommodation()} 
+                <button
+                  type="button"
+                  onClick={() => addAccommodation()}
                   className="px-4 bg-stone-100 dark:bg-stone-800 text-slate-600 dark:text-stone-300 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/30 hover:text-orange-600 dark:hover:text-orange-400 transition-all font-medium text-xs active:scale-95"
                 >
                   Añadir
                 </button>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                {(formData.accommodations || []).map((acc: string, index: number) => (
-                  <span key={index} className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[10px] font-medium rounded-lg border border-orange-100 dark:border-orange-800/50 animate-in zoom-in duration-300">
-                    <MapPin size={10} />
-                    {acc}
-                    <button 
-                      type="button" 
-                      onClick={() => removeAccommodation(acc)}
-                      className="ml-1 hover:text-red-500 transition-colors"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
+              {/* Accommodation detail rows */}
+              <div className="space-y-2">
+                {(formData.accommodationDetails as WorkerAccommodationDetails[]).map((detail) => (
+                  <div key={detail.accommodationName} className="bg-stone-50 dark:bg-stone-800/50 rounded-xl border border-stone-100 dark:border-stone-800 p-3 animate-in zoom-in duration-200">
+                    {/* Name row */}
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-1.5 text-[11px] font-normal text-orange-600 dark:text-orange-400">
+                        <MapPin size={10} />
+                        <span className="truncate max-w-[220px]">{detail.accommodationName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAccommodation(detail.accommodationName)}
+                        className="text-slate-300 dark:text-stone-600 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {/* Detail fields */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {/* Precio */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-400 dark:text-stone-500">€ Precio</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={detail.precio}
+                          onChange={(e) => updateAccommodationDetail(detail.accommodationName, 'precio', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 text-xs bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg text-slate-700 dark:text-stone-300 focus:outline-none focus:ring-1 focus:ring-orange-300 tabular-nums"
+                        />
+                      </div>
+                      {/* Sábanas */}
+                      <button
+                        type="button"
+                        onClick={() => updateAccommodationDetail(detail.accommodationName, 'sabanasIncluidas', !detail.sabanasIncluidas)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-normal border transition-all ${
+                          detail.sabanasIncluidas
+                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                            : 'bg-white dark:bg-stone-900 text-slate-400 dark:text-stone-500 border-stone-200 dark:border-stone-700'
+                        }`}
+                      >
+                        <span>🛏</span>
+                        Sábanas {detail.sabanasIncluidas ? '✓' : '—'}
+                      </button>
+                      {/* Toallas */}
+                      <button
+                        type="button"
+                        onClick={() => updateAccommodationDetail(detail.accommodationName, 'toallasIncluidas', !detail.toallasIncluidas)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-normal border transition-all ${
+                          detail.toallasIncluidas
+                            ? 'bg-teal-50 dark:bg-teal-900/20 text-teal-600 dark:text-teal-400 border-teal-200 dark:border-teal-800'
+                            : 'bg-white dark:bg-stone-900 text-slate-400 dark:text-stone-500 border-stone-200 dark:border-stone-700'
+                        }`}
+                      >
+                        <span>🛁</span>
+                        Toallas {detail.toallasIncluidas ? '✓' : '—'}
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

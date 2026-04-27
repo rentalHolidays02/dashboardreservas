@@ -17,7 +17,8 @@ import {
   PagoRecord,
   Accommodation,
   MOCK_ACCOMMODATIONS,
-  Suggestion
+  Suggestion,
+  WorkerAccommodationDetails
 } from './mockData';
 import { supabase } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
@@ -286,6 +287,7 @@ const getStoredWorkers = (): Worker[] => {
       extraHoursMonth: w.extraHoursMonth ?? 0,
       efectivoRetenido: w.efectivoRetenido ?? 0,
       accommodations: w.accommodations ?? [],
+      accommodationDetails: w.accommodationDetails ?? [],
     }));
   } catch (error) {
     console.error('Error loading workers from localStorage:', error);
@@ -315,11 +317,13 @@ const saveAccommodations = (accommodations: Accommodation[]) => {
 };
 
 // Reemplaza todas las asignaciones de alojamiento de un trabajador en la tabla pivote
-const setWorkerAccommodations = async (workerId: string, accommodationNames: string[]): Promise<void> => {
-  if (!accommodationNames || accommodationNames.length === 0) {
+const setWorkerAccommodations = async (workerId: string, details: WorkerAccommodationDetails[]): Promise<void> => {
+  if (!details || details.length === 0) {
     await supabase.from('worker_accommodations').delete().eq('worker_id', workerId);
     return;
   }
+
+  const accommodationNames = details.map(d => d.accommodationName);
 
   // Buscar IDs de los alojamientos por nombre
   const { data: existing } = await supabase
@@ -346,16 +350,35 @@ const setWorkerAccommodations = async (workerId: string, accommodationNames: str
     (created || []).forEach((a: any) => nameToId.set(a.name, a.id));
   }
 
-  const accommodationIds = accommodationNames
-    .map(n => nameToId.get(n))
-    .filter((id): id is string => !!id);
-
   // Reemplazar todas las entradas del trabajador
   await supabase.from('worker_accommodations').delete().eq('worker_id', workerId);
-  if (accommodationIds.length > 0) {
-    await supabase.from('worker_accommodations').insert(
-      accommodationIds.map(accommodation_id => ({ worker_id: workerId, accommodation_id }))
-    );
+
+  const rows = details
+    .map(d => {
+      const accommodation_id = nameToId.get(d.accommodationName);
+      if (!accommodation_id) return null;
+      return {
+        worker_id: workerId,
+        accommodation_id,
+        precio: Number(d.precio ?? 0),
+        sabanas_incl: Boolean(d.sabanasIncluidas ?? false),
+        toallas_incl: Boolean(d.toallasIncluidas ?? false),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('worker_accommodations').insert(rows);
+    if (error) {
+      // Columnas nuevas no disponibles aún: guardar al menos la asociación básica
+      console.warn('worker_accommodations INSERT con columnas nuevas falló, intentando inserción básica:', error.message);
+      const basicRows = rows.map(r => ({ worker_id: r.worker_id, accommodation_id: r.accommodation_id }));
+      const { error: basicError } = await supabase.from('worker_accommodations').insert(basicRows);
+      if (basicError) {
+        console.error('Error en inserción básica de worker_accommodations:', basicError);
+        throw basicError;
+      }
+    }
   }
 };
 
@@ -822,21 +845,39 @@ export const appsScriptApi = {
 
       // 3. Fetch accommodation assignments from pivot table
       const workerIds = dbWorkers.map((w: any) => w.id);
-      const workerAccMap: Record<string, string[]> = {};
+      const workerAccDetailsMap: Record<string, WorkerAccommodationDetails[]> = {};
 
       if (workerIds.length > 0) {
-        const { data: waData } = await supabase
+        // Intentamos leer las columnas nuevas; si no existen aún hacemos fallback a la query básica
+        const { data: waData, error: waError } = await supabase
           .from('worker_accommodations')
-          .select('worker_id, accommodations(name)')
+          .select('worker_id, precio, sabanas_incl, toallas_incl, accommodations(name)')
           .in('worker_id', workerIds);
 
-        if (waData) {
-          waData.forEach((entry: any) => {
-            if (!workerAccMap[entry.worker_id]) workerAccMap[entry.worker_id] = [];
+        const populate = (entries: any[], withDetails: boolean) => {
+          entries.forEach((entry: any) => {
+            if (!workerAccDetailsMap[entry.worker_id]) workerAccDetailsMap[entry.worker_id] = [];
             if (entry.accommodations?.name) {
-              workerAccMap[entry.worker_id].push(entry.accommodations.name);
+              workerAccDetailsMap[entry.worker_id].push({
+                accommodationName: entry.accommodations.name,
+                precio: withDetails ? Number(entry.precio ?? 0) : 0,
+                sabanasIncluidas: withDetails ? (entry.sabanas_incl ?? false) : false,
+                toallasIncluidas: withDetails ? (entry.toallas_incl ?? false) : false,
+              });
             }
           });
+        };
+
+        if (!waError && waData) {
+          populate(waData, true);
+        } else {
+          // Fallback: columnas nuevas no disponibles aún — usamos query básica
+          if (waError) console.warn('worker_accommodations: columnas nuevas no disponibles, usando fallback:', waError.message);
+          const { data: basicData } = await supabase
+            .from('worker_accommodations')
+            .select('worker_id, accommodations(name)')
+            .in('worker_id', workerIds);
+          if (basicData) populate(basicData, false);
         }
       }
 
@@ -863,7 +904,8 @@ export const appsScriptApi = {
           cleansCountMonth: 0,
           kmsMonth: 0,
           extraHoursMonth: 0,
-          accommodations: workerAccMap[w.id] || [],
+          accommodationDetails: workerAccDetailsMap[w.id] || [],
+          accommodations: (workerAccDetailsMap[w.id] || []).map(d => d.accommodationName),
           tipoTrabajador: w.worker_type,
           telefonoBizum: w.bizum_phone,
           photo: w.photo_url
@@ -1116,8 +1158,14 @@ export const appsScriptApi = {
       if (error) throw error;
 
       // 4. Guardar asignaciones de alojamiento en tabla pivote
-      if (Array.isArray(workerData.accommodations)) {
-        await setWorkerAccommodations(workerData.id, workerData.accommodations);
+      if (Array.isArray(workerData.accommodationDetails)) {
+        await setWorkerAccommodations(workerData.id, workerData.accommodationDetails);
+      } else if (Array.isArray(workerData.accommodations) && workerData.accommodations.length > 0) {
+        // Fallback: si solo llegan nombres, crea detalles con valores por defecto
+        const fallback = (workerData.accommodations as string[]).map(name => ({
+          accommodationName: name, precio: 0, sabanasIncluidas: false, toallasIncluidas: false,
+        }));
+        await setWorkerAccommodations(workerData.id, fallback);
       }
 
       const updatedWorkers = currentWorkers.map(w =>
@@ -1190,8 +1238,8 @@ export const appsScriptApi = {
       if (error) throw error;
 
       // 4. Guardar asignaciones de alojamiento en tabla pivote
-      if (Array.isArray(workerData.accommodations) && workerData.accommodations.length > 0) {
-        await setWorkerAccommodations(data.id, workerData.accommodations);
+      if (Array.isArray(workerData.accommodationDetails) && workerData.accommodationDetails.length > 0) {
+        await setWorkerAccommodations(data.id, workerData.accommodationDetails);
       }
 
       const newWorker: Worker = { ...workerData, id: data.id } as Worker;

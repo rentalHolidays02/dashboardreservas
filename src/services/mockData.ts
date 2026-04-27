@@ -7,6 +7,13 @@ export interface User {
   last_location?: any;
 }
 
+export interface WorkerAccommodationDetails {
+  accommodationName: string;
+  precio: number;
+  sabanasIncluidas: boolean;
+  toallasIncluidas: boolean;
+}
+
 export interface Worker {
   id: string;
   excelId?: string;
@@ -21,6 +28,7 @@ export interface Worker {
   cleansCountMonth: number;
   kmsMonth: number;
   extraHoursMonth?: number;
+  accommodationDetails: WorkerAccommodationDetails[];
   accommodations: string[];
   tipoPago?: 'bizum' | 'tarjeta' | 'efectivo';
   pagoPorReserva?: number;
@@ -125,6 +133,11 @@ export const MOCK_WORKERS: Worker[] = [
     cleansCountMonth: 12,
     kmsMonth: 450,
     accommodations: ['Penthouse Diagonal', 'Casa Marina 3B', 'Ático Sol 7'],
+    accommodationDetails: [
+      { accommodationName: 'Penthouse Diagonal', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+      { accommodationName: 'Casa Marina 3B', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+      { accommodationName: 'Ático Sol 7', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+    ],
     tipoPago: 'bizum',
     pagoPorReserva: 20
   },
@@ -136,6 +149,10 @@ export const MOCK_WORKERS: Worker[] = [
     cleansCountMonth: 8,
     kmsMonth: 120,
     accommodations: ['Apt. Ramblas 12', 'Loft Born 2'],
+    accommodationDetails: [
+      { accommodationName: 'Apt. Ramblas 12', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+      { accommodationName: 'Loft Born 2', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+    ],
     tipoPago: 'tarjeta',
     pagoPorReserva: 25
   },
@@ -147,6 +164,12 @@ export const MOCK_WORKERS: Worker[] = [
     cleansCountMonth: 15,
     kmsMonth: 600,
     accommodations: ['Estudio Gracia 5', 'Casa Marina 3B', 'Loft Born 2', 'Ático Sol 7'],
+    accommodationDetails: [
+      { accommodationName: 'Estudio Gracia 5', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+      { accommodationName: 'Casa Marina 3B', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+      { accommodationName: 'Loft Born 2', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+      { accommodationName: 'Ático Sol 7', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+    ],
     tipoPago: 'efectivo',
     pagoPorReserva: 15
   },
@@ -158,6 +181,9 @@ export const MOCK_WORKERS: Worker[] = [
     cleansCountMonth: 10,
     kmsMonth: 300,
     accommodations: ['Ático Sol 7'],
+    accommodationDetails: [
+      { accommodationName: 'Ático Sol 7', precio: 0, sabanasIncluidas: false, toallasIncluidas: false },
+    ],
     tipoPago: 'bizum',
     pagoPorReserva: 20
   }
