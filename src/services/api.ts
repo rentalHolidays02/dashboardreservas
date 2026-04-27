@@ -1166,6 +1166,30 @@ export const appsScriptApi = {
     }
   },
 
+  starSuggestion: async (id: string): Promise<boolean> => {
+    try {
+      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=star&id=${id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.ok;
+    } catch (error) {
+      console.error('Error starring suggestion:', error);
+      return false;
+    }
+  },
+
+  unstarSuggestion: async (id: string): Promise<boolean> => {
+    try {
+      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=unstar&id=${id}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      return data.ok;
+    } catch (error) {
+      console.error('Error unstarring suggestion:', error);
+      return false;
+    }
+  },
+
   deleteSuggestion: async (id: string): Promise<boolean> => {
     try {
       const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=delete&id=${id}`;
@@ -1174,6 +1198,21 @@ export const appsScriptApi = {
       return data.ok;
     } catch (error) {
       console.error('Error deleting suggestion:', error);
+      return false;
+    }
+  },
+
+  replySuggestion: async (id: string, body: string): Promise<boolean> => {
+    try {
+      await fetch(SUGERENCIAS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'reply', id, body })
+      });
+      return true;
+    } catch (error) {
+      console.error('Error replying to suggestion:', error);
       return false;
     }
   },
