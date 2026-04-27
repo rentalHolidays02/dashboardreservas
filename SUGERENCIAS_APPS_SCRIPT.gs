@@ -22,6 +22,18 @@ function doGet(e) {
       GmailApp.getThreadById(id).markUnread();
       return jsonResponse({ ok: true });
     }
+
+    if (action === 'star' && id) {
+      var thread = GmailApp.getThreadById(id);
+      thread.getMessages()[0].star();
+      return jsonResponse({ ok: true });
+    }
+
+    if (action === 'unstar' && id) {
+      var thread = GmailApp.getThreadById(id);
+      thread.getMessages()[0].unstar();
+      return jsonResponse({ ok: true });
+    }
     
     if (action === 'delete' && id) {
       GmailApp.getThreadById(id).moveToTrash();
@@ -48,8 +60,48 @@ function doPost(e) {
       GmailApp.getThreadById(id).markUnread();
       return jsonResponse({ ok: true });
     }
+    if (action === 'star' && id) {
+      GmailApp.getThreadById(id).getMessages()[0].star();
+      return jsonResponse({ ok: true });
+    }
+    if (action === 'unstar' && id) {
+      GmailApp.getThreadById(id).getMessages()[0].unstar();
+      return jsonResponse({ ok: true });
+    }
     if (action === 'delete' && id) {
       GmailApp.getThreadById(id).moveToTrash();
+      return jsonResponse({ ok: true });
+    }
+    
+    if (action === 'reply' && id) {
+      var body = payload.body;
+      if (!body) return jsonResponse({ ok: false, error: 'Falta el cuerpo del mensaje' });
+      
+      var thread = GmailApp.getThreadById(id);
+      var lastMessage = thread.getMessages()[0]; // El primer mensaje suele tener los datos del formulario
+      var messageBody = lastMessage.getPlainBody();
+      
+      // Intentar extraer el correo del cuerpo del mensaje
+      var emailMatch = messageBody.match(/Correo:\s*([^\n\r]+)/i);
+      var recipient = "";
+      if (emailMatch && emailMatch[1]) {
+        recipient = emailMatch[1].trim();
+      } else {
+        // Fallback al remitente del último mensaje
+        recipient = thread.getMessages()[thread.getMessageCount() - 1].getFrom();
+      }
+      
+      var subject = "Re: " + thread.getFirstMessageSubject();
+      
+      // Enviar el correo directamente al destinatario extraído
+      GmailApp.sendEmail(recipient, subject, body, {
+        name: "Feedback App - Rental Holidays",
+        replyTo: "rentalholidays.es@gmail.com"
+      });
+      
+      // También responder en el hilo de Gmail para que quede constancia del envío
+      thread.reply("Respuesta enviada a " + recipient + ":\n\n" + body);
+      
       return jsonResponse({ ok: true });
     }
     
@@ -107,7 +159,8 @@ function listSuggestions(params) {
       snippet: body.substring(0, 150).replace(/\n/g, ' ') + "...",
       body: body,
       category: category,
-      isRead: !threads[i].isUnread()
+      isRead: !threads[i].isUnread(),
+      isStarred: threads[i].hasStarredMessages()
     });
   }
   
