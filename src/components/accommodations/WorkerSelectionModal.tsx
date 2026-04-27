@@ -39,7 +39,7 @@ const WorkerSelectionModal: React.FC<WorkerSelectionModalProps> = ({
     return allWorkers
       .filter(w => 
         w.fullName.toLowerCase().includes(search) || 
-        w.telefono.includes(search)
+        (w.telefono || '').includes(search)
       )
       .sort((a, b) => {
         const aSel = selectedNames.has(a.fullName);
