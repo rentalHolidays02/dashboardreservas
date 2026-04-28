@@ -42,6 +42,7 @@ const SUGERENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT
 const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL || '';
 const PDF_FOLDER_ID = import.meta.env.VITE_PDF_FOLDER_ID || '';
 
+
 type AppsScriptJsonResponse = { ok: boolean; error?: string; [k: string]: any };
 
 const postToCleansScript = async (payload: Record<string, any>): Promise<AppsScriptJsonResponse> => {
