@@ -25,12 +25,12 @@ import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets API Configuration
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
-const SPREADSHEET_ID = import.meta.env.VITE_SPREADSHEET_ID || ''; // Alojamientos
+const SPREADSHEET_ID = import.meta.env.VITE_ALOJAMIENTOS_SPREADSHEET_ID || ''; // Alojamientos
 const WORKERS_SPREADSHEET_ID = import.meta.env.VITE_WORKERS_SPREADSHEET_ID || ''; // Pagos Generales (Operarios)
 const CLEANS_SPREADSHEET_ID = import.meta.env.VITE_CLEANS_SPREADSHEET_ID || ''; // INFORMES_OPERARIOS
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL || '';
+const APPS_SCRIPT_URL = import.meta.env.VITE_SUPABASE_INVITACION_APPS_SCRIPT_URL || '';
 const CLEANS_APPS_SCRIPT_URL = import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL || '';
 const WORKERS_APPS_SCRIPT_URL = import.meta.env.VITE_WORKERS_APPS_SCRIPT_URL || '';
 const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || '';
