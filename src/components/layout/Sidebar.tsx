@@ -157,7 +157,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         if (userRole === 'trabajador') {
           return item.label === 'Dashboard' || item.label === 'Resumen' || item.label === 'Registros';
         }
-        return item.label !== 'Registros';
+        // Para admin, no mostrar 'Registros' ni 'Resumen'
+        return item.label !== 'Registros' && item.label !== 'Resumen';
       });
 
               if (filteredItems.length === 0) return null;
