@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users, Pencil } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
@@ -9,6 +9,7 @@ import { appsScriptApi } from '../services/api';
 import { Accommodation, Worker } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
+import defaultAccImage from '../assets/default_accommodation.png';
 
 interface AlojamientosProps {
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
@@ -383,7 +384,7 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                     <div className="flex items-center gap-3 md:hidden">
                       <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-stone-100 dark:bg-stone-800">
                         <img
-                          src={acc.image || '/default_accommodation.png'}
+                          src={acc.image || defaultAccImage}
                           alt={acc.name}
                           className="w-full h-full object-cover"
                         />
@@ -392,11 +393,21 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                         <p className="text-sm font-normal text-slate-800 dark:text-stone-100 truncate">{toTC(acc.name)}</p>
                         <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{toTC(acc.city)} • {acc.ref || 'S/R'}</p>
                       </div>
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${
-                        acc.active
-                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                          : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
-                      }`}>{acc.active ? 'Activo' : 'Inactivo'}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${
+                          acc.active
+                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                            : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
+                        }`}>{acc.active ? 'Activo' : 'Inactivo'}</span>
+                        {!isReadOnly && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEditClick(acc); }}
+                            className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all active:scale-90"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Desktop: grid row */}
@@ -404,7 +415,7 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                       {/* Miniatura */}
                       <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-stone-100 dark:bg-stone-800">
                         <img
-                          src={acc.image || '/default_accommodation.png'}
+                          src={acc.image || defaultAccImage}
                           alt={acc.name}
                           className="w-full h-full object-cover"
                         />
@@ -422,12 +433,22 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                         <Users size={11} className="text-orange-400 flex-shrink-0" />
                         {assignedCount}
                       </span>
-                      {/* Estado */}
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md w-fit ${
-                        acc.active
-                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                          : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
-                      }`}>{acc.active ? 'Activo' : 'Inactivo'}</span>
+                      {/* Estado + Editar */}
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md w-fit ${
+                          acc.active
+                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                            : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
+                        }`}>{acc.active ? 'Activo' : 'Inactivo'}</span>
+                        {!isReadOnly && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEditClick(acc); }}
+                            className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all opacity-0 group-hover:opacity-100 active:scale-90"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </li>
                 );
