@@ -89,6 +89,7 @@ interface WorkerProfileProps {
   onSave?: (worker: Worker) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   initialEditing?: boolean;
+  userRole?: string;
 }
 
 type MainTab = 'datos' | 'registros' | 'analiticas' | 'alojamientos';
@@ -185,7 +186,14 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, onDelete, initialEditing = false }) => {
+const WorkerProfile: React.FC<WorkerProfileProps> = ({ 
+  worker, 
+  onBack, 
+  onSave, 
+  onDelete, 
+  initialEditing = false,
+  userRole 
+}) => {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<MainTab>('datos');
 
@@ -632,12 +640,17 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({ worker, onBack, onSave, o
   const gridColor = theme === 'dark' ? '#44403c' : '#e7e5e4';
   const tickColor = theme === 'dark' ? '#78716c' : '#a8a29e';
 
-  const tabs: { id: MainTab; label: string }[] = [
+  const tabs = [
     { id: 'datos', label: 'Datos trabajador' },
     { id: 'registros', label: 'Registros' },
     { id: 'analiticas', label: 'Resumen' },
     { id: 'alojamientos', label: 'Alojamientos' },
-  ];
+  ].filter(tab => {
+    if (tab.id === 'analiticas' && userRole && userRole !== 'trabajador') {
+      return false;
+    }
+    return true;
+  }) as { id: MainTab; label: string }[];
 
   const recordTabs = [
     { id: 'normal' as RecordsTab, label: 'Normales', icon: <ClipboardList size={13} />, count: normalCleans.length },

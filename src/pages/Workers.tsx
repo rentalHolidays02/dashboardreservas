@@ -168,6 +168,7 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
     return (
       <WorkerProfile
         worker={profileWorker}
+        userRole={userRole}
         onBack={() => { setProfileWorker(null); setProfileEditMode(false); }}
         initialEditing={profileEditMode}
         onSave={async (w) => {
