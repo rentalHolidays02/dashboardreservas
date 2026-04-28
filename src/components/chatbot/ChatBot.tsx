@@ -26,7 +26,7 @@ import chatbotAvatar from '../../assets/chatbot-avatar.jpeg';
 // ─── 1. CONSTANTES ────────────────────────────────────────────────────────────
 
 // Clave de API de Groq (servicio de IA que procesa los mensajes de texto)
-const GROQ_API_KEY = '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';
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || '';
 
 // URL del endpoint de Groq (compatible con el formato de OpenAI)
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
