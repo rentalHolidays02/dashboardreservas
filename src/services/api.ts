@@ -25,12 +25,12 @@ import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets API Configuration
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
-const SPREADSHEET_ID = import.meta.env.VITE_ALOJAMIENTOS_SPREADSHEET_ID || ''; // Alojamientos
+const ALOJAMIENTOS_SPREADSHEET_ID = import.meta.env.VITE_ALOJAMIENTOS_SPREADSHEET_ID || ''; // Alojamientos
 const WORKERS_SPREADSHEET_ID = import.meta.env.VITE_WORKERS_SPREADSHEET_ID || ''; // Pagos Generales (Operarios)
 const CLEANS_SPREADSHEET_ID = import.meta.env.VITE_CLEANS_SPREADSHEET_ID || ''; // INFORMES_OPERARIOS
 const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const APPS_SCRIPT_URL = import.meta.env.VITE_SUPABASE_INVITACION_APPS_SCRIPT_URL || '';
+const INVITACION_APPS_SCRIPT_URL = import.meta.env.VITE_SUPABASE_INVITACION_APPS_SCRIPT_URL || '';
 const CLEANS_APPS_SCRIPT_URL = import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL || '';
 const WORKERS_APPS_SCRIPT_URL = import.meta.env.VITE_WORKERS_APPS_SCRIPT_URL || '';
 const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || '';
@@ -540,7 +540,7 @@ export const appsScriptApi = {
       if (profileError || !profile || profile.role === 'viewer') {
         console.warn('Perfil no encontrado, RLS bloqueado o rol de visualizador detectado. Verificando con el puente de Google...');
         try {
-          const url = new URL(APPS_SCRIPT_URL);
+          const url = new URL(INVITACION_APPS_SCRIPT_URL);
           url.searchParams.append('action', 'getProfile');
           url.searchParams.append('email', sessionUser.email || '');
 
@@ -613,7 +613,7 @@ export const appsScriptApi = {
       
       // 1. Intentar Google primero (es nuestra fuente de verdad para roles heredados)
       try {
-        const url = new URL(APPS_SCRIPT_URL);
+        const url = new URL(INVITACION_APPS_SCRIPT_URL);
         url.searchParams.append('action', 'getProfile');
         url.searchParams.append('email', email);
         const response = await fetch(url.toString(), { method: 'GET' });
@@ -702,7 +702,7 @@ export const appsScriptApi = {
     try {
       // Apps Script Web App no permite controlar CORS headers en la respuesta.
       // Enviamos vía POST con no-cors para asegurar que la petición llegue.
-      const url = new URL(APPS_SCRIPT_URL);
+      const url = new URL(INVITACION_APPS_SCRIPT_URL);
       url.searchParams.append('action', 'inviteUser');
       url.searchParams.append('email', email);
       url.searchParams.append('userData', JSON.stringify(userData));
@@ -732,7 +732,7 @@ export const appsScriptApi = {
     if (!data || data.length === 0) {
       console.warn('⚠️ [API] Supabase no devolvió perfiles. Intentando Google...');
       try {
-        const url = new URL(APPS_SCRIPT_URL);
+        const url = new URL(INVITACION_APPS_SCRIPT_URL);
         url.searchParams.append('action', 'getAllProfiles');
         // Usamos un proxy de CORS o intentamos fetch normal (aunque falle)
         const response = await fetch(url.toString(), { method: 'GET' });
@@ -1018,7 +1018,7 @@ export const appsScriptApi = {
   // --- Sincronización Alojamientos: Sheets -> Supabase ---
   syncAccommodationsFromSheets: async (): Promise<void> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${ALOJAMIENTOS_SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
       const response = await fetchWithRetry(url);
       if (!response.ok) return;
 
