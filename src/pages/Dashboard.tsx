@@ -133,25 +133,45 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
   const handleContextFinish = (type: CheckoutTabType, record: CheckoutRecord) => {
     setContextModal(prev => ({ ...prev, open: false }));
-    // Prepare pre-filled record with current date/time for checkout
-    const now = new Date().toISOString().split('.')[0].replace('T', ' ');
-    const nowTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     
+    const now = new Date();
+    const formatFull = (d: Date) => {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${pad(d.getDate())}/${d.getMonth() + 1}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    
+    const nowStr = formatFull(now);
+    const nowTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    
+    const extractTime = (str: string) => {
+      if (!str) return '';
+      const match = str.match(/(\d{2}:\d{2})/);
+      return match ? match[1] : '';
+    };
+
     let preFilled: CheckoutRecord;
 
     if (type === 'handyman') {
       const r = record as HandymanRecord;
+      const horaInicio = extractTime(r.fechaLlegada || '');
+      
       preFilled = {
         ...r,
-        fechaFin: now,
+        alojamiento: '',
+        fechaFin: nowStr,
+        horaInicioTarea: horaInicio || r.horaInicioTarea,
         horaFinTarea: nowTime,
         estadoCompletado: 'Completado'
       } as HandymanRecord;
     } else {
       const r = record as NormalCleanRecord | InitialCleanRecord;
+      const horaEntrada = extractTime(r.checkinFecha || '');
+
       preFilled = {
         ...r,
-        checkoutFecha: now,
+        apartamento: '',
+        checkoutFecha: nowStr,
+        horaEntrada: horaEntrada || r.horaEntrada,
         horaSalida: nowTime,
         checked: false
       } as NormalCleanRecord | InitialCleanRecord;
@@ -182,9 +202,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
   const handleCheckoutSubmit = async (record: CheckoutRecord) => {
     try {
       setIsSavingCheckout(true);
+      // 1. Crear el registro en la hoja de checkout
       const ok = await appsScriptApi.createCheckoutRecord(checkoutForm.type, record);
       if (!ok) throw new Error('No se pudo guardar el checkout');
       
+      // 2. Si el registro venía de un check-in abierto, lo borramos de su hoja original
+      if (record.id && String(record.id).startsWith('check_')) {
+        console.log('Borrando check-in abierto tras checkout:', record.id);
+        await appsScriptApi.deleteCheckinRecord(checkoutForm.type, record.id);
+      }
+
       setCheckoutForm(prev => ({ ...prev, open: false }));
       await refreshDashboard();
     } catch (error) {

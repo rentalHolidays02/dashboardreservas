@@ -176,7 +176,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         isFinished: false,
         type: 'Limpieza Normal',
         tabType: 'normal',
-        originalRecord: r
+        originalRecord: r,
+        location: r.checkinUbicacion
       });
     });
     activeInitialCheckins.forEach(r => {
@@ -188,7 +189,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         isFinished: false,
         type: 'Limpieza Inicial',
         tabType: 'initial',
-        originalRecord: r
+        originalRecord: r,
+        location: r.checkinUbicacion
       });
     });
     activeHandymanCheckins.forEach(r => {
@@ -200,7 +202,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         isFinished: false,
         type: 'Manitas',
         tabType: 'handyman',
-        originalRecord: r
+        originalRecord: r,
+        location: r.ubicacionInicio
       });
     });
 
@@ -212,7 +215,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         accommodation: r.apartamento,
         timestamp: r.checkoutFecha || r.checkinFecha,
         isFinished: true,
-        type: 'Limpieza Normal'
+        type: 'Limpieza Normal',
+        location: r.checkoutUbicacion || r.checkinUbicacion
       });
     });
 
@@ -223,7 +227,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         accommodation: r.apartamento,
         timestamp: r.checkoutFecha || r.checkinFecha,
         isFinished: true,
-        type: 'Limpieza Inicial'
+        type: 'Limpieza Inicial',
+        location: r.checkoutUbicacion || r.checkinUbicacion
       });
     });
 
@@ -234,7 +239,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         accommodation: r.alojamiento,
         timestamp: r.fechaFin || r.fechaLlegada,
         isFinished: true,
-        type: 'Manitas'
+        type: 'Manitas',
+        location: r.ubicacionFin || r.ubicacionInicio
       });
     });
 
@@ -364,7 +370,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
                 <div className="min-w-0 pr-2">
                   <p className="text-xs font-semibold text-slate-700 dark:text-stone-300 truncate">{formattedCleanerName}</p>
                   <a 
-                    href={entry.checkinUbicacion ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.checkinUbicacion)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.accommodation)}`}
+                    href={entry.location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.location)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(entry.accommodation)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[10px] text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors block truncate max-w-[140px]"

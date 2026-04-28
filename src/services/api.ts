@@ -439,9 +439,9 @@ const getCheckinSheetName = (type: string): string => {
 
 const parseRowIndexFromId = (id: string): number => {
   if (!id) return -1;
-  // Soporta formatos nc_123, ic_123, hm_123 o simplemente el número
+  // Soporta formatos nc_123, ic_123, hm_123, check_norm_123 o simplemente el número
   const parts = String(id).split('_');
-  const indexStr = parts.length > 1 ? parts[1] : parts[0];
+  const indexStr = parts[parts.length - 1]; // Tomar siempre el último fragmento
   const rowIndex = parseInt(indexStr, 10);
   if (!Number.isFinite(rowIndex) || rowIndex <= 1) {
     console.warn(`⚠️ Invalid clean record id for indexing: ${id}`);
@@ -451,6 +451,13 @@ const parseRowIndexFromId = (id: string): number => {
 };
 
 const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Record<string, any> => {
+  const ensureKm = (v: any) => {
+    const val = String(v || '').trim();
+    if (val === '' || isNaN(parseFloat(val))) return '0';
+    return val;
+  };
+  const toSiNo = (v: any) => v ? 'Sí' : 'No';
+
   if (type === 'normal') {
     const data = record as NormalCleanRecord;
     return {
@@ -464,10 +471,10 @@ const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | 
       Apartamento: data.apartamento,
       'Hora Limpieza Entrada': data.horaEntrada,
       'Hora Limpieza Salida': data.horaSalida,
-      'Sigue Huesped': data.sigueHuesped,
+      'Sigue Huesped': toSiNo(data.sigueHuesped),
       'Fecha Salida Reserva': data.fechaSalidaReserva,
-      'Recoge Llaves': data.recogeLlaves,
-      Km: data.km,
+      'Recoge Llaves': toSiNo(data.recogeLlaves),
+      Km: ensureKm(data.km),
       Observaciones: data.observaciones,
       Checked: data.checked,
     };
@@ -485,7 +492,7 @@ const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | 
       Apartamento: data.apartamento,
       'Hora Limpieza Entrada': data.horaEntrada,
       'Hora Limpieza Salida': data.horaSalida,
-      Km: data.km,
+      Km: ensureKm(data.km),
       Observaciones: data.observaciones,
       Checked: data.checked,
     };
@@ -502,7 +509,7 @@ const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | 
     Apartamento: data.alojamiento,
     'Hora Reparacion Entrada': data.horaInicioTarea,
     'Hora Reparacion Salida': data.horaFinTarea,
-    Km: data.cantidadMinutos,
+    Km: ensureKm(data.cantidadMinutos),
     Observaciones: data.observacionesTarea,
     Checked: data.estadoCompletado === 'Completado',
   };
@@ -1879,7 +1886,7 @@ export const appsScriptApi = {
 
   getNormalCleansResult: async (): Promise<CleansFetchResult<NormalCleanRecord>> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
       const response = await fetchWithRetry(url);
 
       if (!response.ok) {
@@ -2040,7 +2047,7 @@ export const appsScriptApi = {
 
   getInitialCleansResult: async (): Promise<CleansFetchResult<InitialCleanRecord>> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Inicial!A:M?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Inicial!A:M?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
       const response = await fetchWithRetry(url);
 
       if (!response.ok) {
@@ -2105,7 +2112,7 @@ export const appsScriptApi = {
 
   getHandymanRecordsResult: async (): Promise<CleansFetchResult<HandymanRecord>> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Manitas!A:M?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Manitas!A:M?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
       const response = await fetchWithRetry(url);
 
       if (!response.ok) {
@@ -2170,7 +2177,7 @@ export const appsScriptApi = {
 
   getNormalCheckins: async (): Promise<NormalCleanRecord[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
       const response = await fetchWithRetry(url);
       if (!response.ok) throw new Error(`Error fetching normal checkins: ${response.statusText}`);
       const data = await response.json();
@@ -2209,7 +2216,7 @@ export const appsScriptApi = {
 
   getInitialCheckins: async (): Promise<InitialCleanRecord[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Inicial!A:P?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Inicial!A:P?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
       const response = await fetchWithRetry(url);
       if (!response.ok) throw new Error(`Error fetching initial checkins: ${response.statusText}`);
       const data = await response.json();
@@ -2248,7 +2255,7 @@ export const appsScriptApi = {
 
   getHandymanCheckins: async (): Promise<HandymanRecord[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Manitas!A:M?key=${GOOGLE_API_KEY}`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Manitas!A:M?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
       const response = await fetchWithRetry(url);
       if (!response.ok) throw new Error(`Error fetching handyman checkins: ${response.statusText}`);
       const data = await response.json();

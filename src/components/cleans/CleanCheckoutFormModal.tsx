@@ -84,6 +84,17 @@ const formatWorkerPhoneForSheet = (prefix: string, localDigits: string) => {
 const isCoordString = (s: string): boolean =>
   /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/.test(s.trim());
 
+const toISOForInput = (dateStr: string) => {
+  if (!dateStr) return '';
+  if (dateStr.includes('T')) return dateStr;
+  
+  const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})(?:\s+|T)(\d{2}:\d{2}(?::\d{2})?)/);
+  if (match) {
+    return `${match[3]}-${match[2]}-${match[1]}T${match[4]}`;
+  }
+  return dateStr.replace(' ', 'T');
+};
+
 const MapPickerModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -453,13 +464,23 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
 
           if (isExtra && extraHoursReason.trim()) {
             const obsKey = isHandyman ? 'observacionesTarea' : 'observaciones';
-            const currentObs = String(finalRecord[obsKey] || '');
-            finalRecord[obsKey] = `[HORAS EXTRA] ${extraHoursReason.trim()}\n${currentObs}`.trim();
+            const currentObs = String(finalRecord[obsKey] || '').trim();
+            finalRecord[obsKey] = currentObs 
+              ? `${currentObs}\n[HORAS EXTRA] ${extraHoursReason.trim()}` 
+              : `[HORAS EXTRA] ${extraHoursReason.trim()}`;
           }
           if (type === 'normal' && (finalRecord as NormalCleanRecord).sigueHuesped) {
             if (reservaTime && reservaDate) {
-              // Guardar con fecha primero para que sea legible y consistente en el sheet
-              (finalRecord as NormalCleanRecord).fechaSalidaReserva = `${reservaDate} ${reservaTime}`.trim();
+              let formattedDate = reservaDate;
+              if (reservaDate.includes('-')) {
+                const [y, m, d] = reservaDate.split('-');
+                formattedDate = `${d}/${parseInt(m, 10)}/${y}`;
+              } else if (reservaDate.includes('/')) {
+                const [d, m, y] = reservaDate.split('/');
+                formattedDate = `${d}/${parseInt(m, 10)}/${y}`;
+              }
+              // Guardar formato hh:mm dd/m/aaaa
+              (finalRecord as NormalCleanRecord).fechaSalidaReserva = `${reservaTime} ${formattedDate}`.trim();
             }
           } else if (type === 'normal') {
             (finalRecord as NormalCleanRecord).fechaSalidaReserva = '';
@@ -621,7 +642,7 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
             <div className="space-y-2">
               <label className={labelClass}>{isHandyman ? 'Fecha de Inicio' : 'Fecha Check-in'}</label>
               <div className="relative group"><Calendar size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
-                <input type="datetime-local" max="9999-12-31T23:59" className={`${inputClass} !pl-10`} value={isHandyman ? ((form as HandymanRecord).fechaLlegada || '').replace(' ', 'T') : ((form as any).checkinFecha || '').replace(' ', 'T')} onChange={(e) => {
+                <input type="datetime-local" step="1" max="9999-12-31T23:59:59" className={`${inputClass} !pl-10`} value={toISOForInput(isHandyman ? ((form as HandymanRecord).fechaLlegada || '') : ((form as any).checkinFecha || ''))} onChange={(e) => {
                   const val = e.target.value;
                   if (val.split('-')[0].length > 4) return;
                   updateField(isHandyman ? 'fechaLlegada' : 'checkinFecha', val.replace('T', ' '));
@@ -632,7 +653,7 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
             <div className="space-y-2">
               <label className={labelClass}>{isHandyman ? 'Fecha de Fin' : 'Fecha Check-out'}</label>
               <div className="relative group"><Calendar size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
-                <input type="datetime-local" max="9999-12-31T23:59" className={`${inputClass} !pl-10`} value={isHandyman ? ((form as HandymanRecord).fechaFin || '').replace(' ', 'T') : ((form as any).checkoutFecha || '').replace(' ', 'T')} onChange={(e) => {
+                <input type="datetime-local" step="1" max="9999-12-31T23:59:59" className={`${inputClass} !pl-10`} value={toISOForInput(isHandyman ? ((form as HandymanRecord).fechaFin || '') : ((form as any).checkoutFecha || ''))} onChange={(e) => {
                   const val = e.target.value;
                   if (val.split('-')[0].length > 4) return;
                   updateField(isHandyman ? 'fechaFin' : 'checkoutFecha', val.replace('T', ' '));
@@ -739,7 +760,7 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
             </div>
 
             <div className="space-y-2">
-              <label className={labelClass}>{isHandyman ? 'Cantidad Minutos' : 'Kilometraje'}</label>
+              <label className={labelClass}>Km (ida y vuelta)</label>
               <div className="relative group"><Navigation size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors pointer-events-none" />
                 <input type="text" className={`${inputClass} !pl-10`} value={kmInput} onChange={(e) => handleKmChange(e.target.value)} />
               </div>
@@ -802,7 +823,7 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
 
             <div className="space-y-3"><label className={labelClass}>Revisión</label><div className="flex p-1.5 bg-stone-100 dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800"><button type="button" onClick={() => isHandyman ? updateField('estadoCompletado', 'Completado') : updateField('checked', true)} className={`flex-1 py-2 text-xs rounded-xl transition-all font-medium flex items-center justify-center gap-2 ${(isHandyman ? (form as HandymanRecord).estadoCompletado === 'Completado' : (form as any).checked) ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}><CheckCircle2 size={12} />Verificado</button><button type="button" onClick={() => isHandyman ? updateField('estadoCompletado', 'Pendiente') : updateField('checked', false)} className={`flex-1 py-2 text-xs rounded-xl transition-all font-medium ${!(isHandyman ? (form as HandymanRecord).estadoCompletado === 'Completado' : (form as any).checked) ? 'bg-white dark:bg-stone-800 text-slate-600' : 'text-slate-400'}`}>Pendiente</button></div></div>
 
-            <div className="md:col-span-2 space-y-2"><label className={labelClass}>Notas</label><div className="relative group"><MessageSquare size={14} className="absolute left-3.5 top-4 text-slate-400" /><textarea className={`${inputClass} !pl-10 h-32 resize-none pt-4`} placeholder="Notas adicionales..." value={isHandyman ? (form as HandymanRecord).observacionesTarea || '' : (form as any).observaciones || ''} onChange={(e) => updateField(isHandyman ? 'observacionesTarea' : 'observaciones', e.target.value)} /></div></div>
+            <div className="md:col-span-2 space-y-2"><label className={labelClass}>{isHandyman ? 'Detalles del trabajo' : 'Notas'}</label><div className="relative group"><MessageSquare size={14} className="absolute left-3.5 top-4 text-slate-400" /><textarea className={`${inputClass} !pl-10 h-32 resize-none pt-4`} placeholder={isHandyman ? "Describa los detalles del trabajo realizado..." : "Notas adicionales..."} value={isHandyman ? (form as HandymanRecord).observacionesTarea || '' : (form as any).observaciones || ''} onChange={(e) => updateField(isHandyman ? 'observacionesTarea' : 'observaciones', e.target.value)} /></div></div>
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-4 pt-12 pb-2">
