@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Home, RefreshCw } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
@@ -29,6 +29,14 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(
+    () => (localStorage.getItem('accommodations_viewMode') as 'grid' | 'table') || 'grid'
+  );
+
+  const handleSetViewMode = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    localStorage.setItem('accommodations_viewMode', mode);
+  };
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -266,6 +274,32 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
               />
             </div>
 
+            {/* View mode toggle */}
+            <div className="flex items-center bg-white dark:bg-stone-900 border border-white/60 dark:border-stone-700/50 rounded-xl p-1 gap-0.5">
+              <button
+                onClick={() => handleSetViewMode('grid')}
+                title="Vista en cuadrícula"
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
+                }`}
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button
+                onClick={() => handleSetViewMode('table')}
+                title="Vista en lista"
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
+                }`}
+              >
+                <List size={14} />
+              </button>
+            </div>
+
             {!isReadOnly && (
               <div className="flex items-center gap-2">
                 <button
@@ -299,27 +333,108 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
         </p>
       )}
 
-      {/* Accommodations grid (Airbnb Style) */}
+      {/* Accommodations — grid or table */}
       {filteredAccommodations.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10 p-1">
-          {filteredAccommodations.map(acc => {
-            const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
-            return (
-              <div
-                key={acc.id}
-                onClick={() => handleViewClick(acc)}
-                className="cursor-pointer"
-              >
-                <AccommodationCard
-                  accommodation={acc}
-                  assignedWorkersCount={assignedCount}
-                  onEdit={handleEditClick}
-                  isReadOnly={isReadOnly}
-                />
-              </div>
-            );
-          })}
-        </div>
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10 p-1">
+            {filteredAccommodations.map(acc => {
+              const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
+              return (
+                <div
+                  key={acc.id}
+                  onClick={() => handleViewClick(acc)}
+                  className="cursor-pointer"
+                >
+                  <AccommodationCard
+                    accommodation={acc}
+                    assignedWorkersCount={assignedCount}
+                    onEdit={handleEditClick}
+                    isReadOnly={isReadOnly}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            {/* Table header */}
+            <div className="hidden md:grid grid-cols-[3rem_2fr_1fr_1fr_2fr_1fr_1fr] gap-4 px-5 py-3 border-b border-stone-100 dark:border-stone-800">
+              <span />
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Alojamiento</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Ref.</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Ciudad</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Dirección</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Operarios</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Estado</span>
+            </div>
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800">
+              {filteredAccommodations.map(acc => {
+                const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
+                const toTC = (s: string) => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+                return (
+                  <li
+                    key={acc.id}
+                    onClick={() => handleViewClick(acc)}
+                    className={`px-5 py-3.5 hover:bg-stone-50/70 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group ${
+                      !acc.active ? 'opacity-50' : ''
+                    }`}
+                  >
+                    {/* Mobile: stacked */}
+                    <div className="flex items-center gap-3 md:hidden">
+                      <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-stone-100 dark:bg-stone-800">
+                        <img
+                          src={acc.image || '/default_accommodation.png'}
+                          alt={acc.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-normal text-slate-800 dark:text-stone-100 truncate">{toTC(acc.name)}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{toTC(acc.city)} • {acc.ref || 'S/R'}</p>
+                      </div>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md ${
+                        acc.active
+                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
+                      }`}>{acc.active ? 'Activo' : 'Inactivo'}</span>
+                    </div>
+
+                    {/* Desktop: grid row */}
+                    <div className="hidden md:grid grid-cols-[3rem_2fr_1fr_1fr_2fr_1fr_1fr] gap-4 items-center">
+                      {/* Miniatura */}
+                      <div className="w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-stone-100 dark:bg-stone-800">
+                        <img
+                          src={acc.image || '/default_accommodation.png'}
+                          alt={acc.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      {/* Nombre */}
+                      <p className="text-sm font-normal text-slate-800 dark:text-stone-100 truncate group-hover:text-orange-600 transition-colors">{toTC(acc.name)}</p>
+                      {/* Ref */}
+                      <span className="text-xs text-slate-500 dark:text-stone-400">{acc.ref || '—'}</span>
+                      {/* Ciudad */}
+                      <span className="text-xs text-slate-500 dark:text-stone-400 truncate">{toTC(acc.city) || '—'}</span>
+                      {/* Dirección */}
+                      <span className="text-xs text-slate-400 dark:text-stone-500 truncate">{toTC(acc.address) || '—'}</span>
+                      {/* Operarios */}
+                      <span className="text-xs text-slate-500 dark:text-stone-400 flex items-center gap-1">
+                        <Users size={11} className="text-orange-400 flex-shrink-0" />
+                        {assignedCount}
+                      </span>
+                      {/* Estado */}
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md w-fit ${
+                        acc.active
+                          ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                          : 'bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400'
+                      }`}>{acc.active ? 'Activo' : 'Inactivo'}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )
       ) : (
         <div className="bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-2xl p-12 flex flex-col items-center justify-center gap-4">
           <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-xl flex items-center justify-center text-slate-300 dark:text-stone-600">

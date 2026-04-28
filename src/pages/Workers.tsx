@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Users } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Users, LayoutGrid, List, Phone, MapPin, AlertTriangle } from 'lucide-react';
 import WorkerCard from '../components/workers/WorkerCard';
 import WorkerModal from '../components/workers/WorkerModal';
 import WorkerProfile from '../components/workers/WorkerProfile';
@@ -25,6 +25,14 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [profileWorker, setProfileWorker] = useState<Worker | null>(null);
   const [profileEditMode, setProfileEditMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(
+    () => (localStorage.getItem('workers_viewMode') as 'grid' | 'table') || 'grid'
+  );
+
+  const handleSetViewMode = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    localStorage.setItem('workers_viewMode', mode);
+  };
 
   // Filter Modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -228,6 +236,32 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
               />
             </div>
 
+            {/* View mode toggle */}
+            <div className="flex items-center bg-white dark:bg-stone-900 border border-white/60 dark:border-stone-700/50 rounded-xl p-1 gap-0.5">
+              <button
+                onClick={() => handleSetViewMode('grid')}
+                title="Vista en cuadrícula"
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
+                }`}
+              >
+                <LayoutGrid size={14} />
+              </button>
+              <button
+                onClick={() => handleSetViewMode('table')}
+                title="Vista en lista"
+                className={`p-1.5 rounded-lg transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
+                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
+                }`}
+              >
+                <List size={14} />
+              </button>
+            </div>
+
             {!isReadOnly && (
               <button
                 onClick={handleAddClick}
@@ -250,23 +284,122 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
         </p>
       )}
 
-      {/* Workers grid */}
+      {/* Workers — grid or table */}
       {filteredWorkers.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredWorkers.map(worker => (
-            <div
-              key={worker.id}
-              onClick={() => setProfileWorker(worker)}
-              className="cursor-pointer"
-            >
-              <WorkerCard
-                worker={worker}
-                onEdit={isReadOnly ? undefined : (w) => { setProfileWorker(w); setProfileEditMode(true); }}
-                isReadOnly={isReadOnly}
-              />
+        viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredWorkers.map(worker => (
+              <div
+                key={worker.id}
+                onClick={() => setProfileWorker(worker)}
+                className="cursor-pointer"
+              >
+                <WorkerCard
+                  worker={worker}
+                  onEdit={isReadOnly ? undefined : (w) => { setProfileWorker(w); setProfileEditMode(true); }}
+                  isReadOnly={isReadOnly}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            {/* Table header */}
+            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-stone-100 dark:border-stone-800">
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Trabajador</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Tipo</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Teléfono</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Pago</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider text-right">Por cobrar</span>
+              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Alojamientos</span>
             </div>
-          ))}
-        </div>
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800">
+              {filteredWorkers.map(worker => {
+                const initials = worker.fullName.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+                const toTC = (s: string) => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+                return (
+                  <li
+                    key={worker.id}
+                    onClick={() => setProfileWorker(worker)}
+                    className="px-5 py-3.5 hover:bg-stone-50/70 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group"
+                  >
+                    {/* Mobile: stacked */}
+                    <div className="flex items-center justify-between md:hidden gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl flex-shrink-0 overflow-hidden">
+                          {worker.photo
+                            ? <img src={worker.photo} alt={worker.fullName} className="w-full h-full object-cover" />
+                            : <span className="w-full h-full flex items-center justify-center text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">{initials}</span>
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-normal text-slate-800 dark:text-stone-100 truncate">{toTC(worker.fullName)}</p>
+                          <p className="text-[11px] text-slate-400 dark:text-stone-500">{worker.telefono || '—'}</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold text-orange-600 dark:text-orange-400 tabular-nums whitespace-nowrap">
+                        {(worker.owedMoney ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+                      </span>
+                    </div>
+
+                    {/* Desktop: grid row */}
+                    <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center">
+                      {/* Nombre */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-xl flex-shrink-0 overflow-hidden">
+                          {worker.photo
+                            ? <img src={worker.photo} alt={worker.fullName} className="w-full h-full object-cover" />
+                            : <span className="w-full h-full flex items-center justify-center text-xs font-semibold bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">{initials}</span>
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-normal text-slate-800 dark:text-stone-100 truncate">{toTC(worker.fullName)}</p>
+                            {!worker.profileId && <AlertTriangle size={11} className="text-amber-500 flex-shrink-0" />}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Tipo */}
+                      <span className={`self-start mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-md border w-fit ${
+                        worker.tipoTrabajador === 'Manitas'
+                          ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-900/30 dark:border-blue-800/50'
+                          : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-stone-800 dark:text-stone-400 dark:border-stone-700'
+                      }`}>{worker.tipoTrabajador || 'Limpiador'}</span>
+                      {/* Teléfono */}
+                      <span className="text-xs text-slate-500 dark:text-stone-400 flex items-center gap-1">
+                        <Phone size={10} className="text-orange-400 flex-shrink-0" />
+                        {worker.telefono || '—'}
+                      </span>
+                      {/* Pago */}
+                      <div>
+                        <p className="text-xs font-medium text-slate-700 dark:text-stone-200">{worker.tipoPago ? ({ bizum: 'Bizum', tarjeta: 'Tarjeta', efectivo: 'Efectivo' }[worker.tipoPago] ?? '—') : '—'}</p>
+                        {worker.pagoPorReserva != null && (
+                          <p className="text-[10px] text-slate-400 dark:text-stone-500">{worker.pagoPorReserva}€/res.</p>
+                        )}
+                      </div>
+                      {/* Por cobrar */}
+                      <span className="text-sm font-semibold text-orange-600 dark:text-orange-400 tabular-nums text-right">
+                        {(worker.owedMoney ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+                      </span>
+                      {/* Alojamientos */}
+                      {worker.accommodations && worker.accommodations.length > 0 ? (
+                        <span className="text-[11px] text-slate-400 dark:text-stone-500 flex items-center gap-1 truncate">
+                          <MapPin size={10} className="text-slate-300 dark:text-stone-600 flex-shrink-0" />
+                          <span className="truncate">
+                            {worker.accommodations.slice(0, 2).join(', ')}
+                            {worker.accommodations.length > 2 && <span className="text-slate-300 dark:text-stone-600 ml-1">+{worker.accommodations.length - 2}</span>}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-300 dark:text-stone-600">—</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )
       ) : (
         <div className="bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-2xl p-12 flex flex-col items-center justify-center gap-4">
           <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-xl flex items-center justify-center text-slate-300 dark:text-stone-600">
