@@ -500,6 +500,7 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
               cleansCountMonth: 0,
               kmsMonth: 0,
               accommodations: [],
+              accommodationDetails: [],
             });
           }
           await onSubmit(finalRecord); 
