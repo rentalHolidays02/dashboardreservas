@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
@@ -7,6 +7,7 @@ import WorkerSelectionModal, { WorkerAssignmentDetail } from '../components/acco
 import AccommodationFilterModal, { AccommodationFilters } from '../components/accommodations/AccommodationFilterModal';
 import { appsScriptApi } from '../services/api';
 import { Accommodation, Worker } from '../services/mockData';
+import AccommodationSortModal, { AccommodationSortConfig } from '../components/accommodations/AccommodationSortModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
 
@@ -32,10 +33,20 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(
     () => (localStorage.getItem('accommodations_viewMode') as 'grid' | 'table') || 'grid'
   );
+  const [isSortModalOpen, setIsSortModalOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<AccommodationSortConfig>({ field: 'name', direction: 'asc' });
 
   const handleSetViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
     localStorage.setItem('accommodations_viewMode', mode);
+  };
+
+  const handleRequestSort = (field: AccommodationSortConfig['field']) => {
+    const isAsc = sortConfig.field === field && sortConfig.direction === 'asc';
+    setSortConfig({
+      field,
+      direction: isAsc ? 'desc' : 'asc',
+    });
   };
 
   const handleSync = async () => {
@@ -202,24 +213,55 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
     return count;
   }, [filters]);
 
-  const filteredAccommodations = accommodations.filter(acc => {
-    const s = searchTerm.toLowerCase();
-    const name = (acc.name || '').toLowerCase();
-    const address = (acc.address || '').toLowerCase();
-    const city = (acc.city || '').toLowerCase();
+  const filteredAccommodations = React.useMemo(() => {
+    return accommodations
+      .filter(acc => {
+        const s = searchTerm.toLowerCase();
+        const name = (acc.name || '').toLowerCase();
+        const address = (acc.address || '').toLowerCase();
+        const city = (acc.city || '').toLowerCase();
 
-    const matchSearch = 
-      name.includes(s) ||
-      address.includes(s) ||
-      city.includes(s);
-    
-    const matchCity = filters.city === 'all' || 
-      (acc.city || '').trim().toLowerCase() === filters.city.trim().toLowerCase();
-    const matchStatus = filters.status === 'all' || 
-      (filters.status === 'active' ? acc.active : !acc.active);
-    
-    return matchSearch && matchCity && matchStatus;
-  });
+        const matchSearch = 
+          name.includes(s) ||
+          address.includes(s) ||
+          city.includes(s);
+        
+        const matchCity = filters.city === 'all' || 
+          (acc.city || '').trim().toLowerCase() === filters.city.trim().toLowerCase();
+        const matchStatus = filters.status === 'all' || 
+          (filters.status === 'active' ? acc.active : !acc.active);
+        
+        return matchSearch && matchCity && matchStatus;
+      })
+      .sort((a, b) => {
+        let valA: string, valB: string;
+        switch (sortConfig.field) {
+          case 'ref':
+            valA = a.ref || '';
+            valB = b.ref || '';
+            break;
+          case 'city':
+            valA = a.city || '';
+            valB = b.city || '';
+            break;
+          case 'address':
+            valA = a.address || '';
+            valB = b.address || '';
+            break;
+          case 'workers': {
+            const countA = workers.filter(w => w.accommodations?.includes(a.name)).length;
+            const countB = workers.filter(w => w.accommodations?.includes(b.name)).length;
+            return sortConfig.direction === 'asc' ? countA - countB : countB - countA;
+          }
+          default:
+            valA = a.name || '';
+            valB = b.name || '';
+        }
+
+        const cmp = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+        return sortConfig.direction === 'asc' ? cmp : -cmp;
+      });
+  }, [accommodations, searchTerm, filters, sortConfig]);
 
   if (loading && accommodations.length === 0) {
     return <LoadingSpinner message="Sincronizando base de alojamientos..." />;
@@ -247,6 +289,23 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
           </div>
           
           <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative">
+              <button 
+                onClick={() => setIsSortModalOpen(true)}
+                className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 transition-all active:scale-[0.98] hover:bg-white/80 dark:hover:bg-stone-800/60"
+              >
+                <ArrowUpDown size={12} className="text-orange-500" />
+                <span>Ordenar</span>
+              </button>
+
+              <AccommodationSortModal 
+                isOpen={isSortModalOpen}
+                onClose={() => setIsSortModalOpen(false)}
+                sortConfig={sortConfig}
+                onApply={(newSort) => setSortConfig(newSort)}
+              />
+            </div>
+
             <div className="relative flex-1 md:flex-none">
               <button 
                 onClick={() => setIsFilterModalOpen(true)}
@@ -360,11 +419,51 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
             {/* Table header */}
             <div className="hidden md:grid grid-cols-[3rem_2fr_1fr_1fr_2fr_1fr_1fr] gap-4 px-5 py-3 border-b border-stone-100 dark:border-stone-800">
               <span />
-              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Alojamiento</span>
-              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Ref.</span>
-              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Ciudad</span>
-              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Dirección</span>
-              <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Operarios</span>
+              <button 
+                onClick={() => handleRequestSort('name')}
+                className="flex items-center gap-2 text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider hover:text-orange-500 transition-colors"
+              >
+                Alojamiento
+                {sortConfig.field === 'name' && (
+                  sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                )}
+              </button>
+              <button 
+                onClick={() => handleRequestSort('ref')}
+                className="flex items-center gap-2 text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider hover:text-orange-500 transition-colors"
+              >
+                Ref.
+                {sortConfig.field === 'ref' && (
+                  sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                )}
+              </button>
+              <button 
+                onClick={() => handleRequestSort('city')}
+                className="flex items-center gap-2 text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider hover:text-orange-500 transition-colors"
+              >
+                Ciudad
+                {sortConfig.field === 'city' && (
+                  sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                )}
+              </button>
+              <button 
+                onClick={() => handleRequestSort('address')}
+                className="flex items-center gap-2 text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider hover:text-orange-500 transition-colors"
+              >
+                Dirección
+                {sortConfig.field === 'address' && (
+                  sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                )}
+              </button>
+              <button 
+                onClick={() => handleRequestSort('workers')}
+                className="flex items-center gap-2 text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider hover:text-orange-500 transition-colors"
+              >
+                Operarios
+                {sortConfig.field === 'workers' && (
+                  sortConfig.direction === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />
+                )}
+              </button>
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Estado</span>
             </div>
             <ul className="divide-y divide-stone-100 dark:divide-stone-800">
