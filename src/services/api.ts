@@ -1665,105 +1665,56 @@ export const appsScriptApi = {
     });
 
     try {
-      // 1. Intentar Supabase primero
-      const { data: dbAccs, error } = await supabase
+      const { data, error } = await supabase
         .from('accommodations')
         .select('*')
         .order('name', { ascending: true });
 
-      if (!error && dbAccs) {
-        if (dbAccs.length > 0) {
-          const accommodations = dbAccs.map(mapDbRow);
-          saveAccommodations(accommodations);
-          return accommodations;
-        }
-        // 2. Supabase vacío: sincronizar desde Sheets y volver a leer
-        await appsScriptApi.syncAccommodationsFromSheets();
-        const { data: synced } = await supabase
-          .from('accommodations')
-          .select('*')
-          .order('name', { ascending: true });
-        if (synced && synced.length > 0) {
-          const accommodations = synced.map(mapDbRow);
-          saveAccommodations(accommodations);
-          return accommodations;
-        }
+      if (error) {
+        console.error('❌ Error de Supabase al leer alojamientos:', error);
+        throw error;
       }
-    } catch (err) {
-      console.warn('Supabase no disponible, usando caché local:', err);
-    }
 
-    // 3. Fallback directo a Sheets (comportamiento original)
-    try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) return currentAccommodations;
-
-      const data = await response.json();
-      if (!data.values || data.values.length === 0) return currentAccommodations;
-
-      const headers = data.values[0] as string[];
-      const rows    = data.values.slice(1) as any[][];
-
-      const accommodations: Accommodation[] = rows
-        .map((row: any[], index: number): Accommodation => {
-          const getVal = (h: string) => {
-            const norm = normalizeHeader(h);
-            const idx  = headers.findIndex((hh: string) => hh && normalizeHeader(hh) === norm);
-            return idx !== -1 ? row[idx] : undefined;
-          };
-          const touristAddress = String(getVal('DIRECCIÓN ALOJAMIENTO TURÍSTICO') || getVal('DIRECCION ALOJAMIENTO TURISTICO') || '').trim();
-          return {
-            id:       `real_${index + 2}`,
-            name:     String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || 'Sin nombre').trim(),
-            ref:      String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
-            address:  touristAddress || String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim(),
-            city:     row[27] ? String(row[27]).trim() : String(getVal('POBLACIÓN') || ''),
-            zipCode:  row[26] ? String(row[26]).trim() : String(getVal('CP') || '').trim(),
-            provincia: row[28] ? String(row[28]).trim() : String(getVal('PROVINCIA') || ''),
-            notes:    String(getVal('OBSERVACIONES') || '').trim(),
-            active:   true,
-          };
-        })
-        .filter((acc) => acc.name && acc.name.trim() !== '' && acc.name !== 'Sin nombre');
-
+      const accommodations = (data || []).map(mapDbRow);
       saveAccommodations(accommodations);
       return accommodations;
-    } catch (error) {
-      console.error('Error fetching accommodations from Sheets:', error);
+    } catch (err) {
+      console.error('⚠️ Fallo en getAccommodations:', err);
       return currentAccommodations;
     }
   },
 
   updateAccommodation: async (accommodationData: Accommodation): Promise<Accommodation> => {
     try {
-      const { error } = await supabase
-        .from('accommodations')
-        .update({
-          name:      accommodationData.name,
-          ref:       accommodationData.ref       || '',
-          address:   accommodationData.address   || '',
-          city:      accommodationData.city      || '',
-          zip_code:  accommodationData.zipCode   || '',
-          provincia: accommodationData.provincia || '',
-          notes:     accommodationData.notes     || '',
-          active:    accommodationData.active    ?? true,
-          image_url: accommodationData.image     || null,
-        })
-        .eq('id', accommodationData.id);
+      const payload = {
+        name:      accommodationData.name,
+        ref:       accommodationData.ref       || '',
+        address:   accommodationData.address   || '',
+        city:      accommodationData.city      || '',
+        zip_code:  accommodationData.zipCode   || '',
+        provincia: accommodationData.provincia || '',
+        notes:     accommodationData.notes     || '',
+        active:    accommodationData.active    ?? true,
+        image_url: accommodationData.image     || null,
+      };
 
-      if (error) throw error;
+      // Anti-duplicado: si el ID viene de Sheets (real_), usamos upsert por nombre
+      if (accommodationData.id.startsWith('real_')) {
+        const { error } = await supabase
+          .from('accommodations')
+          .upsert(payload, { onConflict: 'name' });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('accommodations')
+          .update(payload)
+          .eq('id', accommodationData.id);
+        if (error) throw error;
+      }
     } catch (error) {
       console.error('Error updating accommodation in Supabase:', error);
+      throw error;
     }
-
-    // Fire & forget al Apps Script para mantener el Sheets sincronizado
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ ...accommodationData, action: 'update' }),
-    });
 
     const updated = currentAccommodations.map(a =>
       a.id === accommodationData.id ? { ...accommodationData } : a
@@ -1774,6 +1725,17 @@ export const appsScriptApi = {
 
   addAccommodation: async (accommodationData: Omit<Accommodation, 'id'>): Promise<Accommodation> => {
     try {
+      // Verificar si ya existe por nombre para evitar duplicados
+      const { data: existing } = await supabase
+        .from('accommodations')
+        .select('id')
+        .eq('name', accommodationData.name)
+        .maybeSingle();
+
+      if (existing) {
+        return appsScriptApi.updateAccommodation({ ...accommodationData, id: existing.id } as Accommodation);
+      }
+
       const { data, error } = await supabase
         .from('accommodations')
         .insert([{
@@ -1792,13 +1754,6 @@ export const appsScriptApi = {
 
       if (error) throw error;
 
-      fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ ...accommodationData, action: 'add' }),
-      });
-
       const newAccommodation: Accommodation = {
         ...accommodationData,
         id: data.id,
@@ -1808,14 +1763,7 @@ export const appsScriptApi = {
       return newAccommodation;
     } catch (error) {
       console.error('Error adding accommodation to Supabase:', error);
-      // Fallback local si falla Supabase
-      const newAccommodation: Accommodation = {
-        ...accommodationData,
-        id: `real_new_${Date.now()}`,
-      };
-      currentAccommodations = [newAccommodation, ...currentAccommodations];
-      saveAccommodations(currentAccommodations);
-      return newAccommodation;
+      throw error;
     }
   },
 
@@ -1826,22 +1774,15 @@ export const appsScriptApi = {
         .delete()
         .eq('id', id);
 
-      if (error) console.warn('Supabase delete accommodation warning:', error);
+      if (error) throw error;
+
+      const updated = currentAccommodations.filter(a => a.id !== id);
+      saveAccommodations(updated);
+      return true;
     } catch (error) {
       console.error('Error deleting accommodation from Supabase:', error);
+      throw error;
     }
-
-    // Fire & forget al Apps Script (best effort)
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ id, action: 'delete' }),
-    });
-
-    const updated = currentAccommodations.filter(a => a.id !== id);
-    saveAccommodations(updated);
-    return true;
   },
 
   restoreAccommodation: async (accommodation: Accommodation): Promise<void> => {
@@ -1862,19 +1803,13 @@ export const appsScriptApi = {
         });
 
       if (error) throw error;
+
+      const updated = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
+      saveAccommodations(updated);
     } catch (error) {
       console.error('Error restoring accommodation in Supabase:', error);
+      throw error;
     }
-
-    fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ ...accommodation, action: 'restore' }),
-    });
-
-    const updated = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
-    saveAccommodations(updated);
   },
 
   getNormalCleansResult: async (): Promise<CleansFetchResult<NormalCleanRecord>> => {

@@ -31,6 +31,7 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
     address: '',
     city: '',
     zipCode: '',
+    provincia: '',
     active: true,
     notes: '',
     image: undefined
@@ -152,6 +153,11 @@ const AccommodationModal: React.FC<AccommodationModalProps> = ({ accommodation, 
               <label className={labelClass}>Código Postal</label>
               <input type="text" name="zipCode" value={formData.zipCode} onChange={handleChange} readOnly={isReadOnly} placeholder="08001" className={`${inputClass} ${isReadOnly ? 'cursor-default focus:ring-0 focus:bg-stone-50 dark:focus:bg-stone-800/50' : ''}`} />
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Provincia</label>
+            <input type="text" name="provincia" value={formData.provincia ?? ''} onChange={handleChange} readOnly={isReadOnly} placeholder="Ej. Barcelona" className={`${inputClass} ${isReadOnly ? 'cursor-default focus:ring-0 focus:bg-stone-50 dark:focus:bg-stone-800/50' : ''}`} />
           </div>
 
           {/* ── Estado ── */}

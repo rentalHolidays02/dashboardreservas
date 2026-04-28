@@ -10,7 +10,10 @@ export interface UndoToast {
 }
 
 interface UndoToastContextValue {
-  showUndoToast: (message: string, onUndo: () => Promise<void> | void) => void;
+  showUndoToast: (
+    messageOrOptions: string | { message: string; onUndo: () => Promise<void> | void },
+    onUndo?: () => Promise<void> | void
+  ) => void;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -32,9 +35,24 @@ export const UndoToastProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const showUndoToast = useCallback((message: string, onUndo: () => Promise<void> | void) => {
+  const showUndoToast = useCallback((
+    messageOrOptions: string | { message: string; onUndo: () => Promise<void> | void },
+    onUndo?: () => Promise<void> | void
+  ) => {
     const id = `undo_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const toast: UndoToast = { id, message, onUndo };
+    
+    let message: string;
+    let finalOnUndo: () => Promise<void> | void;
+
+    if (typeof messageOrOptions === 'object') {
+      message = messageOrOptions.message;
+      finalOnUndo = messageOrOptions.onUndo;
+    } else {
+      message = messageOrOptions;
+      finalOnUndo = onUndo || (() => {});
+    }
+
+    const toast: UndoToast = { id, message, onUndo: finalOnUndo };
     setToasts(prev => [...prev, toast]);
   }, []);
 
