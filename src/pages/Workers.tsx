@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Users, LayoutGrid, List, Phone, MapPin, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Users, LayoutGrid, List, Phone, MapPin, AlertTriangle, Edit2 } from 'lucide-react';
 import WorkerCard from '../components/workers/WorkerCard';
 import WorkerModal from '../components/workers/WorkerModal';
 import WorkerProfile from '../components/workers/WorkerProfile';
@@ -305,13 +305,14 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
         ) : (
           <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden">
             {/* Table header */}
-            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 px-5 py-3 border-b border-stone-100 dark:border-stone-800">
+            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_2rem] gap-4 px-5 py-3 border-b border-stone-100 dark:border-stone-800">
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Trabajador</span>
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Tipo</span>
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Teléfono</span>
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Pago</span>
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider text-right">Por cobrar</span>
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Alojamientos</span>
+              <span />
             </div>
             <ul className="divide-y divide-stone-100 dark:divide-stone-800">
               {filteredWorkers.map(worker => {
@@ -337,13 +338,23 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
                           <p className="text-[11px] text-slate-400 dark:text-stone-500">{worker.telefono || '—'}</p>
                         </div>
                       </div>
-                      <span className="text-sm font-semibold text-orange-600 dark:text-orange-400 tabular-nums whitespace-nowrap">
-                        {(worker.owedMoney ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
-                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-sm font-semibold text-orange-600 dark:text-orange-400 tabular-nums whitespace-nowrap">
+                          {(worker.owedMoney ?? 0).toLocaleString('es-ES', { maximumFractionDigits: 0 })}€
+                        </span>
+                        {!isReadOnly && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setProfileWorker(worker); setProfileEditMode(true); }}
+                            className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all active:scale-90"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Desktop: grid row */}
-                    <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr] gap-4 items-center">
+                    <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_2rem] gap-4 items-center">
                       {/* Nombre */}
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-xl flex-shrink-0 overflow-hidden">
@@ -393,6 +404,15 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
                       ) : (
                         <span className="text-[11px] text-slate-300 dark:text-stone-600">—</span>
                       )}
+                      {/* Editar */}
+                      {!isReadOnly ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setProfileWorker(worker); setProfileEditMode(true); }}
+                          className="p-1.5 rounded-lg text-slate-300 dark:text-stone-600 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-all opacity-0 group-hover:opacity-100 active:scale-90"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                      ) : <span />}
                     </div>
                   </li>
                 );
