@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Home } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Home, RefreshCw } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
@@ -27,6 +27,20 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      await appsScriptApi.syncAccommodationsFromSheets();
+      await fetchAccommodations();
+    } catch (error) {
+      console.error('Error sincronizando:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Filter Modal state
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -122,25 +136,53 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   const handleSaveAccommodation = async (accommodationData: any) => {
     try {
       if (accommodationData.id) {
-        // Edición: actualizamos el estado local directamente con los nuevos datos
+        // Edición
         const updated = await appsScriptApi.updateAccommodation(accommodationData as Accommodation);
         setAccommodations(prev =>
           prev.map(a => a.id === updated.id ? updated : a)
         );
       } else {
-        // Creación: añadimos el nuevo alojamiento al estado local
+        // Creación
         const created = await appsScriptApi.addAccommodation(accommodationData);
         setAccommodations(prev => [created, ...prev]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving accommodation:', error);
+      // Podríamos mostrar un error visual aquí si tuviéramos un context de notificaciones
       throw error;
+    }
+  };
+
+  const handleDeleteAccommodation = async (id: string) => {
+    const accommodationToDelete = accommodations.find(a => a.id === id);
+    if (!accommodationToDelete) return;
+
+    try {
+      await appsScriptApi.deleteAccommodation(id);
+      
+      setAccommodations(prev => prev.filter(a => a.id !== id));
+      setIsModalOpen(false);
+      setEditingAccommodation(null);
+
+      showUndoToast({
+        message: `Alojamiento "${accommodationToDelete.name}" eliminado`,
+        onUndo: async () => {
+          try {
+            await appsScriptApi.restoreAccommodation(accommodationToDelete);
+            setAccommodations(prev => [accommodationToDelete, ...prev].sort((a, b) => a.name.localeCompare(b.name)));
+          } catch (error) {
+            console.error('Error deshaciendo eliminación:', error);
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error eliminando alojamiento:', error);
     }
   };
 
   const availableCities = React.useMemo(() => {
     const cities = accommodations
-      .map(acc => acc.city.trim())
+      .map(acc => (acc.city || '').trim())
       .filter(city => city !== '');
     return Array.from(new Set(cities)).sort();
   }, [accommodations]);
@@ -154,13 +196,17 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
 
   const filteredAccommodations = accommodations.filter(acc => {
     const s = searchTerm.toLowerCase();
+    const name = (acc.name || '').toLowerCase();
+    const address = (acc.address || '').toLowerCase();
+    const city = (acc.city || '').toLowerCase();
+
     const matchSearch = 
-      acc.name.toLowerCase().includes(s) ||
-      acc.address.toLowerCase().includes(s) ||
-      acc.city.toLowerCase().includes(s);
+      name.includes(s) ||
+      address.includes(s) ||
+      city.includes(s);
     
     const matchCity = filters.city === 'all' || 
-      acc.city.trim().toLowerCase() === filters.city.trim().toLowerCase();
+      (acc.city || '').trim().toLowerCase() === filters.city.trim().toLowerCase();
     const matchStatus = filters.status === 'all' || 
       (filters.status === 'active' ? acc.active : !acc.active);
     
@@ -221,13 +267,24 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
             </div>
 
             {!isReadOnly && (
-              <button
-                onClick={handleAddClick}
-                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
-              >
-                <Plus size={14} />
-                <span>Nuevo Alojamiento</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSync}
+                  disabled={isSyncing || loading}
+                  title="Sincronizar desde Excel"
+                  className="flex items-center justify-center p-2.5 bg-white dark:bg-stone-900 border border-white/60 dark:border-stone-700/50 rounded-xl text-orange-500 hover:text-orange-600 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                </button>
+
+                <button
+                  onClick={handleAddClick}
+                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
+                >
+                  <Plus size={14} />
+                  <span>Nuevo Alojamiento</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -286,9 +343,7 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveAccommodation}
-        onDelete={async (id) => {
-          // ... rest of delete logic
-        }}
+        onDelete={handleDeleteAccommodation}
         isReadOnly={isReadOnly}
       />
 
