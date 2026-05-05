@@ -130,8 +130,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
             {/* Logo */}
             <div className="relative z-10">
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center overflow-hidden">
-                <img src="/src/assets/logo/LogoEstandar.png" alt="Logo" className="w-9 h-9 object-contain" />
+              <div className="w-12 h-12 flex items-center justify-center overflow-hidden">
+                <img 
+                  src="/faviconRH.png" 
+                  alt="Logo" 
+                  className="w-12 h-12 object-contain mix-blend-multiply" 
+                  style={{ filter: 'contrast(1.2) brightness(1.1)' }}
+                />
               </div>
             </div>
 
@@ -166,8 +171,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
             {/* Mobile logo */}
             <div className="flex lg:hidden items-center gap-2 mb-8">
-              <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-sm">RH</span>
+              <div className="w-9 h-9 flex items-center justify-center overflow-hidden">
+                <img 
+                  src="/faviconRH.png" 
+                  alt="RH Logo" 
+                  className="w-9 h-9 object-contain mix-blend-multiply dark:mix-blend-screen" 
+                  style={{ filter: 'contrast(1.2) brightness(1.1)' }}
+                />
               </div>
               <span className="text-slate-700 dark:text-stone-200 font-semibold text-sm">Rental Holidays</span>
             </div>

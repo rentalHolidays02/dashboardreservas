@@ -19,7 +19,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
 import { appsScriptApi } from '../../services/api';
-import logoFull from '../../assets/logo/LogoEstandar.png';
+const logoFull = '/faviconRH.png';
 import type { User as AppUser } from '../../services/mockData';
 
 interface SidebarProps {
@@ -128,7 +128,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           <img
             src={logoFull}
             alt="RH Pagos"
-            className="h-9 w-auto object-contain shrink-0"
+            className="h-9 w-auto object-contain shrink-0 mix-blend-multiply dark:mix-blend-screen"
+            style={{ filter: 'contrast(1.2) brightness(1.1)' }}
           />
           <div className="flex-1" />
           <button
