@@ -957,21 +957,33 @@ export const appsScriptApi = {
       const headers = data.values[0];
       const rows = data.values.slice(1);
 
-      const workersToSync = rows.map((row: any[], index: number) => {
+      // 1. Obtener estado actual de Supabase para comparar
+      const { data: dbWorkers } = await supabase.from('workers').select('*');
+      if (!dbWorkers) return;
+
+      const activePhonesInExcel: string[] = [];
+
+      for (const row of rows) {
         const getVal = (headerName: string) => {
           const norm = normalizeHeader(headerName);
           const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
           return idx !== -1 ? row[idx] : undefined;
         };
 
+        const fullName = String(getVal('OPERARIO') || '').trim();
+        const phone = String(getVal('MOVIL') || '').trim();
+        if (!fullName || !phone) continue;
+
+        activePhonesInExcel.push(phone);
+
         const medioPago = String(getVal('MEDIO DE PAGO') || '').toLowerCase();
         const tipoPago = medioPago.includes('bizum') ? 'bizum' :
                          medioPago.includes('tarjeta') ? 'tarjeta' :
                          'efectivo';
 
-        return {
-          full_name: String(getVal('OPERARIO') || ''),
-          phone: String(getVal('MOVIL') || ''),
+        const workerData = {
+          full_name: fullName,
+          phone: phone,
           iban: String(getVal('CUENTA BANCARIA') || ''),
           payment_method: tipoPago,
           pay_per_reservation: parseExcelNumber(getVal('PAGO POR RESERVA')),
@@ -981,35 +993,32 @@ export const appsScriptApi = {
           retained_cash: parseExcelNumber(getVal('EFECTIVO RETENIDO')),
           active: true
         };
-      }).filter((w: any) => w.full_name && w.phone);
 
-      // Upsert en Supabase usando el teléfono como clave única
-      const { error } = await supabase
-        .from('workers')
-        .upsert(workersToSync, { onConflict: 'phone' });
+        // LÓGICA INTELIGENTE: Buscar por teléfono O por nombre (para detectar cambios de número)
+        const existing = dbWorkers.find(w => w.phone === phone) || 
+                         dbWorkers.find(w => w.full_name.toLowerCase() === fullName.toLowerCase());
 
-      if (error) {
-        console.error('Error en sincronización Supabase:', error);
-      } else {
-        // --- SINCRONIZAR ELIMINACIONES DEL EXCEL ---
-        // Extraemos los teléfonos que están actualmente en el Excel
-        const activePhones = workersToSync.map((w: any) => w.phone);
-        
-        // Consultamos qué teléfonos tenemos en Supabase
-        const { data: dbWorkers } = await supabase.from('workers').select('id, phone');
-        if (dbWorkers) {
-          const dbPhones = dbWorkers.map(w => w.phone);
-          // Los que están en Supabase pero ya NO están en Excel, los eliminamos
-          const phonesToDelete = dbPhones.filter(phone => !activePhones.includes(phone) && phone !== '');
-          
-          if (phonesToDelete.length > 0) {
-            await supabase.from('workers').delete().in('phone', phonesToDelete);
-            console.log(`Sincronización: Eliminados ${phonesToDelete.length} trabajadores que fueron borrados del Excel.`);
-          }
+        if (existing) {
+          // Si existe (por teléfono o nombre), actualizamos para mantener el mismo ID interno
+          await supabase.from('workers').update(workerData).eq('id', existing.id);
+        } else {
+          // Si es totalmente nuevo, insertamos
+          await supabase.from('workers').insert([workerData]);
         }
-        
-        console.log('✅ Sincronización Excel -> Supabase completada');
       }
+
+      // 2. GESTIÓN DE BAJAS: Los que están en DB pero ya no en Excel
+      const dbPhones = dbWorkers.map(w => w.phone);
+      const phonesToDeactivate = dbPhones.filter(p => !activePhonesInExcel.includes(p) && p !== '');
+      
+      if (phonesToDeactivate.length > 0) {
+        // En lugar de borrar (delete), marcamos como inactivos (active: false)
+        // Esto evita romper relaciones con pagos e informes históricos.
+        await supabase.from('workers').update({ active: false }).in('phone', phonesToDeactivate);
+        console.log(`Sincronización: Marcados como inactivos ${phonesToDeactivate.length} trabajadores.`);
+      }
+
+      console.log('✅ Sincronización inteligente Excel -> Supabase completada');
     } catch (error) {
       console.error('Error sincronizando trabajadores:', error);
     }
@@ -1046,9 +1055,9 @@ export const appsScriptApi = {
             name,
             ref:       String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
             address:   touristAddress || ownerAddress,
-            city:      row[27] ? String(row[27]).trim() : String(getVal('POBLACIÓN') || ''),
-            zip_code:  row[26] ? String(row[26]).trim() : String(getVal('CP') || '').trim(),
-            provincia: row[28] ? String(row[28]).trim() : String(getVal('PROVINCIA') || ''),
+            city:      String(getVal('POBLACIÓN') || getVal('POBLACION') || getVal('Población') || getVal('Ciudad') || '').trim(),
+            zip_code:  String(getVal('CP') || getVal('C.P.') || '').trim(),
+            provincia: String(getVal('PROVINCIA') || getVal('Provincia') || '').trim(),
             notes:     String(getVal('OBSERVACIONES') || '').trim(),
             active:    true,
           };
