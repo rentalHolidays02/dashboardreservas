@@ -1409,7 +1409,18 @@ export const appsScriptApi = {
             coste: 0,
             pagadoPor: 'empresa',
             kms: parseExcelNumber(getVal('KMS TOTAL')),
-            checked: String(getVal('CHECKED')).toUpperCase() === 'TRUE'
+            checked: String(getVal('CHECKED')).toUpperCase() === 'TRUE',
+            telefono: String(getVal('TELEFONO') || '').trim(),
+            nombre: nombre,
+            apellidos: apellidos,
+            paradaInicial: String(getVal('PARADA INICIAL') || '').trim(),
+            paradaOpcional1: String(getVal('PARADA OPCIONAL 1') || '').trim(),
+            paradaOpcional2: String(getVal('PARADA OPCIONAL 2') || '').trim(),
+            paradaOpcional3: String(getVal('PARADA OPCIONAL 3') || '').trim(),
+            paradaOpcional4: String(getVal('PARADA OPCIONAL 4') || '').trim(),
+            paradaOpcional5: String(getVal('PARADA OPCIONAL 5') || '').trim(),
+            paradaFinal: String(getVal('PARADA FINAL') || '').trim(),
+            observaciones: String(getVal('OBSERVACIONES') || '').trim()
           };
         })
         .filter(inc => inc.description && inc.description.trim() !== '') // Solo las que tienen descripción

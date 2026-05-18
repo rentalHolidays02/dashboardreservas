@@ -91,6 +91,17 @@ export interface Incidencia {
   pagadoPor: 'limpiador' | 'empresa';
   kms?: number;
   checked?: boolean;
+  telefono?: string;
+  nombre?: string;
+  apellidos?: string;
+  paradaInicial?: string;
+  paradaOpcional1?: string;
+  paradaOpcional2?: string;
+  paradaOpcional3?: string;
+  paradaOpcional4?: string;
+  paradaOpcional5?: string;
+  paradaFinal?: string;
+  observaciones?: string;
 }
 
 export interface EntregaLlaves {

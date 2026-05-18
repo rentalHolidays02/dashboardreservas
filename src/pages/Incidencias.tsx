@@ -1,17 +1,280 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Loader2, Search, Filter, MapPin, CheckCircle2, ChevronRight } from 'lucide-react';
-import { appsScriptApi } from '../services/api';
+import { AlertTriangle, ExternalLink, Banknote, Building2, UserRound, Home, Loader2, Search, Filter, MapPin, CheckCircle2, ChevronRight, X, Info } from 'lucide-react';
+import { appsScriptApi, geocodeAddress } from '../services/api';
 import { Incidencia } from '../services/mockData';
 import IncidentFilterModal, { IncidentFilters } from '../components/incidencias/IncidentFilterModal';
 import IncidentEditModal from '../components/incidencias/IncidentEditModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { createPortal } from 'react-dom';
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
 const fmtCost = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+
+const StopsModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  stops: string[];
+}> = ({ isOpen, onClose, stops }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const [coords, setCoords] = useState<[number, number][]>([]);
+  const [expandedStops, setExpandedStops] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || stops.length === 0) return;
+
+    setLoading(true);
+    
+    const parseStop = (stopStr: string) => {
+      const coordMatch = stopStr.match(/\[\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\]/);
+      const coords: [number, number] | null = coordMatch ? [parseFloat(coordMatch[1]), parseFloat(coordMatch[2])] : null;
+      
+      // Extract name without (Time) and [Coords] for better geocoding
+      let cleanName = stopStr;
+      cleanName = cleanName.replace(/\[.*?\]/, '').trim();
+      cleanName = cleanName.replace(/\(.*?\)/, '').trim();
+      
+      return { coords, cleanName };
+    };
+
+    const fetchCoords = async () => {
+      try {
+        const allStops: string[] = [];
+        const resolvedCoords: [number, number][] = [];
+        
+        for (const stop of stops) {
+          if (!stop) continue;
+          
+          // Split by newline in case of multiple stops in one field (like P5)
+          const lines = stop.split('\n').map(l => l.trim()).filter(Boolean);
+          
+          for (const line of lines) {
+            allStops.push(line);
+            const parsed = parseStop(line);
+            
+            if (parsed.coords) {
+              resolvedCoords.push(parsed.coords);
+            } else {
+              // Fallback to geocode if no coords in string
+              const res = await geocodeAddress(parsed.cleanName);
+              if (res) {
+                resolvedCoords.push([res.lat, res.lng]);
+              }
+            }
+          }
+        }
+        
+        setExpandedStops(allStops);
+        setCoords(resolvedCoords);
+      } catch (error) {
+        console.error('Error fetching stops coords:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCoords();
+  }, [isOpen, stops]);
+
+  useEffect(() => {
+    if (!isOpen || coords.length === 0 || !containerRef.current) return;
+
+    const timer = setTimeout(() => {
+      if (!containerRef.current) return;
+      
+      const map = L.map(containerRef.current, {
+        zoomControl: false,
+        attributionControl: false,
+      });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+      mapRef.current = map;
+
+      const markers = coords.map((c, i) => {
+        const [lat, lng] = c;
+        const popupContent = `
+          <div class="text-xs p-1">
+            <p class="font-semibold text-slate-800 dark:text-white mb-1">Parada ${i + 1}</p>
+            <p class="text-slate-600 dark:text-stone-300 mb-2">${expandedStops[i] || ''}</p>
+            <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener noreferrer" class="text-orange-500 hover:text-orange-600 font-medium no-underline">Ver en Google Maps</a>
+          </div>
+        `;
+        return L.circleMarker(c, {
+          radius: 8,
+          color: 'white',
+          fillColor: i === 0 ? '#10b981' : i === coords.length - 1 ? '#ef4444' : '#3b82f6',
+          fillOpacity: 1,
+          weight: 2,
+        }).addTo(map).bindPopup(popupContent, { maxWidth: 200 });
+      });
+
+      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
+      const polylines: L.Polyline[] = [];
+      
+      for (let i = 0; i < coords.length - 1; i++) {
+        const pl = L.polyline([coords[i], coords[i+1]], { 
+          color: colors[i % colors.length], 
+          weight: 3, 
+          opacity: 0.7 
+        }).addTo(map);
+        polylines.push(pl);
+      }
+
+      const group = L.featureGroup([...markers, ...polylines]);
+      map.fitBounds(group.getBounds().pad(0.3));
+      
+      map.invalidateSize();
+    }, 200);
+
+    return () => {
+      clearTimeout(timer);
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [isOpen, coords, expandedStops]);
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-slate-800 dark:text-stone-200">Ruta de Paradas</h2>
+          <button onClick={onClose} className="p-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full transition-colors">
+            <X size={16} className="text-stone-500" />
+          </button>
+        </div>
+        
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 md:h-[500px]">
+          <div className="w-full md:w-1/3 p-4 border-b md:border-b-0 md:border-r border-stone-100 dark:border-stone-800 overflow-y-auto">
+            <h3 className="text-xs uppercase tracking-wider text-slate-400 dark:text-stone-500 font-medium mb-3">Paradas</h3>
+            <ol className="space-y-3">
+              {expandedStops.map((stop, i) => (
+                <li key={i} className="flex gap-3 text-xs">
+                  <div className="flex flex-col items-center">
+                    <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[10px] font-bold ${
+                      i === 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 
+                      i === expandedStops.length - 1 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 
+                      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    }`}>
+                      {i + 1}
+                    </span>
+                    {i < expandedStops.length - 1 && <div className="w-0.5 h-full bg-stone-200 dark:bg-stone-700 my-1"></div>}
+                  </div>
+                  <div className="flex-1 pt-0.5">
+                    <button 
+                      onClick={() => {
+                        if (mapRef.current && coords[i]) {
+                          mapRef.current.setView(coords[i], 16);
+                        }
+                      }}
+                      className="text-slate-700 dark:text-stone-300 text-left hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
+                    >
+                      {stop}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+          
+          <div className="w-full md:w-2/3 h-[400px] md:h-[500px] relative">
+            {loading && (
+              <div className="absolute inset-0 bg-white/80 dark:bg-stone-900/80 z-10 flex items-center justify-center">
+                <div className="flex items-center gap-2 text-xs text-stone-500">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Geolocalizando paradas...</span>
+                </div>
+              </div>
+            )}
+            {coords.length === 0 && !loading && (
+              <div className="absolute inset-0 bg-stone-50 dark:bg-stone-800 z-10 flex flex-col items-center justify-center text-center p-4">
+                <MapPin size={24} className="text-stone-400 mb-2" />
+                <p className="text-xs text-stone-500">No se pudieron geolocalizar las paradas.</p>
+                <p className="text-[10px] text-stone-400 mt-1">Verifica que las direcciones sean correctas.</p>
+              </div>
+            )}
+            <div ref={containerRef} className="w-full h-full" />
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// Observation popup modal
+const ObservationModal: React.FC<{ isOpen: boolean; anchorRef: React.RefObject<HTMLElement | null>; text: string; title?: string }> = ({ isOpen, anchorRef, text, title = 'Observaciones' }) => {
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (isOpen && anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      const popupW = 240;
+      const popupH = 130;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - popupW - 8));
+      const openAbove = rect.bottom + 6 + popupH > window.innerHeight - 8;
+      const top = openAbove ? Math.max(8, rect.top - popupH - 6) : rect.bottom + 6;
+      setPos({ top, left });
+    }
+  }, [isOpen]);
+
+  return createPortal(
+    <>
+      <div
+        className={`fixed z-[110] bg-white dark:bg-stone-900 rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-700 shadow-xl transition-opacity duration-200 pointer-events-none ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+        style={{ top: pos.top, left: pos.left, width: 240 }}
+      >
+        {title && (
+          <div className="px-4 py-2.5 flex items-center gap-2 border-b border-stone-100 dark:border-stone-800 bg-orange-50 dark:bg-orange-900/20">
+            <Info size={13} className="text-orange-500" />
+            <span className="text-[11px] font-semibold text-orange-700 dark:text-orange-400">{title}</span>
+          </div>
+        )}
+        <div className="p-3">
+          <p className="text-xs text-slate-600 dark:text-stone-300 leading-relaxed">{text}</p>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+};
+
+// Observation button component
+const ObservationButton: React.FC<{ text?: string; modalTitle?: string }> = ({ text, modalTitle = 'Observaciones' }) => {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const hasObs = !!text && text.trim() !== '';
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onMouseEnter={() => hasObs && setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-semibold transition-colors ${
+          hasObs
+            ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/60 cursor-default'
+            : 'bg-stone-100 dark:bg-stone-800 text-slate-400 dark:text-stone-600 cursor-default'
+        }`}
+      >
+        {hasObs ? '1' : '0'}
+      </button>
+      {hasObs && (
+        <ObservationModal isOpen={open} anchorRef={btnRef} text={text!} title={modalTitle} />
+      )}
+    </>
+  );
+};
 
 interface IncidenciasProps {
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
@@ -20,6 +283,8 @@ interface IncidenciasProps {
 const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
   const isReadOnly = userRole === 'viewer';
   const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+  const [isStopsModalOpen, setIsStopsModalOpen] = useState(false);
+  const [currentStops, setCurrentStops] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -168,80 +433,88 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
         </div>
       </header>
 
-      <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+      <div className="bg-white dark:bg-stone-950 border border-slate-200 dark:border-stone-700/50 rounded-2xl overflow-x-auto">
         {filteredIncidencias.length === 0 ? (
           <div className="px-5 py-12 flex flex-col items-center justify-center gap-2">
             <AlertTriangle size={32} className="text-slate-300 dark:text-stone-700" />
             <p className="text-sm text-slate-400 dark:text-stone-500">No se encontraron incidencias</p>
           </div>
         ) : (
-          <ul className="divide-y divide-stone-100 dark:divide-stone-800">
-            {filteredIncidencias.map((inc) => (
-              <li 
-                key={inc.id} 
-                className="px-5 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors cursor-pointer group relative"
-                onClick={() => {
-                  setSelectedIncident(inc);
-                  setIsEditModalOpen(true);
-                }}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-slate-400 dark:text-stone-500">{inc.userName}</span>
-                  <div className="flex items-center gap-2">
-                    {inc.checked && (
+          <table className="min-w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-stone-100 dark:border-stone-800">
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Teléfono</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Nombre</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Apellidos</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Fecha</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Apartamento</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Detalles Incidencia</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Paradas</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Kms total</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Observaciones</th>
+                <th className="px-4 py-3 font-normal text-slate-400 dark:text-stone-500 whitespace-nowrap">Checked</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+              {filteredIncidencias.map((inc) => (
+                <tr 
+                  key={inc.id} 
+                  className="hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setSelectedIncident(inc);
+                    setIsEditModalOpen(true);
+                  }}
+                >
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">{inc.telefono || '—'}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">{inc.nombre || '—'}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">{inc.apellidos || '—'}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300 whitespace-nowrap">{fmtDate(inc.timestamp)}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
+                    <Link
+                      to={`/alojamientos/${inc.accommodationId}`}
+                      className="inline-flex items-center gap-1.5 hover:text-blue-600 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {inc.accommodationName}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300 max-w-xs truncate" title={inc.description}>{inc.description}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
+                    {[inc.paradaInicial, inc.paradaOpcional1, inc.paradaOpcional2, inc.paradaOpcional3, inc.paradaOpcional4, inc.paradaOpcional5, inc.paradaFinal].filter(Boolean).length > 0 ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentStops([inc.paradaInicial, inc.paradaOpcional1, inc.paradaOpcional2, inc.paradaOpcional3, inc.paradaOpcional4, inc.paradaOpcional5, inc.paradaFinal].filter(Boolean) as string[]);
+                          setIsStopsModalOpen(true);
+                        }}
+                        className="text-orange-500 hover:text-orange-600 font-medium"
+                      >
+                        Ver paradas
+                      </button>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300 whitespace-nowrap">{inc.kms !== undefined ? `${Number(inc.kms).toFixed(2).replace('.', ',')} km` : '—'}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
+                    <ObservationButton text={inc.observaciones} />
+                  </td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
+                    {inc.checked ? (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded-md">
                         <CheckCircle2 size={10} />
                         Revisada
                       </span>
-                    )}
-                    <span className="text-xs text-slate-400 dark:text-stone-500 tabular-nums">{fmtDate(inc.timestamp)}</span>
-                  </div>
-                </div>
-
-                <p className="text-sm font-normal text-slate-800 dark:text-stone-200 leading-snug mb-3">
-                  {inc.description.charAt(0).toUpperCase() + inc.description.slice(1)}
-                </p>
-
-                <div className="flex items-center justify-between gap-2">
-                  <Link
-                    to={`/alojamientos/${inc.accommodationId}`}
-                    className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-stone-400 border border-slate-200 dark:border-stone-700 rounded-md px-2 py-1 hover:text-blue-600 hover:border-blue-200 dark:hover:border-blue-700 transition-colors shrink-0"
-                  >
-                    <Home size={10} className="text-slate-400 dark:text-stone-500" />
-                    {inc.accommodationName}
-                    <ExternalLink size={9} className="text-slate-300 dark:text-stone-600" />
-                  </Link>
-
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1 text-xs font-normal text-slate-700 dark:text-stone-300">
-                      <Banknote size={12} className="text-slate-400 dark:text-stone-500" />
-                      {fmtCost(inc.coste)}
-                    </span>
-                    {inc.pagadoPor === 'limpiador' ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-white bg-orange-500 dark:bg-orange-600 rounded-md px-1.5 py-0.5 border-none">
-                        <UserRound size={10} />
-                        Limpiador
-                      </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950 border border-orange-100 dark:border-orange-900/50 rounded-md px-1.5 py-0.5">
-                        <Building2 size={10} />
-                        Empresa
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-stone-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-900/20 px-1.5 py-0.5 rounded-md">
+                        Pendiente
                       </span>
                     )}
-                    
-                    {inc.kms !== undefined ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 border border-blue-100 dark:border-blue-900/30 rounded-md">
-                        <MapPin size={10} />
-                        {Number(inc.kms).toFixed(2).replace('.', ',')} km
-                      </span>
-                    ) : null}
-                    
-                    <ChevronRight size={14} className="text-slate-300 dark:text-stone-600 group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -252,6 +525,12 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
         onSave={handleSaveIncident}
         onDelete={handleDeleteIncident}
         isReadOnly={isReadOnly}
+      />
+
+      <StopsModal 
+        isOpen={isStopsModalOpen}
+        onClose={() => setIsStopsModalOpen(false)}
+        stops={currentStops}
       />
     </div>
   );
