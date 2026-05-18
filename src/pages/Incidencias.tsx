@@ -5,6 +5,7 @@ import { appsScriptApi, geocodeAddress } from '../services/api';
 import { Incidencia } from '../services/mockData';
 import IncidentFilterModal, { IncidentFilters } from '../components/incidencias/IncidentFilterModal';
 import IncidentEditModal from '../components/incidencias/IncidentEditModal';
+import IncidentCreateModal from '../components/incidencias/IncidentCreateModal';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -302,6 +303,9 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedIncident, setSelectedIncident] = useState<Incidencia | null>(null);
 
+  // Create Modal state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
   useEffect(() => {
     fetchIncidencias();
   }, []);
@@ -328,6 +332,21 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
     } catch (error) {
       console.error('Error al guardar:', error);
       alert('Error al sincronizar con el Excel, pero los cambios se ven en pantalla.');
+      fetchIncidencias(false);
+    }
+  };
+
+  const handleCreateIncident = async (incidentData: Omit<Incidencia, 'id'>) => {
+    // Optimistic update - generating a temporary ID
+    const tempIncident = { ...incidentData, id: `temp_${Date.now()}` } as Incidencia;
+    setIncidencias(prev => [tempIncident, ...prev]);
+
+    try {
+      await appsScriptApi.createIncidencia(incidentData);
+      fetchIncidencias(false);
+    } catch (error) {
+      console.error('Error al crear:', error);
+      alert('Error al sincronizar con el Excel.');
       fetchIncidencias(false);
     }
   };
@@ -430,6 +449,15 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
               }}
             />
           </div>
+
+          {!isReadOnly && (
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded-xl transition-colors active:scale-95"
+            >
+              <span className="text-lg leading-none">+</span> Nueva
+            </button>
+          )}
         </div>
       </header>
 
@@ -525,6 +553,12 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
         onSave={handleSaveIncident}
         onDelete={handleDeleteIncident}
         isReadOnly={isReadOnly}
+      />
+
+      <IncidentCreateModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreate={handleCreateIncident}
       />
 
       <StopsModal 

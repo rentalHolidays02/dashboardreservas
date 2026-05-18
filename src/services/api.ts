@@ -1545,6 +1545,24 @@ export const appsScriptApi = {
     }
   },
 
+  createIncidencia: async (incidencia: Omit<Incidencia, 'id'>): Promise<boolean> => {
+    try {
+      await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+        body: JSON.stringify({ ...incidencia, action: 'add' })
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error creating incidencia:', error);
+      throw error;
+    }
+  },
+
   deleteIncidencia: async (id: string): Promise<boolean> => {
     try {
       await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
