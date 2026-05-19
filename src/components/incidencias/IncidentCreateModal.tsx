@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, PlusCircle, Loader2, MapPin, Building2, UserRound, Plus, Trash2 } from 'lucide-react';
+import { X, Save, PlusCircle, Loader2, MapPin, Plus, Trash2, Info, CheckCircle2 } from 'lucide-react';
 import { Incidencia, Accommodation } from '../../services/mockData';
 import { appsScriptApi } from '../../services/api';
 
@@ -16,11 +16,10 @@ const IncidentCreateModal: React.FC<IncidentCreateModalProps> = ({ isOpen, onClo
   const [stops, setStops] = useState<string[]>(['']);
   
   const [formData, setFormData] = useState<Partial<Incidencia>>({
-    coste: 0,
     kms: 0,
-    pagadoPor: 'empresa',
     checked: false,
-    timestamp: new Date().toISOString().slice(0, 16)
+    timestamp: new Date().toISOString().slice(0, 16),
+    observaciones: ''
   });
 
   useEffect(() => {
@@ -78,13 +77,14 @@ const IncidentCreateModal: React.FC<IncidentCreateModalProps> = ({ isOpen, onClo
         timestamp: formattedDate,
         accommodationId: 'temp_acc',
         accommodationName: formData.accommodationName || 'Sin especificar',
-        coste: formData.coste !== undefined ? formData.coste : 0,
-        pagadoPor: formData.pagadoPor || 'empresa',
+        coste: 0,
+        pagadoPor: 'empresa',
         kms: (formData.kms !== undefined ? formData.kms : 0).toString() as any, // Conversión a string para evitar el fallo de 0 en el Apps Script
         checked: formData.checked || false,
         telefono: formData.telefono ? `34${formData.telefono.replace(/\s/g, '')}` : '',
         nombre: formData.nombre || '',
-        apellidos: formData.apellidos || ''
+        apellidos: formData.apellidos || '',
+        observaciones: formData.observaciones || ''
       };
 
       // Obtener coordenadas GPS reales del dispositivo
@@ -314,21 +314,36 @@ const IncidentCreateModal: React.FC<IncidentCreateModalProps> = ({ isOpen, onClo
               </div>
             </div>
 
-            {/* Fila: Coste, Kms, Quién paga */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Fila: Estado de Revisión y Kms */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
-                  Coste Estimado (€)
+                  Estado de Revisión
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.coste || ''}
-                  onChange={e => setFormData({ ...formData, coste: parseFloat(e.target.value) })}
-                  className="w-full px-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40 transition-all font-light"
-                  placeholder="0.00"
-                />
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, checked: false })}
+                    className={`flex-1 py-3 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2 text-xs ${
+                      !formData.checked
+                        ? 'bg-slate-50 dark:bg-stone-800 border-slate-200 dark:border-stone-700 text-slate-600 dark:text-stone-300 shadow-sm'
+                        : 'border-transparent text-slate-400 dark:text-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800/50'
+                    }`}
+                  >
+                    <Info size={14} /> Pendiente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, checked: true })}
+                    className={`flex-1 py-3 px-4 rounded-2xl border transition-all flex items-center justify-center gap-2 text-xs ${
+                      formData.checked
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900/40 text-green-600 dark:text-green-400 shadow-sm'
+                        : 'border-transparent text-slate-400 dark:text-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800/50'
+                    }`}
+                  >
+                    <CheckCircle2 size={14} /> Revisada
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
@@ -344,35 +359,20 @@ const IncidentCreateModal: React.FC<IncidentCreateModalProps> = ({ isOpen, onClo
                   placeholder="0.0"
                 />
               </div>
-              <div>
-                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
-                  ¿Quién paga?
-                </label>
-                <div className="flex gap-2 h-[46px]">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, pagadoPor: 'empresa' })}
-                    className={`flex-1 rounded-xl border transition-all flex items-center justify-center gap-1.5 text-xs ${
-                      formData.pagadoPor === 'empresa'
-                        ? 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900/50 text-orange-700 dark:text-orange-400 shadow-sm font-medium'
-                        : 'border-slate-200 dark:border-stone-700 text-slate-500 hover:bg-stone-50 dark:hover:bg-stone-800'
-                    }`}
-                  >
-                    <Building2 size={12} /> Empresa
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, pagadoPor: 'limpiador' })}
-                    className={`flex-1 rounded-xl border transition-all flex items-center justify-center gap-1.5 text-xs ${
-                      formData.pagadoPor === 'limpiador'
-                        ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/50 text-blue-700 dark:text-blue-400 shadow-sm font-medium'
-                        : 'border-slate-200 dark:border-stone-700 text-slate-500 hover:bg-stone-50 dark:hover:bg-stone-800'
-                    }`}
-                  >
-                    <UserRound size={12} /> Trab.
-                  </button>
-                </div>
-              </div>
+            </div>
+
+            {/* Observaciones */}
+            <div>
+              <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
+                Observaciones
+              </label>
+              <textarea
+                value={formData.observaciones || ''}
+                onChange={e => setFormData({ ...formData, observaciones: e.target.value })}
+                rows={2}
+                className="w-full px-4 py-4 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40 transition-all font-light resize-none"
+                placeholder="Añade aquí cualquier observación extra..."
+              />
             </div>
 
           </form>
