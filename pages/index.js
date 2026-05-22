@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 
 function parseDate(str) {
   if (!str) return null;
+  str = String(str).trim();
   const m1 = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if (m1) return new Date(+m1[3], +m1[2] - 1, +m1[1]);
   const m2 = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
@@ -69,16 +70,15 @@ export default function Home() {
   const [sort, setSort] = useState('entrada');
   const [search, setSearch] = useState('');
   const [alarmsEnabled, setAlarmsEnabled] = useState(true);
-  const [phones, setPhones] = useState({});
-  const [editingPhone, setEditingPhone] = useState(null);
-  const [phoneInput, setPhoneInput] = useState('');
-  const [called, setCalled] = useState({});
+  const [edits, setEdits] = useState({});
+  const [editingCell, setEditingCell] = useState(null);
+  const [editInput, setEditInput] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
-  const [tab, setTab] = useState('reservas');
   const audioCtx = useRef(null);
   const alarmInterval = useRef(null);
 
-    const URL_CSV = "https://docs.google.com/spreadsheets/d/1joSFjd6yZS9rjVwbXzuZSU1SVCScbEIVovSexqrO7ZE/export?format=csv&gid=251145455";
+  const URL_CSV = "https://docs.google.com/spreadsheets/d/1joSFjd6yZS9rjVwbXzuZSU1SVCScbEIVovSexqrO7ZE/export?format=csv&gid=251145455";
+
   const fetchData = useCallback(async () => {
     try {
       const respuesta = await fetch(URL_CSV);
@@ -102,16 +102,9 @@ export default function Home() {
           const idxOrigen = cabeceras.findIndex(c => c.includes("ORIGEN"));
           const idxEntrada = cabeceras.findIndex(c => c.includes("ENTRADA"));
           const idxSalida = cabeceras.findIndex(c => c.includes("SALIDA"));
-          const idxCobradoA = cabeceras.findIndex(c => c === "COBRADO A");
-          const idxCobradoB = cabeceras.findIndex(c => c === "COBRADO B");
-          const idxTotal = cabeceras.findIndex(c => c.includes("TOTAL COBRADO"));
-          const idxObs = cabeceras.findIndex(c => c.includes("OBSERVAC"));
-          const idxIngresoCanal = cabeceras.findIndex(c => c.includes("INGRESO CANAL"));
-          const idxFechaPago = cabeceras.findIndex(c => c.includes("FECHA DE PAGO"));
-          const idxSegundoIngreso = cabeceras.findIndex(c => c.includes("SEGUNDO INGRESO"));
-          const idxFechaPago2 = cabeceras.lastIndexOf("FECHA DE PAGO"); 
-          const idxReportes = cabeceras.findIndex(c => c.includes("REPORTES"));
-          const idxDatosKiko = cabeceras.findIndex(c => c.includes("DATOS KIKO"));
+          const idxObs = cabeceras.findIndex(c => c === "OBSERVACIONES" || c.includes("OBSERVAC"));
+          const idxNombre = cabeceras.findIndex(c => c.includes("NOMBRE"));
+          const idxTelefono = cabeceras.findIndex(c => c.includes("TELEFONO") || c.includes("TELÉFONO"));
 
           const registros = [];
           for (let i = idxCabecera + 1; i < filas.length; i++) {
@@ -126,16 +119,9 @@ export default function Home() {
               origen: idxOrigen > -1 ? fila[idxOrigen] : 'MANUAL',
               entrada: idxEntrada > -1 ? fila[idxEntrada] : '',
               salida: idxSalida > -1 ? fila[idxSalida] : '',
-              cobradoA: idxCobradoA > -1 ? fila[idxCobradoA] : '',
-              cobradoB: idxCobradoB > -1 ? fila[idxCobradoB] : '',
-              totalCobrado: idxTotal > -1 ? fila[idxTotal] : '',
-              observaciones: idxObs > -1 ? fila[idxObs] : '',
-              ingresoCanal: idxIngresoCanal > -1 ? fila[idxIngresoCanal] : '',
-              fechaPago: idxFechaPago > -1 ? fila[idxFechaPago] : '',
-              segundoIngreso: idxSegundoIngreso > -1 ? fila[idxSegundoIngreso] : '',
-              fechaPago2: idxFechaPago2 > -1 && idxFechaPago2 !== idxFechaPago ? fila[idxFechaPago2] : '',
-              reportes: idxReportes > -1 ? fila[idxReportes] : '',
-              datosKiko: idxDatosKiko > -1 ? fila[idxDatosKiko] : ''
+              nombre: idxNombre > -1 ? fila[idxNombre] : '',
+              telefono: idxTelefono > -1 ? fila[idxTelefono] : '',
+              observaciones: idxObs > -1 ? fila[idxObs] : ''
             });
           }
 
@@ -145,16 +131,9 @@ export default function Home() {
             origen: 'origen',
             entrada: 'entrada',
             salida: 'salida',
-            cobradoA: 'cobradoA',
-            cobradoB: 'cobradoB',
-            totalCobrado: 'totalCobrado',
-            observaciones: 'observaciones',
-            ingresoCanal: 'ingresoCanal',
-            fechaPago: 'fechaPago',
-            segundoIngreso: 'segundoIngreso',
-            fechaPago2: 'fechaPago2',
-            reportes: 'reportes',
-            datosKiko: 'datosKiko'
+            nombre: 'nombre',
+            telefono: 'telefono',
+            observaciones: 'observaciones'
           });
 
           const enriched = registros.map((row, i) => ({
@@ -228,8 +207,17 @@ export default function Home() {
     return da - db;
   });
 
-  function savePhone(id) {
-    setPhones(p => ({ ...p, [id]: phoneInput }));
+  function saveEdit(id, field) {
+    setEdits(prev => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        [field]: editInput
+      }
+    }));
+    setEditingCell(null);
+    setEditInput('');
+  }));
     setEditingPhone(null); setPhoneInput('');
   }
 
@@ -316,7 +304,7 @@ export default function Home() {
       background: var(--s1); border-bottom: 1px solid var(--border2);
       padding: 0.6rem 0.85rem; text-align: left;
       font-size: 0.63rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
-      color: var(--muted); white-space: nowrap; position: sticky; top: 55px; z-index: 10;
+      color: var(--muted); white-space: nowrap; 
     }
     tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
     tbody tr:hover { background: var(--s2); }
@@ -442,12 +430,6 @@ export default function Home() {
         </div>
       )}
 
-      <div className="tabs">
-        {[['reservas', '📅 Reservas'], ['financiero', '💶 Financiero']].map(([k, l]) => (
-          <button key={k} className={`tab-btn ${tab === k ? 'active' : ''}`} onClick={() => setTab(k)}>{l}</button>
-        ))}
-      </div>
-
       <div className="stats">
         <div className="stat">
           <div className="stat-label">Total reservas</div>
@@ -472,9 +454,7 @@ export default function Home() {
           <div className="stat-label">Airbnb</div>
           <div className="stat-val" style={{ color: '#fca5a5' }}>{data.filter(r => r._origen.includes('airbnb')).length}</div>
         </div>
-        <div className="stat">
-          <div className="stat-label">Ya llamados</div>
-          <div className="stat-val" style={{ color: 'var(--green)' }}>{Object.values(called).filter(Boolean).length}</div>
+        
           <div className="stat-sub">de {data.length} reservas</div>
         </div>
       </div>
@@ -506,7 +486,7 @@ export default function Home() {
           <div className="empty-txt">Error: {error}</div>
           <button className="btn btn-accent" onClick={fetchData}>Reintentar</button>
         </div>
-      ) : tab === 'reservas' ? (
+      ) : (
         <>
           <div className="tbl-wrap">
             {displayed.length === 0 ? (
@@ -520,10 +500,9 @@ export default function Home() {
                     <th>Entrada</th>
                     <th>Salida</th>
                     <th style={{ textAlign: 'center' }}>Noches</th>
+                    <th>Nombre</th>
                     <th>Teléfono</th>
-                    <th>Acción</th>
                     <th>Observaciones</th>
-                    <th>Datos Kiko</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -534,16 +513,52 @@ export default function Home() {
                     const sHoy = isToday(row._salida);
                     const dIn = daysDiff(row._entrada);
                     const dOut = daysDiff(row._salida);
-                    const isCalled = called[id];
-                    const phone = phones[id] || '';
+                    const customNombre = edits[id]?.nombre !== undefined ? edits[id].nombre : (row.nombre || '');
+                    const customTelefono = edits[id]?.telefono !== undefined ? edits[id].telefono : (row.telefono || '');
+                    const customObs = edits[id]?.observaciones !== undefined ? edits[id].observaciones : (row.observaciones || '');
+                    
                     let nights = '—';
+                    if (row._entrada && row._salida)
+                      nights = Math.round((row._salida - row._entrada) / 86400000);
+
+                    const renderEditableCell = (field, value, placeholder) => {
+                      const isEditing = editingCell?.id === id && editingCell?.field === field;
+                      if (isEditing) {
+                        return (
+                          <div className="phone-cell" onClick={e => e.stopPropagation()}>
+                            <input
+                              className="phone-input"
+                              value={editInput}
+                              placeholder={placeholder}
+                              onChange={e => setEditInput(e.target.value)}
+                              onKeyDown={e => { 
+                                if (e.key === 'Enter') saveEdit(id, field); 
+                                if (e.key === 'Escape') setEditingCell(null); 
+                              }}
+                              autoFocus
+                            />
+                            <button className="btn btn-accent btn-xs" onClick={() => saveEdit(id, field)}>✓</button>
+                            <button className="btn btn-ghost btn-xs" onClick={() => setEditingCell(null)}>✕</button>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="phone-cell" onClick={e => e.stopPropagation()}>
+                          {value ? <span className="phone-val">{value}</span> : <span className="phone-empty">Vacío</span>}
+                          <button className="btn btn-ghost btn-xs" onClick={() => { 
+                            setEditingCell({ id, field }); 
+                            setEditInput(value); 
+                          }}>✏️</button>
+                        </div>
+                      );
+                    };
                     if (row._entrada && row._salida)
                       nights = Math.round((row._salida - row._entrada) / 86400000);
 
                     return [
                       <tr
                         key={`r${id}`}
-                        className={`${eHoy ? 'in-today' : sHoy ? 'out-today' : ''} ${isCalled ? 'is-called' : ''}`}
+                        className={`${eHoy ? 'in-today' : sHoy ? 'out-today' : ''}`}
                         onClick={() => setExpandedRow(isExp ? null : id)}
                       >
                         <td style={{ fontWeight: 700, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -565,42 +580,10 @@ export default function Home() {
                           {!sHoy && dOut !== null && dOut > 0 && dOut <= 30 && <span className="days-lbl">+{dOut}d</span>}
                         </td>
                         <td className="mono" style={{ textAlign: 'center', color: 'var(--muted)' }}>{nights}</td>
-                        <td className="ac" onClick={e => e.stopPropagation()}>
-                          <div className="phone-cell">
-                            {editingPhone === id ? (
-                              <>
-                                <input
-                                  className="phone-input"
-                                  value={phoneInput}
-                                  placeholder="+34 600 000 000"
-                                  onChange={e => setPhoneInput(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') savePhone(id); if (e.key === 'Escape') setEditingPhone(null); }}
-                                  autoFocus
-                                />
-                                <button className="btn btn-accent btn-xs" onClick={() => savePhone(id)}>✓</button>
-                                <button className="btn btn-ghost btn-xs" onClick={() => setEditingPhone(null)}>✕</button>
-                              </>
-                            ) : (
-                              <>
-                                {phone ? <span className="phone-val">{phone}</span> : <span className="phone-empty">Sin tel.</span>}
-                                <button className="btn btn-ghost btn-xs" onClick={() => { setEditingPhone(id); setPhoneInput(phone); }}>✏️</button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                        <td className="ac" onClick={e => e.stopPropagation()}>
-                          <button
-                            className={`btn btn-xs ${isCalled ? 'btn-called' : 'btn-call'}`}
-                            onClick={() => setCalled(p => ({ ...p, [id]: !p[id] }))}
-                          >
-                            {isCalled ? '✅ Llamado' : '📞 Llamar'}
-                          </button>
-                        </td>
-                        <td style={{ color: 'var(--muted)', fontSize: '0.71rem', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {row[keys.observaciones] || '—'}
-                        </td>
-                        <td style={{ color: 'var(--muted)', fontSize: '0.71rem', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {row[keys.datosKiko] || '—'}
+                        <td className="ac">{renderEditableCell('nombre', customNombre, 'Nombre...')}</td>
+                        <td className="ac">{renderEditableCell('telefono', customTelefono, '+34...')}</td>
+                        <td className="ac" style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {renderEditableCell('observaciones', customObs, 'Observaciones...')}
                         </td>
                       </tr>,
                       isExp && (
@@ -616,18 +599,12 @@ export default function Home() {
                                     <span>{v}</span>
                                   </div>
                                 ))}
-                              {phones[id] && (
-                                <div className="exp-item">
-                                  <label>Teléfono (manual)</label>
-                                  <span>{phones[id]}</span>
+                              {edits[id] && Object.entries(edits[id]).map(([fk, fv]) => (
+                                <div className="exp-item" key={fk}>
+                                  <label>{fk} (modificado)</label>
+                                  <span>{fv}</span>
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    ];
-                  })}
+                              ))}}
                 </tbody>
               </table>
             )}
@@ -636,69 +613,6 @@ export default function Home() {
             {displayed.length} reservas · {data.length} total Booking + Airbnb · Haz clic en una fila para ver todos los datos
           </div>
         </>
-      ) : (
-        /* Financiero */
-        <div className="tbl-wrap">
-          <table className="fin-table">
-            <thead>
-              <tr>
-                <th>Alojamiento</th>
-                <th>Origen</th>
-                <th>Entrada</th>
-                <th>Salida</th>
-                <th>Cobrado A</th>
-                <th>Cobrado B</th>
-                <th>Total Cobrado</th>
-                <th>Ingreso Canal Neto</th>
-                <th>Fecha Pago</th>
-                <th>2º Ingreso Neto</th>
-                <th>Fecha Pago 2</th>
-                <th>Reportes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayed.map(row => (
-                <tr key={row._id}>
-                  <td style={{ fontWeight: 600 }}>{row[keys.alojamiento] || '—'}</td>
-                  <td>
-                    <span className={`bdg ${row._origen.includes('booking') ? 'bdg-bk' : 'bdg-ab'}`}>
-                      {row[keys.origen] || '—'}
-                    </span>
-                  </td>
-                  <td className="mono" style={{ fontSize: '0.73rem' }}>{formatDate(row._entrada)}</td>
-                  <td className="mono" style={{ fontSize: '0.73rem' }}>{formatDate(row._salida)}</td>
-                  <td className="money">{formatMoney(row[keys.cobradoA])}</td>
-                  <td className="money">{formatMoney(row[keys.cobradoB])}</td>
-                  <td className="money" style={{ fontWeight: 700 }}>{formatMoney(row[keys.totalCobrado])}</td>
-                  <td className="money">{formatMoney(row[keys.ingresoCanal])}</td>
-                  <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{row[keys.fechaPago] || '—'}</td>
-                  <td className="money">{formatMoney(row[keys.segundoIngreso])}</td>
-                  <td className="mono" style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{row[keys.fechaPago2] || '—'}</td>
-                  <td style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{row[keys.reportes] || '—'}</td>
-                </tr>
-              ))}
-              <tr className="total-row">
-                <td colSpan={4} style={{ textAlign: 'right', color: 'var(--muted)', fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  TOTALES — {displayed.length} reservas
-                </td>
-                <td className="money" style={{ color: 'var(--muted)' }}>—</td>
-                <td className="money" style={{ color: 'var(--muted)' }}>—</td>
-                <td className="money" style={{ color: 'var(--accent)', fontWeight: 800 }}>
-                  {displayed.reduce((s, r) => s + (parseFloat(String(r[keys.totalCobrado] || '').replace(/[€\s]/g, '').replace(',', '.')) || 0), 0)
-                    .toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                </td>
-                <td className="money" style={{ color: 'var(--green)', fontWeight: 800 }}>
-                  {displayed.reduce((s, r) => s + (parseFloat(String(r[keys.ingresoCanal] || '').replace(/[€\s]/g, '').replace(',', '.')) || 0), 0)
-                    .toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                </td>
-                <td colSpan={4} />
-              </tr>
-            </tbody>
-          </table>
-          <div className="footer-bar">
-            {displayed.length} reservas · Columnas: COBRADO A, COBRADO B, TOTAL COBRADO, INGRESO CANAL NETO, DATOS KIKO
-          </div>
-        </div>
       )}
     </>
   );
