@@ -78,8 +78,7 @@ export default function Home() {
   const audioCtx = useRef(null);
   const alarmInterval = useRef(null);
 
-    const URL_CSV = "https://docs.google.com/spreadsheets/d/1joSFjd6yZS9rjVwbXzuZSU1SVCScbEIVovSexqrO7ZE/edit?usp=sharing";
-
+    const URL_CSV = "https://docs.google.com/spreadsheets/d/1joSFjd6yZS9rjVwbXzuZSU1SVCScbEIVovSexqrO7ZE/export?format=csv&gid=251145455";
   const fetchData = useCallback(async () => {
     try {
       const respuesta = await fetch(URL_CSV);
