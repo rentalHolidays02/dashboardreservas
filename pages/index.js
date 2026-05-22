@@ -455,7 +455,7 @@ export default function Home() {
         
           <div className="stat-sub">de {data.length} reservas</div>
         </div>
-      </div>
+      
 
       <div className="controls">
         <input className="search" placeholder="🔍 Buscar..." value={search} onChange={e => setSearch(e.target.value)} />
