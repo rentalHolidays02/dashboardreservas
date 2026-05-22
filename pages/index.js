@@ -217,8 +217,6 @@ export default function Home() {
     }));
     setEditingCell(null);
     setEditInput('');
-  }));
-    setEditingPhone(null); setPhoneInput('');
   }
 
   const CSS = `
@@ -604,7 +602,13 @@ export default function Home() {
                                   <label>{fk} (modificado)</label>
                                   <span>{fv}</span>
                                 </div>
-                              ))}}
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    ];
+                  })}
                 </tbody>
               </table>
             )}
