@@ -15,19 +15,10 @@ import {
   Check,
   LocateFixed
 } from 'lucide-react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { InitialCleanRecord, HandymanRecord, NormalCleanRecord, Worker, Accommodation } from '../../services/mockData';
 import { computeHoursWorked, getExpectedHours, matchesWorkerByPhone } from '../../utils/payments';
-import { appsScriptApi, reverseGeocode } from '../../services/api';
-
-// Fix for default marker icons in Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+import { appsScriptApi } from '../../services/api';
+import { MapPickerModal } from '../ui/MapPickerModal';
 
 export type CheckoutTabType = 'normal' | 'initial' | 'handyman';
 type CheckoutRecord = NormalCleanRecord | InitialCleanRecord | HandymanRecord;
@@ -95,158 +86,6 @@ const toISOForInput = (dateStr: string) => {
   return dateStr.replace(' ', 'T');
 };
 
-const MapPickerModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: (address: string, coords: string) => void;
-  initialValue?: string;
-  siblingValue?: string;
-}> = ({ isOpen, onClose, onConfirm, initialValue, siblingValue }) => {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
-
-  const [address, setAddress] = useState('');
-  const [coords, setCoords] = useState('');
-  const [loadingMap, setLoadingMap] = useState(false);
-  const [hasSelection, setHasSelection] = useState(false);
-
-  useEffect(() => {
-    // Evita doble inicialización de Leaflet (React StrictMode / cambios de deps)
-    if (!mapContainerRef.current || mapRef.current) return;
-
-    const CASTELLON: [number, number] = [39.9864, -0.0513];
-    let initialPos: [number, number] = CASTELLON;
-
-    // Solo parsear si es realmente un string de coordenadas
-    if (initialValue && isCoordString(initialValue)) {
-      const parts = initialValue.split(',').map(s => parseFloat(s.trim()));
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        initialPos = [parts[0], parts[1]];
-      }
-    }
-
-    const map = L.map(mapContainerRef.current, {
-      center: initialPos,
-      zoom: 15,
-      zoomControl: false,
-      attributionControl: false
-    });
-    mapRef.current = map;
-
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
-
-    // Marcador de referencia del campo hermano (solo si tiene coordenadas válidas)
-    if (siblingValue && isCoordString(siblingValue)) {
-      const sParts = siblingValue.split(',').map((s: string) => parseFloat(s.trim()));
-      if (!isNaN(sParts[0]) && !isNaN(sParts[1])) {
-        const siblingIcon = L.icon({
-          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          className: 'grayscale opacity-50'
-        });
-        L.marker([sParts[0], sParts[1]], { icon: siblingIcon, interactive: false })
-          .addTo(map)
-          .bindTooltip('Referencia del otro punto', { permanent: false, direction: 'top' });
-      }
-    }
-
-    const placeMarker = async (latlng: L.LatLng) => {
-      if (!mapRef.current) return;
-      if (markerRef.current) {
-        markerRef.current.setLatLng(latlng);
-      } else {
-        markerRef.current = L.marker(latlng).addTo(mapRef.current);
-      }
-      const cStr = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
-      setCoords(cStr);
-      setHasSelection(true);
-      setLoadingMap(true);
-      try {
-        const addr = await reverseGeocode(cStr);
-        setAddress(addr || 'Ubicación seleccionada');
-      } catch {
-        setAddress('Ubicación seleccionada');
-      } finally {
-        setLoadingMap(false);
-      }
-    };
-
-    // Centro inicial: si ya tiene coords propias, centra ahí y pone el marcador
-    if (initialValue && isCoordString(initialValue)) {
-      placeMarker(new L.LatLng(initialPos[0], initialPos[1]));
-    } else if (siblingValue && isCoordString(siblingValue)) {
-      // Centra cerca del otro punto
-      const sParts = siblingValue.split(',').map((s: string) => parseFloat(s.trim()));
-      map.setView([sParts[0], sParts[1]], 16);
-    } else {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          if (mapRef.current) mapRef.current.setView([pos.coords.latitude, pos.coords.longitude], 16);
-        },
-        () => {
-          if (mapRef.current) mapRef.current.setView(CASTELLON, 15);
-        },
-        { timeout: 5000 }
-      );
-    }
-
-    map.on('click', (e) => placeMarker(e.latlng));
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        markerRef.current = null;
-      }
-    };
-  }, []); // deps vacías: el componente se desmonta con key={field} en el padre
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose} />
-      <div className="relative w-full max-w-4xl h-[80vh] bg-white dark:bg-stone-950 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-md">
-          <div className="bg-white/95 dark:bg-stone-900/95 backdrop-blur shadow-xl border border-stone-200 dark:border-stone-800 rounded-2xl px-6 py-4 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center text-orange-600">
-              <MapPin size={20} />
-            </div>
-            <div className="flex-1 truncate">
-              <p className="text-[10px] text-slate-400 dark:text-stone-500 uppercase tracking-widest font-black">Punto de interés</p>
-              <p className="text-sm text-slate-800 dark:text-stone-200 font-medium truncate leading-tight">
-                {hasSelection ? (loadingMap ? 'Geocodificando...' : address) : 'Haz clic para colocar el pin'}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div ref={mapContainerRef} className="flex-1 w-full z-0" />
-        <div className="p-8 bg-white dark:bg-stone-950 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-stone-100 dark:border-stone-800/50">
-          <div className="flex items-center gap-3 text-slate-400 dark:text-stone-600">
-            <Info size={14} />
-            <p className="text-[11px] font-medium italic">Haz clic en cualquier parte del mapa para fijar la ubicación.</p>
-          </div>
-          <div className="flex items-center gap-4 w-full sm:w-auto">
-            <button onClick={onClose} className="flex-1 sm:flex-none px-8 py-3.5 text-xs font-bold text-slate-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-900 rounded-xl transition-all uppercase tracking-widest">
-              Cerrar
-            </button>
-            <button 
-              onClick={() => onConfirm(address, coords)}
-              disabled={!hasSelection || loadingMap}
-              className="flex-[2] sm:flex-none px-12 py-3.5 bg-orange-500 text-white text-xs font-black rounded-xl hover:bg-orange-600 shadow-xl shadow-orange-500/30 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed uppercase tracking-widest flex items-center justify-center gap-2"
-            >
-              <Check size={18} />
-              Confirmar ubicación
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const CleanCheckoutFormModal: React.FC<Props> = ({ 
   isOpen, 
@@ -822,7 +661,7 @@ const CleanCheckoutFormModal: React.FC<Props> = ({
               </>
             )}
 
-            <div className="space-y-3"><label className={labelClass}>Revisión</label><div className="flex p-1.5 bg-stone-100 dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800"><button type="button" onClick={() => isHandyman ? updateField('estadoCompletado', 'Completado') : updateField('checked', true)} className={`flex-1 py-2 text-xs rounded-xl transition-all font-medium flex items-center justify-center gap-2 ${(isHandyman ? (form as HandymanRecord).estadoCompletado === 'Completado' : (form as any).checked) ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}><CheckCircle2 size={12} />Verificado</button><button type="button" onClick={() => isHandyman ? updateField('estadoCompletado', 'Pendiente') : updateField('checked', false)} className={`flex-1 py-2 text-xs rounded-xl transition-all font-medium ${!(isHandyman ? (form as HandymanRecord).estadoCompletado === 'Completado' : (form as any).checked) ? 'bg-white dark:bg-stone-800 text-slate-600' : 'text-slate-400'}`}>Pendiente</button></div></div>
+            <div className="space-y-3"><label className={labelClass}>Revisión</label><div className="flex p-1.5 bg-stone-100 dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800"><button type="button" onClick={() => isHandyman ? updateField('estadoCompletado', 'Completado') : updateField('checked', true)} className={`flex-1 py-2 text-xs rounded-xl transition-all font-medium flex items-center justify-center gap-2 ${(isHandyman ? (form as HandymanRecord).estadoCompletado === 'Completado' : (form as any).checked) ? 'bg-emerald-500 text-white shadow-lg' : 'text-slate-400'}`}><CheckCircle2 size={12} />Revisada</button><button type="button" onClick={() => isHandyman ? updateField('estadoCompletado', 'Pendiente') : updateField('checked', false)} className={`flex-1 py-2 text-xs rounded-xl transition-all font-medium ${!(isHandyman ? (form as HandymanRecord).estadoCompletado === 'Completado' : (form as any).checked) ? 'bg-white dark:bg-stone-800 text-slate-600' : 'text-slate-400'}`}>Pendiente</button></div></div>
 
             <div className="md:col-span-2 space-y-2"><label className={labelClass}>{isHandyman ? 'Detalles del trabajo' : 'Notas'}</label><div className="relative group"><MessageSquare size={14} className="absolute left-3.5 top-4 text-slate-400" /><textarea className={`${inputClass} !pl-10 h-32 resize-none pt-4`} placeholder={isHandyman ? "Describa los detalles del trabajo realizado..." : "Notas adicionales..."} value={isHandyman ? (form as HandymanRecord).observacionesTarea || '' : (form as any).observaciones || ''} onChange={(e) => updateField(isHandyman ? 'observacionesTarea' : 'observaciones', e.target.value)} /></div></div>
           </div>
