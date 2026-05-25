@@ -23,6 +23,7 @@ import WorkerAnalytics from './pages/WorkerAnalytics';
 import WorkerRecords from './pages/WorkerRecords';
 import { User } from './services/mockData';
 
+
 function App() {
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('rh_user');
@@ -59,7 +60,7 @@ function App() {
         try {
           const { supabase } = await import('./services/supabaseClient');
           const { data: { session } } = await supabase.auth.getSession();
-          
+
           if (session && session.user) {
             const { appsScriptApi } = await import('./services/api');
             // Intentamos un login silencioso (re-obtener perfil)
@@ -83,8 +84,8 @@ function App() {
     if (user && user.id) {
       const updateActivity = async () => {
         const { supabase: sb } = await import('./services/supabaseClient');
-        await sb.from('profiles').update({ 
-          last_seen: new Date().toISOString() 
+        await sb.from('profiles').update({
+          last_seen: new Date().toISOString()
         }).eq('id', user.id);
       };
       updateActivity();
@@ -96,205 +97,205 @@ function App() {
 
   return (
     <ThemeProvider>
-    <UndoToastProvider>
-    <NavigationGuardProvider>
-    <BrowserRouter>
-      {user && user.role !== 'trabajador' && <ChatBot />}
-      <Routes>
-        <Route 
-          path="/login" 
-          element={user ? <Navigate to="/dashboard" /> : <Login onLoginSuccess={handleLoginSuccess} />} 
-        />
-        
-        <Route
-          path="/usuarios"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <GestionUsuarios />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+      <UndoToastProvider>
+        <NavigationGuardProvider>
+          <BrowserRouter>
+            {user && user.role !== 'trabajador' && <ChatBot />}
+            <Routes>
+              <Route
+                path="/login"
+                element={user ? <Navigate to="/dashboard" /> : <Login onLoginSuccess={handleLoginSuccess} />}
+              />
 
-        <Route
-          path="/dashboard"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                {user.role === 'trabajador' ? <WorkerPanel user={user} /> : <Dashboard userRole={user.role} />}
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          } 
-        />
+              <Route
+                path="/usuarios"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <GestionUsuarios />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/analiticas"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <WorkerAnalytics user={user} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          } 
-        />
+              <Route
+                path="/dashboard"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      {user.role === 'trabajador' ? <WorkerPanel user={user} /> : <Dashboard userRole={user.role} />}
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/registros"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <WorkerRecords user={user} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          } 
-        />
+              <Route
+                path="/analiticas"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <WorkerAnalytics user={user} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/cleans"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Cleans userRole={user.role} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/registros"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <WorkerRecords user={user} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/workers"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Workers userRole={user.role} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/cleans"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Cleans userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/incidencias"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Incidencias userRole={user.role} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/workers"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Workers userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/sugerencias"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout}>
-                <Sugerencias />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/incidencias"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Incidencias userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/pagos"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Pagos userRole={user.role} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/sugerencias"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout}>
+                      <Sugerencias />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/alojamientos"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Alojamientos userRole={user.role} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/pagos"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Pagos userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/analisis"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Analisis />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/alojamientos"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Alojamientos userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/generar-informe"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <GenerarInforme />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/analisis"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Analisis />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+
+              <Route
+                path="/generar-informe"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <GenerarInforme />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
 
-        <Route
-          path="/entrega-de-llaves"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <EntregaDeLlaves userRole={user.role} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/entrega-de-llaves"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <EntregaDeLlaves userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route
-          path="/perfil"
-          element={
-            user ? (
-              <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                <Profile user={user} onLogout={handleLogout} />
-              </MainLayout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
+              <Route
+                path="/perfil"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <Profile user={user} onLogout={handleLogout} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
 
-        <Route path="/" element={<Navigate to={user ? "/dashboard" : `/login${window.location.hash}`} />} />
-        <Route path="*" element={<Navigate to={user ? "/dashboard" : `/login${window.location.hash}`} />} />
-      </Routes>
-    </BrowserRouter>
-    </NavigationGuardProvider>
-    </UndoToastProvider>
+              <Route path="/" element={<Navigate to={user ? "/dashboard" : `/login${window.location.hash}`} />} />
+              <Route path="*" element={<Navigate to={user ? "/dashboard" : `/login${window.location.hash}`} />} />
+            </Routes>
+          </BrowserRouter>
+        </NavigationGuardProvider>
+      </UndoToastProvider>
     </ThemeProvider>
   );
 }
