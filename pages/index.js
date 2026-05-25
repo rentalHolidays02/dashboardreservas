@@ -296,7 +296,20 @@ export default function Home() {
     .ml-auto { margin-left: auto; }
     .sep { width: 1px; height: 22px; background: var(--border); }
 
-    .tbl-wrap { padding: 0 1.5rem 3rem; overflow-x: auto; }
+    .tbl-wrap {
+  max-height: 70vh;
+  overflow: auto; /* both x and y */
+  padding: 0 1.5rem 3rem;
+}
+
+/* Sticky table header */
+.tbl-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--s1);
+}
+
     table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
     thead th {
       background: var(--s1); border-bottom: 1px solid var(--border2);
