@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
+import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Incidencia, EntregaLlaves } from '../services/mockData';
 import { appsScriptApi } from '../services/api';
 import { computeCleanPay, computeHoursWorked, cleanPhone } from '../utils/payments';
 import {
@@ -24,7 +24,7 @@ interface WorkerRecordsProps {
   user: User;
 }
 
-export type RecordType = 'Normal' | 'Inicial' | 'Manitas';
+export type RecordType = 'Normal' | 'Inicial' | 'Manitas' | 'Incidencia' | 'Llaves';
 
 interface UnifiedRecord {
   id: string;
@@ -38,6 +38,14 @@ interface UnifiedRecord {
   observations: string;
   horaEntrada?: string;
   horaSalida?: string;
+  // Campos extra Incidencias
+  description?: string;
+  coste?: number;
+  pagadoPor?: string;
+  // Campos extra Entrega de Llaves
+  nombreCliente?: string;
+  fechaEntrada?: string;
+  fechaSalida?: string;
 }
 
 /** Normaliza un nombre para comparación: minúsculas sin acentos */
@@ -80,11 +88,13 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [workers, normal, initial, handyman] = await Promise.all([
+        const [workers, normal, initial, handyman, incidencias, llaves] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getNormalCleans(),
           appsScriptApi.getInitialCleans(),
           appsScriptApi.getHandymanRecords(),
+          appsScriptApi.getRecentIncidencias(200).catch(() => [] as Incidencia[]),
+          appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
         ]);
 
         // Buscar al trabajador para obtener su tarifa (por teléfono primero, luego nombre)
@@ -153,6 +163,61 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 horaSalida: r.horaFinTarea,
               };
             }),
+          ...incidencias
+            .filter(r => matchRecord(
+              r.telefono || '',
+              r.nombre || '',
+              r.apellidos || '',
+              user.telefono,
+              user.name
+            ))
+            .map((r: Incidencia) => {
+              // Calcular horas si hay paradaInicial y paradaFinal o paradas con hora
+              let calculatedHours = 0;
+              const extractTime = (stopStr?: string): string | null => {
+                if (!stopStr) return null;
+                const m = stopStr.match(/\((\d{1,2}:\d{2})\)/);
+                return m ? m[1] : null;
+              };
+              const tIni = extractTime(r.paradaInicial);
+              const tFin = extractTime(r.paradaFinal);
+              if (tIni && tFin) {
+                calculatedHours = computeHoursWorked(tIni, tFin);
+              }
+
+              return {
+                id: r.id,
+                type: 'Incidencia' as RecordType,
+                date: r.timestamp || new Date().toISOString(),
+                accommodation: r.accommodationName,
+                kms: r.kms || 0,
+                hoursWorked: calculatedHours,
+                earnings: 0,
+                observations: r.observaciones || '',
+                description: r.description,
+                coste: r.coste,
+                pagadoPor: r.pagadoPor,
+                horaEntrada: tIni || undefined,
+                horaSalida: tFin || undefined,
+              };
+            }),
+          ...llaves
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: EntregaLlaves) => {
+              return {
+                id: r.id,
+                type: 'Llaves' as RecordType,
+                date: r.fechaEntradaReserva || r.fechaUbicacionEntrega || new Date().toISOString(),
+                accommodation: r.apartamento,
+                kms: r.km || 0,
+                hoursWorked: 0, // No se calcula desde fechas de reserva del cliente
+                earnings: 0,
+                observations: r.observaciones || '',
+                nombreCliente: r.nombreCliente,
+                fechaEntrada: r.fechaEntradaReserva,
+                fechaSalida: r.fechaSalidaReserva,
+              };
+            }),
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         setRecords(unified);
@@ -206,9 +271,11 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   }
 
   const typeConfig: Record<RecordType, { label: string; badge: string; icon: React.ComponentType<any> }> = {
-    Normal:  { label: 'Normal',  badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',       icon: Home },
-    Inicial: { label: 'Inicial', badge: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400', icon: Sparkles },
-    Manitas: { label: 'Manitas', badge: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',    icon: Wrench },
+    Normal:     { label: 'Normal',     badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',       icon: Home },
+    Inicial:    { label: 'Inicial',    badge: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400', icon: Sparkles },
+    Manitas:    { label: 'Manitas',    badge: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',    icon: Wrench },
+    Incidencia: { label: 'Incidencia', badge: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400',            icon: Info },
+    Llaves:     { label: 'Llaves',     badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',        icon: Banknote },
   };
 
   return (
@@ -312,8 +379,8 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
       {/* ── CONTENIDO CREADO RESPONSIVO CON INNER SCROLL ── */}
       <div className="flex-1 overflow-y-auto w-full lg:overflow-visible pb-24 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
       <div className="hidden lg:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
-        <div className="grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
-           {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Notas'].map(col => (
+        <div className="grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_0.5fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
+           {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Notas', ''].map(col => (
              <span key={col} className="text-xs text-slate-400 dark:text-stone-500">
                {col}
              </span>
@@ -330,53 +397,149 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
           ) : (
             filteredRecords.map(record => {
               const cfg = typeConfig[record.type];
+              const isExpanded = expandedId === record.id;
               return (
                 <li
                   key={record.id}
-                  className="group module-item grid grid-cols-[1.5fr_1fr_2fr_1fr_1fr_1.5fr_2fr] gap-4 px-8 py-4 items-center transition-colors hover:bg-stone-100/50 dark:hover:bg-stone-700/30"
+                  className={`transition-all duration-300 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 cursor-pointer ${
+                    isExpanded ? 'bg-stone-50/80 dark:bg-stone-850/50' : ''
+                  }`}
+                  onClick={() => setExpandedId(isExpanded ? null : record.id)}
                 >
-                  {/* Fecha */}
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
-                      {record.date
-                        ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-                        : '—'}
-                    </span>
-                    {record.horaEntrada && record.horaSalida && (
-                      <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
-                    )}
+                  <div className="group module-item grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_0.5fr] gap-4 px-8 py-4 items-center">
+                    {/* Fecha */}
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
+                        {record.date
+                          ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
+                      </span>
+                      {record.horaEntrada && record.horaSalida && (
+                        <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
+                      )}
+                    </div>
+                    
+                    <div className="min-w-0">
+                      <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-medium truncate max-w-full ${cfg.badge}`}>
+                        {cfg.label}
+                      </span>
+                    </div>
+                    
+                    {/* Alojamiento */}
+                    <p className="text-sm text-slate-800 dark:text-stone-200 truncate font-medium">
+                      {record.accommodation ? formatName(record.accommodation) : '—'}
+                    </p>
+                    
+                    {/* Horas */}
+                    <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                      {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
+                    </p>
+                    
+                    {/* KM */}
+                    <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                      {record.kms > 0 ? `${record.kms} km` : '—'}
+                    </p>
+                    
+                    {/* Generado */}
+                    <p className={`text-xs tabular-nums truncate ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
+                      {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                    </p>
+                    
+                    {/* Notas */}
+                    <p className="text-[11px] text-slate-600 dark:text-stone-300 truncate w-full block" title={record.observations}>
+                      {record.observations || <span className="opacity-40 italic">—</span>}
+                    </p>
+
+                    {/* Chevron icon */}
+                    <div className="flex justify-end pr-2 text-slate-400">
+                      <ChevronRight size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-90 text-orange-500' : ''}`} />
+                    </div>
                   </div>
-                  
-                  <div className="min-w-0">
-                    <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-medium truncate max-w-full ${cfg.badge}`}>
-                      {cfg.label}
-                    </span>
+
+                  {/* Panel de detalles en escritorio */}
+                  <div className={`overflow-hidden transition-all duration-300 ease-in-out px-8 ${
+                    isExpanded ? 'max-h-60 pb-6 pt-2 border-t border-stone-100 dark:border-stone-800/40 bg-white/40 dark:bg-stone-900/40' : 'max-h-0'
+                  }`}
+                  onClick={(e) => e.stopPropagation()} // Evitar colapsar al hacer clic en detalles
+                  >
+                    <div className="grid grid-cols-4 gap-4 bg-stone-50/50 dark:bg-stone-850/40 p-4 rounded-2xl border border-stone-100 dark:border-stone-800/60">
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Alojamiento Completo</span>
+                        <p className="text-xs text-slate-700 dark:text-stone-200 font-medium">
+                          {record.accommodation || '—'}
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Fecha Completa</span>
+                        <p className="text-xs text-slate-700 dark:text-stone-200">
+                          {record.date ? new Date(record.date).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' }) : '—'}
+                        </p>
+                      </div>
+
+                      {record.type === 'Incidencia' && (
+                        <>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Coste Estimado</span>
+                            <p className="text-xs text-red-500 font-semibold">
+                              {record.coste != null && record.coste > 0 ? `${record.coste.toFixed(2)}€` : '—'}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Pagado Por</span>
+                            <p className="text-xs text-slate-700 dark:text-stone-200 capitalize">
+                              {record.pagadoPor || '—'}
+                            </p>
+                          </div>
+                        </>
+                      )}
+
+                      {record.type === 'Llaves' && (
+                        <>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cliente</span>
+                            <p className="text-xs text-slate-700 dark:text-stone-200 font-medium">
+                              {record.nombreCliente || '—'}
+                            </p>
+                          </div>
+                          {record.fechaEntrada && (
+                            <div className="space-y-1">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Entrada de Reserva</span>
+                              <p className="text-xs text-slate-700 dark:text-stone-200">
+                                {new Date(record.fechaEntrada).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {(record.type === 'Normal' || record.type === 'Inicial' || record.type === 'Manitas') && (
+                        <>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horario del Registro</span>
+                            <p className="text-xs text-slate-700 dark:text-stone-200 font-mono">
+                              {record.horaEntrada && record.horaSalida ? `${record.horaEntrada} – ${record.horaSalida}` : '—'}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                              {record.type === 'Manitas' ? 'Minutos Trabajados' : 'Kilómetros totales'}
+                            </span>
+                            <p className="text-xs text-slate-700 dark:text-stone-200">
+                              {record.type === 'Manitas' ? `${record.minutes || 0} min` : `${record.kms || 0} km`}
+                            </p>
+                          </div>
+                        </>
+                      )}
+
+                      <div className="col-span-2 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Detalles / Observaciones</span>
+                        <p className="text-xs text-slate-600 dark:text-stone-400 italic font-light">
+                          "{record.description || record.observations || 'Sin anotaciones adicionales'}"
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  
-                  {/* Alojamiento */}
-                  <p className="text-sm text-slate-800 dark:text-stone-200 truncate">
-                    {record.accommodation ? formatName(record.accommodation) : '—'}
-                  </p>
-                  
-                  {/* Horas */}
-                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
-                    {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
-                  </p>
-                  
-                  {/* KM */}
-                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
-                    {record.kms > 0 ? `${record.kms} km` : '—'}
-                  </p>
-                  
-                  {/* Generado */}
-                  <p className={`text-xs tabular-nums truncate ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
-                    {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
-                  </p>
-                  
-                  {/* Notas */}
-                  <p className="text-xs text-slate-500 dark:text-stone-400 truncate" title={record.observations}>
-                    {record.observations || <span className="opacity-40 italic">—</span>}
-                  </p>
                 </li>
               );
             })
@@ -431,29 +594,76 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 </div>
 
                 {/* Detalle expandible */}
-                <div className={`px-4 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-80 pb-4 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
+                <div className={`px-4 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 pb-4 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
                       <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tipo</p>
                       <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{cfg.label}</p>
                     </div>
-                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horario</p>
-                      <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
-                        {record.horaEntrada && record.horaSalida ? `${record.horaEntrada}-${record.horaSalida}` : '—'}
-                      </p>
-                    </div>
-                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">
-                        {record.type === 'Manitas' ? 'Min' : 'KM'}
-                      </p>
-                      <p className="text-xs font-semibold text-slate-700 dark:text-stone-200">
-                        {record.type === 'Manitas'
-                          ? record.minutes ? `${record.minutes}` : '—'
-                          : record.kms ? `${record.kms}` : '—'}
-                      </p>
-                    </div>
+
+                    {(record.type === 'Normal' || record.type === 'Inicial' || record.type === 'Manitas') && (
+                      <>
+                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horario</p>
+                          <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                            {record.horaEntrada && record.horaSalida ? `${record.horaEntrada}-${record.horaSalida}` : '—'}
+                          </p>
+                        </div>
+                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">
+                            {record.type === 'Manitas' ? 'Min' : 'KM'}
+                          </p>
+                          <p className="text-xs font-semibold text-slate-700 dark:text-stone-200">
+                            {record.type === 'Manitas'
+                              ? record.minutes ? `${record.minutes}` : '—'
+                              : record.kms ? `${record.kms}` : '—'}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {record.type === 'Incidencia' && (
+                      <>
+                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Coste</p>
+                          <p className="text-xs font-semibold text-red-500 tabular-nums">
+                            {record.coste != null && record.coste > 0 ? `${record.coste.toFixed(2)}€` : '—'}
+                          </p>
+                        </div>
+                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Pagado por</p>
+                          <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">
+                            {record.pagadoPor === 'empresa' ? 'Empresa' : record.pagadoPor === 'limpiador' ? 'Limpiador' : '—'}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {record.type === 'Llaves' && (
+                      <>
+                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Cliente</p>
+                          <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{record.nombreCliente || '—'}</p>
+                        </div>
+                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">KM</p>
+                          <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{record.kms || 0}</p>
+                        </div>
+                      </>
+                    )}
                   </div>
+
+                  {record.type === 'Incidencia' && record.description && (
+                    <div className="bg-red-50/50 dark:bg-red-900/10 p-3.5 rounded-2xl border border-red-100/50 dark:border-red-800/30 mb-2">
+                      <div className="flex items-center gap-1.5 mb-1.5 text-red-500">
+                        <Info size={12} />
+                        <span className="text-[9px] uppercase font-bold tracking-wider">Descripción</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
+                        "{record.description}"
+                      </p>
+                    </div>
+                  )}
 
                   {record.observations && (
                     <div className="bg-stone-50 dark:bg-stone-900/40 p-3.5 rounded-2xl border border-stone-100/50 dark:border-stone-800/50">

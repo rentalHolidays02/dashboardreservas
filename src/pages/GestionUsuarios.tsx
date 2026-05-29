@@ -117,6 +117,66 @@ const _EMPTY_USER: Omit<AppUser, 'id' | 'createdAt' | 'lastLogin' | 'avatar'> = 
   name: '', email: '', role: 'viewer', status: 'active', onlineStatus: 'offline',
 };
 
+// ─── Validaciones de DNI, NIE e IBAN ──────────────────────────────────────────
+
+const validateDniNie = (value: string): { isValid: boolean; error?: string } => {
+  const clean = value.trim().toUpperCase();
+  if (!clean) return { isValid: false, error: 'El DNI / NIE es obligatorio para operarios' };
+
+  const dniRegex = /^[0-9]{8}[TRWAGMYFPDXBNJZSQVHLCKE]$/i;
+  const nieRegex = /^[XYZ][0-9]{7}[TRWAGMYFPDXBNJZSQVHLCKE]$/i;
+
+  if (!dniRegex.test(clean) && !nieRegex.test(clean)) {
+    return { isValid: false, error: 'Formato de DNI (12345678A) o NIE (X1234567L) no válido' };
+  }
+
+  // Verificar la letra de control por Módulo 23
+  let tempDni = clean;
+  if (nieRegex.test(clean)) {
+    const niePrefixMap: Record<string, string> = { X: '0', Y: '1', Z: '2' };
+    tempDni = niePrefixMap[clean[0]] + clean.slice(1);
+  }
+
+  const number = parseInt(tempDni.slice(0, 8), 10);
+  const letter = tempDni.slice(-1);
+  const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
+  const expectedLetter = letters[number % 23];
+
+  if (letter !== expectedLetter) {
+    return { isValid: false, error: `La letra '${letter}' no corresponde al número (debería ser '${expectedLetter}')` };
+  }
+
+  return { isValid: true };
+};
+
+const validateIban = (value: string): { isValid: boolean; error?: string } => {
+  const clean = value.replace(/\s+/g, '').toUpperCase();
+  if (!clean) return { isValid: false, error: 'La cuenta bancaria (IBAN) es obligatoria para operarios' };
+
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{12,30}$/.test(clean)) {
+    return { isValid: false, error: 'Formato de cuenta bancaria (IBAN) no válido' };
+  }
+
+  // Módulo 97
+  const rearranged = clean.slice(4) + clean.slice(0, 4);
+  const digits = rearranged.split('').map(char => {
+    const code = char.charCodeAt(0);
+    if (code >= 65 && code <= 90) return String(code - 55); // A-Z a número
+    return char;
+  }).join('');
+
+  let checksum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    checksum = (checksum * 10 + parseInt(digits[i], 10)) % 97;
+  }
+
+  if (checksum !== 1) {
+    return { isValid: false, error: 'El dígito de control del IBAN no es válido' };
+  }
+
+  return { isValid: true };
+};
+
 const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
   const isNew = !user;
   const [form, setForm] = useState({
@@ -137,11 +197,16 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
       setLoadingSensitive(true);
       appsScriptApi.getSensitiveData(user.id).then(data => {
         if (data) {
+          // Formatear IBAN en bloques de 4 al cargar
+          let rawBank = (data.bank_account || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          const parts = rawBank.match(/.{1,4}/g) || [];
+          const formattedBank = parts.join(' ');
+
           setForm(f => ({
             ...f,
-            dni: data.dni || '',
+            dni: (data.dni || '').toUpperCase().replace(/\s/g, ''),
             home_address: data.home_address || '',
-            bank_account: data.bank_account || '',
+            bank_account: formattedBank,
           }));
         }
       }).finally(() => setLoadingSensitive(false));
@@ -154,6 +219,27 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
     if (!form.name.trim()) e.name = 'El nombre es obligatorio';
     if (!form.email.trim()) e.email = 'El email es obligatorio';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Email no válido';
+
+    // Teléfono
+    const phoneDigits = form.telefono.replace(/\D/g, '');
+    if (form.telefono.trim() && phoneDigits.length < 9) {
+      e.telefono = 'El teléfono debe tener al menos 9 dígitos';
+    }
+
+    if (form.role === 'trabajador') {
+      // Validar DNI
+      const dniVal = validateDniNie(form.dni);
+      if (!dniVal.isValid) {
+        e.dni = dniVal.error || 'DNI no válido';
+      }
+
+      // Validar IBAN
+      const ibanVal = validateIban(form.bank_account);
+      if (!ibanVal.isValid) {
+        e.bank_account = ibanVal.error || 'IBAN no válido';
+      }
+    }
+
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -179,18 +265,25 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
-        <div className="flex items-center justify-between">
+      
+      {/* Añadimos max-h-[90vh] y flex flex-col para scroll interno y evitar recortes de pantalla */}
+      <div className="relative bg-white dark:bg-stone-900 rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95">
+        
+        {/* Cabecera fija */}
+        <div className="flex items-center justify-between p-6 border-b border-stone-100 dark:border-stone-800 shrink-0">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-stone-100">
             {isNew ? 'Nuevo usuario' : 'Editar usuario'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 transition"><X size={20} /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 transition">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="space-y-4">
+        {/* Cuerpo del formulario con scroll independiente */}
+        <div className="p-6 space-y-4 overflow-y-auto flex-1">
           <div>
             <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Nombre completo</label>
-            <input className={`${inputClass} ${errors.name ? 'border-red-400' : ''}`} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: María López" />
+            <input className={`${inputClass} ${errors.name ? 'border-red-400 focus:ring-red-400/50' : ''}`} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: María López" />
             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
           </div>
 
@@ -203,13 +296,12 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
           <div>
             <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Teléfono</label>
             <input 
-              className={inputClass} 
+              className={`${inputClass} ${errors.telefono ? 'border-red-400 focus:ring-red-400/50' : ''}`} 
               value={form.telefono} 
               onChange={e => {
                 let input = e.target.value;
                 let digits = input.replace(/\D/g, '');
                 
-                // Si el usuario borra todo, dejarlo vacío
                 if (input === '') {
                   setForm(f => ({ ...f, telefono: '' }));
                   return;
@@ -223,11 +315,13 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
                 // Limitar a 9 dígitos de número
                 mainNumber = mainNumber.slice(0, 9);
                 
-                // Formatear en bloques de 3
+                // Formatear en bloques 3-2-2-2 (ej. 697 60 97 56)
                 let formatted = '';
                 if (mainNumber.length > 0) {
-                  const parts = mainNumber.match(/.{1,3}/g) || [];
-                  formatted = parts.join(' ');
+                  formatted += mainNumber.substring(0, 3);
+                  if (mainNumber.length > 3) formatted += ' ' + mainNumber.substring(3, 5);
+                  if (mainNumber.length > 5) formatted += ' ' + mainNumber.substring(5, 7);
+                  if (mainNumber.length > 7) formatted += ' ' + mainNumber.substring(7, 9);
                 }
 
                 const finalValue = (hasPrefix ? '+34 ' : '') + formatted;
@@ -235,6 +329,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
               }} 
               placeholder="+34 600 000 000" 
             />
+            {errors.telefono && <p className="text-xs text-red-500 mt-1">{errors.telefono}</p>}
           </div>
 
           {form.role === 'trabajador' && (
@@ -246,7 +341,14 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">DNI / NIE</label>
-                    <input className={inputClass} value={form.dni} onChange={e => setForm(f => ({ ...f, dni: e.target.value }))} placeholder="12345678X" />
+                    <input 
+                      className={`${inputClass} ${errors.dni ? 'border-red-400 focus:ring-red-400/50' : ''} uppercase`} 
+                      value={form.dni} 
+                      onChange={e => setForm(f => ({ ...f, dni: e.target.value.toUpperCase().replace(/\s/g, '') }))} 
+                      placeholder="12345678X" 
+                      maxLength={9}
+                    />
+                    {errors.dni && <p className="text-xs text-red-500 mt-1">{errors.dni}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Dirección de casa</label>
@@ -254,7 +356,21 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Cuenta Bancaria (IBAN)</label>
-                    <input className={inputClass} value={form.bank_account} onChange={e => setForm(f => ({ ...f, bank_account: e.target.value }))} placeholder="ES00 0000 0000..." />
+                    <input 
+                      className={`${inputClass} ${errors.bank_account ? 'border-red-400 focus:ring-red-400/50' : ''} uppercase font-mono`} 
+                      value={form.bank_account} 
+                      onChange={e => {
+                        // Formatear automáticamente en bloques de 4 limitando a un máximo de 24 caracteres (estándar español)
+                        let val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        if (val.length > 24) val = val.slice(0, 24);
+                        const parts = val.match(/.{1,4}/g) || [];
+                        const formatted = parts.join(' ');
+                        setForm(f => ({ ...f, bank_account: formatted }));
+                      }} 
+                      placeholder="ES00 0000 0000..." 
+                      maxLength={29}
+                    />
+                    {errors.bank_account && <p className="text-xs text-red-500 mt-1">{errors.bank_account}</p>}
                   </div>
                 </div>
               )}
@@ -282,7 +398,8 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
           </div>
         </div>
 
-        <div className="flex gap-3 pt-1">
+        {/* Pie fijo de botones */}
+        <div className="p-6 border-t border-slate-100 dark:border-stone-800 flex gap-3 shrink-0">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-stone-700 text-slate-600 dark:text-stone-300 text-sm hover:bg-slate-50 dark:hover:bg-stone-800 transition">Cancelar</button>
           <button onClick={handleSubmit} className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition">
             {isNew ? 'Crear usuario' : 'Guardar cambios'}
