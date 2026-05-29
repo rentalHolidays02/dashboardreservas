@@ -14,10 +14,11 @@ import {
   Check,
   AlertTriangle,
   Users,
+  RotateCcw,
 } from 'lucide-react';
 import { useUndoToast } from '../context/UndoToastContext';
 import { appsScriptApi } from '../services/api';
-import { User } from '../services/mockData';
+import { User, Worker } from '../services/mockData';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ interface AppUser {
   dni?: string;
   home_address?: string;
   bank_account?: string;
+  // Transitorio: id del trabajador al que se vincula la cuenta (solo al crear rol trabajador). No se persiste en profiles.
+  assignedWorkerId?: string;
 }
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ const roleConfig: Record<UserRole, { label: string; color: string }> = {
   admin:  { label: 'Admin',  color: 'text-orange-600 dark:text-orange-400' },
   editor: { label: 'Editor', color: 'text-orange-400 dark:text-orange-300' },
   viewer: { label: 'Visor',  color: 'text-slate-400 dark:text-stone-500'   },
-  trabajador: { label: 'Operario', color: 'text-blue-500 dark:text-blue-400' },
+  trabajador: { label: 'Trabajador', color: 'text-blue-500 dark:text-blue-400' },
 };
 
 const statusConfig: Record<UserStatus, { label: string; color: string; dot: string }> = {
@@ -132,6 +135,37 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
 
   const [loadingSensitive, setLoadingSensitive] = useState(false);
 
+  // Trabajadores sin cuenta asignada, para vincular al crear un usuario con rol trabajador.
+  const [assignedWorkerId, setAssignedWorkerId] = useState('');
+  const [unassignedWorkers, setUnassignedWorkers] = useState<Worker[]>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(false);
+
+  useEffect(() => {
+    if (isNew && form.role === 'trabajador' && unassignedWorkers.length === 0) {
+      setLoadingWorkers(true);
+      appsScriptApi.getWorkers()
+        .then(ws => setUnassignedWorkers(ws.filter(w => !w.profileId)))
+        .catch(() => setUnassignedWorkers([]))
+        .finally(() => setLoadingWorkers(false));
+    }
+  }, [isNew, form.role, unassignedWorkers.length]);
+
+  const handleSelectWorker = (workerId: string) => {
+    setAssignedWorkerId(workerId);
+    const w = unassignedWorkers.find(x => x.id === workerId);
+    if (w) {
+      setForm(f => ({
+        ...f,
+        name: w.fullName || f.name,
+        email: w.email || f.email,
+        telefono: w.telefono || f.telefono,
+        dni: w.dni || f.dni,
+        bank_account: w.iban || f.bank_account,
+      }));
+    }
+    setErrors(e => ({ ...e, assignedWorkerId: '' }));
+  };
+
   useEffect(() => {
     if (user?.id) {
       setLoadingSensitive(true);
@@ -154,6 +188,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
     if (!form.name.trim()) e.name = 'El nombre es obligatorio';
     if (!form.email.trim()) e.email = 'El email es obligatorio';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Email no válido';
+    if (isNew && form.role === 'trabajador' && !assignedWorkerId) e.assignedWorkerId = 'Debes asignar un trabajador';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -170,6 +205,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
       currentActivity: user?.currentActivity,
       sessionStart: user?.sessionStart,
       ...form,
+      assignedWorkerId: assignedWorkerId || undefined,
     } as AppUser);
     onClose();
   };
@@ -237,7 +273,30 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
             />
           </div>
 
-          {form.role === 'trabajador' && (
+          {form.role === 'trabajador' && isNew && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-stone-400 mb-1.5">Asignar a trabajador</label>
+              <select
+                className={`${inputClass} ${errors.assignedWorkerId ? 'border-red-400' : ''}`}
+                value={assignedWorkerId}
+                onChange={e => handleSelectWorker(e.target.value)}
+                disabled={loadingWorkers}
+              >
+                <option value="">{loadingWorkers ? 'Cargando trabajadores...' : 'Selecciona un trabajador sin cuenta'}</option>
+                {unassignedWorkers.map(w => (
+                  <option key={w.id} value={w.id}>
+                    {w.fullName}{w.telefono ? ` · ${w.telefono}` : ''}
+                  </option>
+                ))}
+              </select>
+              {errors.assignedWorkerId && <p className="text-xs text-red-500 mt-1">{errors.assignedWorkerId}</p>}
+              {!loadingWorkers && unassignedWorkers.length === 0 && (
+                <p className="text-xs text-amber-500 mt-1">Todos los trabajadores ya tienen cuenta asignada.</p>
+              )}
+            </div>
+          )}
+
+          {form.role === 'trabajador' && !isNew && (
             <div className="border-t border-slate-100 dark:border-stone-800 pt-4 mt-2">
               <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Datos Sensibles (Privado)</h3>
               {loadingSensitive ? (
@@ -268,7 +327,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
                 <option value="admin">Admin</option>
                 <option value="editor">Editor</option>
                 <option value="viewer">Visor</option>
-                <option value="trabajador">Operario</option>
+                <option value="trabajador">Trabajador</option>
               </select>
             </div>
             <div>
@@ -433,9 +492,10 @@ interface UserRowProps {
   onDelete: (u: AppUser) => void;
   onPassword: (u: AppUser) => void;
   onToggleStatus: (u: AppUser) => void;
+  onResend: (u: AppUser) => void;
 }
 
-const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, onToggleStatus }) => {
+const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, onToggleStatus, onResend }) => {
   const { label: roleLabel, color: roleColor } = roleConfig[user.role];
   const { dot: onlineDot } = onlineConfig[user.onlineStatus];
   const isConnected = user.onlineStatus !== 'offline';
@@ -494,6 +554,11 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
 
       {/* Acciones */}
       <div className="flex items-center justify-end gap-1">
+        {user.status === 'pending' && (
+          <button onClick={() => onResend(user)} title="Reenviar invitación" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
+            <RotateCcw size={14} />
+          </button>
+        )}
         <button onClick={() => onEdit(user)} title="Editar" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors">
           <Edit2 size={14} />
         </button>
@@ -521,9 +586,10 @@ const GestionUsuarios: React.FC = () => {
       const supabaseUsers = await appsScriptApi.getAllUsers();
       const mapped = supabaseUsers.map(u => ({
         ...u,
-        status: 'active' as UserStatus,
+        // Sin last_seen = nunca entró = invitación no aceptada todavía.
+        status: (u.last_seen ? 'active' : 'pending') as UserStatus,
         createdAt: new Date().toISOString(),
-        lastLogin: null,
+        lastLogin: u.last_seen ?? null,
         avatar: u.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
         onlineStatus: 'offline' as OnlineStatus,
       }));
@@ -601,15 +667,40 @@ const GestionUsuarios: React.FC = () => {
         }
 
         showToast('Invitación enviada con éxito');
-        
-        // 2. Recargar la lista completa desde Supabase
+
+        // 2. Si es trabajador, vincular su ficha con la cuenta recién creada.
+        if (u.role === 'trabajador' && u.assignedWorkerId) {
+          // El perfil lo crea Apps Script de forma asíncrona; reintentamos resolver su id por email.
+          let profile = null;
+          for (let i = 0; i < 3 && !profile; i++) {
+            await new Promise(r => setTimeout(r, 1500));
+            profile = await appsScriptApi.getProfileByEmail(u.email).catch(() => null);
+          }
+          if (profile?.id) {
+            try {
+              await appsScriptApi.linkWorkerProfile(u.assignedWorkerId, profile.id);
+              await appsScriptApi.updateSensitiveData(profile.id, {
+                dni: u.dni,
+                home_address: u.home_address,
+                bank_account: u.bank_account,
+              });
+            } catch (linkErr) {
+              console.error('Error al vincular trabajador con la cuenta:', linkErr);
+              showToast('Cuenta creada, pero falló el vínculo con el trabajador.');
+            }
+          } else {
+            showToast('Cuenta creada, pero aún no se pudo vincular al trabajador.');
+          }
+        }
+
+        // 3. Recargar la lista completa desde Supabase
         setTimeout(() => {
           loadUsers();
           setModalUser(undefined);
         }, 1500);
-        
+
         return;
-      } 
+      }
       
       // MODO EDICIÓN
       // Usar targetId (u.id) para asegurar que no sea undefined
@@ -640,14 +731,27 @@ const GestionUsuarios: React.FC = () => {
 
   const handleDelete = async (u: AppUser) => {
     try {
-      await appsScriptApi.deleteProfile(u.id);
+      // 1. Desvincular trabajador (evita violar FK workers.profile_id -> profiles.id).
+      await appsScriptApi.unlinkWorkerByProfile(u.id);
+      // 2. Borrar datos sensibles (FK al perfil) y luego el perfil. Detecta RLS si borra 0 filas.
       await appsScriptApi.deleteSensitiveData(u.id);
-      
-      setUsers(prev => prev.filter(p => p.id !== u.id));
-      showToast('Usuario eliminado permanentemente');
-    } catch (error) {
+      await appsScriptApi.deleteProfile(u.id);
+
+      showToast('Usuario eliminado del sistema (auth.users NO; necesita Apps Script)');
+      // 3. Recargar desde Supabase para reflejar el estado real, no un filter optimista.
+      await loadUsers();
+    } catch (error: any) {
       console.error('Error al eliminar usuario:', error);
-      showToast('Error al eliminar el usuario');
+      showToast(error?.message || 'Error al eliminar el usuario');
+    }
+  };
+
+  const handleResend = async (u: AppUser) => {
+    const res = await appsScriptApi.resendInvitation(u.email);
+    if (res.ok) {
+      showToast(`Invitación reenviada a ${u.email}`);
+    } else {
+      showToast(`No se pudo reenviar: ${res.error || 'error desconocido'}`);
     }
   };
 
@@ -700,7 +804,7 @@ const GestionUsuarios: React.FC = () => {
                 <option value="admin">Admin</option>
                 <option value="editor">Editor</option>
                 <option value="viewer">Visor</option>
-                <option value="trabajador">Operario</option>
+                <option value="trabajador">Trabajador</option>
               </select>
               <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-[10px]">▾</span>
             </div>
@@ -799,6 +903,7 @@ const GestionUsuarios: React.FC = () => {
                 onDelete={u => setDeleteUser(u)}
                 onPassword={u => setPasswordUser(u)}
                 onToggleStatus={handleToggleStatus}
+                onResend={handleResend}
               />
             ))
           )}
