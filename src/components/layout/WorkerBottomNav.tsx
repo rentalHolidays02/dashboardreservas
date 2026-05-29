@@ -1,12 +1,11 @@
 import React from 'react';
-import { LayoutDashboard, TrendingUp, FileText, User } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, User } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
 
 const NAV_ITEMS = [
   { Icon: LayoutDashboard, label: 'Inicio',     path: '/dashboard' },
   { Icon: TrendingUp,      label: 'Resumen',    path: '/analiticas' },
-  { Icon: FileText,        label: 'Registros',  path: '/registros' },
   { Icon: User,            label: 'Perfil',     path: '/perfil' },
 ];
 
