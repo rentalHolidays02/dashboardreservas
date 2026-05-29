@@ -15,8 +15,6 @@ import {
   InitialCleanRecord,
   HandymanRecord,
   PagoRecord,
-  MonthlyPayment,
-  PaymentReportStatus,
   Accommodation,
   MOCK_ACCOMMODATIONS,
   Suggestion,
@@ -967,6 +965,9 @@ export const appsScriptApi = {
           iban: sensitive?.bank_account || w.iban || '',
           tipoPago: w.payment_method as Worker['tipoPago'],
           pagoPorReserva: Number(w.pay_per_reservation || 0),
+          pagoPorReservaAdicional: Number(w.pay_per_extra_reservation || 0),
+          pagoPorServicioSabanas: Number(w.pay_per_linen_service || 0),
+          pagoPorIncidencia: Number(w.pay_per_incident || 0),
           precioPorKm: Number(w.price_per_km || 0),
           notes: w.notes || '',
           netMoneyMonth: 0,
@@ -2441,173 +2442,4 @@ export const appsScriptApi = {
   }
 };
 
-// ============================================================
-// Pagos mensuales (Supabase: public.monthly_payments)
-// ============================================================
-
-type MonthlyPaymentRow = {
-  id: string;
-  worker_id: string;
-  period: string;
-  num_reservations: number;
-  num_extra_reservations: number;
-  num_linen_services: number;
-  num_overtime_hours: number;
-  num_kilometers: number;
-  num_incidents: number;
-  rate_reservation: number;
-  rate_extra_reservation: number;
-  rate_linen_service: number;
-  rate_kilometer: number;
-  rate_incident: number;
-  rate_overtime: number;
-  otros: number;
-  abonos_recogidos: number;
-  saldo_mes_anterior_pendiente: number | null;
-  reporte: PaymentReportStatus;
-  observaciones: string | null;
-  monto_reservas: number;
-  monto_sabanas_toallas: number;
-  monto_horas_extra: number;
-  monto_kilometraje: number;
-  monto_incidencias: number;
-  total: number;
-  saldo_pendiente_a_pagar: number;
-  created_at: string;
-  updated_at: string;
-};
-
-const toNum = (v: unknown): number => (v == null ? 0 : Number(v));
-
-const mapRowToMonthlyPayment = (row: MonthlyPaymentRow): MonthlyPayment => ({
-  id: row.id,
-  workerId: row.worker_id,
-  period: row.period,
-  numReservations: toNum(row.num_reservations),
-  numExtraReservations: toNum(row.num_extra_reservations),
-  numLinenServices: toNum(row.num_linen_services),
-  numOvertimeHours: toNum(row.num_overtime_hours),
-  numKilometers: toNum(row.num_kilometers),
-  numIncidents: toNum(row.num_incidents),
-  rateReservation: toNum(row.rate_reservation),
-  rateExtraReservation: toNum(row.rate_extra_reservation),
-  rateLinenService: toNum(row.rate_linen_service),
-  rateKilometer: toNum(row.rate_kilometer),
-  rateIncident: toNum(row.rate_incident),
-  rateOvertime: toNum(row.rate_overtime),
-  otros: toNum(row.otros),
-  abonosRecogidos: toNum(row.abonos_recogidos),
-  saldoMesAnteriorPendiente: row.saldo_mes_anterior_pendiente == null ? null : Number(row.saldo_mes_anterior_pendiente),
-  reporte: row.reporte,
-  observaciones: row.observaciones ?? '',
-  montoReservas: toNum(row.monto_reservas),
-  montoSabanasToallas: toNum(row.monto_sabanas_toallas),
-  montoHorasExtra: toNum(row.monto_horas_extra),
-  montoKilometraje: toNum(row.monto_kilometraje),
-  montoIncidencias: toNum(row.monto_incidencias),
-  total: toNum(row.total),
-  saldoPendienteAPagar: toNum(row.saldo_pendiente_a_pagar),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
-
-// Campos editables (excluye id, generated y timestamps)
-export type MonthlyPaymentInput = Pick<MonthlyPayment,
-  | 'workerId' | 'period'
-  | 'numReservations' | 'numExtraReservations' | 'numLinenServices'
-  | 'numOvertimeHours' | 'numKilometers' | 'numIncidents'
-  | 'rateReservation' | 'rateExtraReservation' | 'rateLinenService'
-  | 'rateKilometer' | 'rateIncident' | 'rateOvertime'
-  | 'otros' | 'abonosRecogidos' | 'saldoMesAnteriorPendiente'
-  | 'reporte' | 'observaciones'>;
-
-const mapInputToRow = (input: Partial<MonthlyPaymentInput>): Partial<MonthlyPaymentRow> => {
-  const r: Partial<MonthlyPaymentRow> = {};
-  if (input.workerId !== undefined) r.worker_id = input.workerId;
-  if (input.period !== undefined) r.period = input.period;
-  if (input.numReservations !== undefined) r.num_reservations = input.numReservations;
-  if (input.numExtraReservations !== undefined) r.num_extra_reservations = input.numExtraReservations;
-  if (input.numLinenServices !== undefined) r.num_linen_services = input.numLinenServices;
-  if (input.numOvertimeHours !== undefined) r.num_overtime_hours = input.numOvertimeHours;
-  if (input.numKilometers !== undefined) r.num_kilometers = input.numKilometers;
-  if (input.numIncidents !== undefined) r.num_incidents = input.numIncidents;
-  if (input.rateReservation !== undefined) r.rate_reservation = input.rateReservation;
-  if (input.rateExtraReservation !== undefined) r.rate_extra_reservation = input.rateExtraReservation;
-  if (input.rateLinenService !== undefined) r.rate_linen_service = input.rateLinenService;
-  if (input.rateKilometer !== undefined) r.rate_kilometer = input.rateKilometer;
-  if (input.rateIncident !== undefined) r.rate_incident = input.rateIncident;
-  if (input.rateOvertime !== undefined) r.rate_overtime = input.rateOvertime;
-  if (input.otros !== undefined) r.otros = input.otros;
-  if (input.abonosRecogidos !== undefined) r.abonos_recogidos = input.abonosRecogidos;
-  if (input.saldoMesAnteriorPendiente !== undefined) r.saldo_mes_anterior_pendiente = input.saldoMesAnteriorPendiente;
-  if (input.reporte !== undefined) r.reporte = input.reporte;
-  if (input.observaciones !== undefined) r.observaciones = input.observaciones;
-  return r;
-};
-
-export const monthlyPaymentsApi = {
-  // Lista pagos. Filtros opcionales por period (YYYY-MM-01) y workerId.
-  async list(filters?: { period?: string; workerId?: string }): Promise<MonthlyPayment[]> {
-    let q = supabase.from('monthly_payments').select('*');
-    if (filters?.period) q = q.eq('period', filters.period);
-    if (filters?.workerId) q = q.eq('worker_id', filters.workerId);
-    const { data, error } = await q.order('period', { ascending: false });
-    if (error) throw error;
-    return (data ?? []).map(r => mapRowToMonthlyPayment(r as MonthlyPaymentRow));
-  },
-
-  // Upsert por (worker_id, period). Si saldoMesAnteriorPendiente=null el trigger lo rellena.
-  async upsert(input: MonthlyPaymentInput): Promise<MonthlyPayment> {
-    const row = mapInputToRow(input);
-    const { data, error } = await supabase
-      .from('monthly_payments')
-      .upsert(row, { onConflict: 'worker_id,period' })
-      .select('*')
-      .single();
-    if (error) throw error;
-    return mapRowToMonthlyPayment(data as MonthlyPaymentRow);
-  },
-
-  async delete(id: string): Promise<void> {
-    const { error } = await supabase.from('monthly_payments').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  // Genera filas para todos los trabajadores activos del mes indicado.
-  // Idempotente: solo inserta los que no existen ya para ese period.
-  // Las tasas (rate_*) se snapshot-an desde workers.pay_per_* / price_per_km en el momento.
-  async bulkGenerateForMonth(period: string): Promise<{ created: number; skipped: number }> {
-    const { data: workersData, error: wErr } = await supabase
-      .from('workers')
-      .select('id, pay_per_reservation, pay_per_extra_reservation, pay_per_linen_service, price_per_km, pay_per_incident')
-      .eq('active', true);
-    if (wErr) throw wErr;
-    if (!workersData || workersData.length === 0) return { created: 0, skipped: 0 };
-
-    const { data: existing, error: eErr } = await supabase
-      .from('monthly_payments')
-      .select('worker_id')
-      .eq('period', period);
-    if (eErr) throw eErr;
-    const existingIds = new Set((existing ?? []).map((r: { worker_id: string }) => r.worker_id));
-
-    const rows = workersData
-      .filter((w: { id: string }) => !existingIds.has(w.id))
-      .map((w: any) => ({
-        worker_id: w.id,
-        period,
-        rate_reservation: Number(w.pay_per_reservation ?? 0),
-        rate_extra_reservation: Number(w.pay_per_extra_reservation ?? 0),
-        rate_linen_service: Number(w.pay_per_linen_service ?? 0),
-        rate_kilometer: Number(w.price_per_km ?? 0),
-        rate_incident: Number(w.pay_per_incident ?? 0),
-      }));
-
-    if (rows.length === 0) return { created: 0, skipped: existingIds.size };
-
-    const { error: iErr } = await supabase.from('monthly_payments').insert(rows);
-    if (iErr) throw iErr;
-    return { created: rows.length, skipped: existingIds.size };
-  },
-};
 
