@@ -913,21 +913,6 @@ const GestionUsuarios: React.FC = () => {
         </div>
       </header>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: 'Total usuarios',   value: stats.total,  color: 'text-slate-700 dark:text-stone-200' },
-          { label: 'Activos',          value: stats.active, color: 'text-green-600 dark:text-green-400' },
-          { label: 'Administradores',  value: stats.admins, color: 'text-orange-600 dark:text-orange-400' },
-          { label: 'Conectados ahora', value: stats.online, color: 'text-green-600 dark:text-green-400' },
-        ].map(s => (
-          <div key={s.label} className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl p-4">
-            <p className="text-xs text-slate-400 dark:text-stone-500 mb-1">{s.label}</p>
-            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
       {/* Online presence panel */}
       {onlineUsers.length > 0 && (
         <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl mb-4 overflow-hidden">
@@ -1004,26 +989,6 @@ const GestionUsuarios: React.FC = () => {
 
         <div className="px-8 py-3 border-t border-stone-100 dark:border-stone-800">
           <span className="text-xs text-slate-400 dark:text-stone-500">{filtered.length} de {users.length} usuarios</span>
-        </div>
-      </div>
-
-      {/* Role legend */}
-      <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl p-4">
-        <h3 className="text-xs font-normal text-slate-400 dark:text-stone-500 uppercase tracking-wider mb-3">Descripción de roles</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {(Object.entries(roleConfig) as [UserRole, typeof roleConfig[UserRole]][]).map(([key, { label, color }]) => (
-            <div key={key} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-stone-800/50">
-              <span className={`text-xs font-medium shrink-0 ${color}`}>
-                {label}
-              </span>
-              <p className="text-xs text-slate-500 dark:text-stone-400 leading-relaxed">
-                {key === 'admin' && 'Acceso total al sistema. Puede gestionar usuarios, configurar la plataforma y ver todos los datos.'}
-                {key === 'editor' && 'Puede añadir, editar y eliminar registros operativos. No puede gestionar usuarios ni configuración.'}
-                {key === 'viewer' && 'Solo lectura. Puede consultar datos pero no modificar ni exportar información sensible.'}
-                {key === 'trabajador' && 'Acceso limitado a sus propias tareas, check-ins e incidencias asignadas.'}
-              </p>
-            </div>
-          ))}
         </div>
       </div>
 
