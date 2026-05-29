@@ -14,7 +14,8 @@ import {
   Wrench,
   Sparkles,
   Building2,
-  ChevronRight
+  ChevronRight,
+  Route
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -54,16 +55,20 @@ const CustomTooltip: React.FC<{
   active?: boolean;
   payload?: { value: number; name: string }[];
   label?: string;
-  activeTab: 'dinero' | 'limpiezas';
+  activeTab: Metric;
 }> = ({ active, payload, label, activeTab }) => {
   if (!active || !payload?.length) return null;
   const value = payload[0].value;
+  const formatted =
+    activeTab === 'dinero'
+      ? fmtEur(value)
+      : activeTab === 'km'
+        ? `${value.toFixed(1)} km`
+        : `${value} ${value === 1 ? 'servicio' : 'servicios'}`;
   return (
     <div className="bg-white dark:bg-stone-800 border border-slate-100 dark:border-stone-700 rounded-xl px-3 py-2 text-xs soft-shadow">
       <p className="text-slate-400 dark:text-stone-500 mb-0.5">{label}</p>
-      <p className="font-medium text-slate-800 dark:text-stone-200">
-        {activeTab === 'dinero' ? fmtEur(value) : `${value} ${value === 1 ? 'limpieza' : 'limpiezas'}`}
-      </p>
+      <p className="font-medium text-slate-800 dark:text-stone-200">{formatted}</p>
     </div>
   );
 };
@@ -158,9 +163,9 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
       customHasta,
       selectedWorkerId || undefined
     );
-    return dailyData.map(d => ({ 
-      label: d.label, 
-      valor: metric === 'dinero' ? d.dinero : d.limpiezas 
+    return dailyData.map(d => ({
+      label: d.label,
+      valor: metric === 'dinero' ? d.dinero : metric === 'km' ? d.km : d.limpiezas
     }));
   }, [period, customDesde, customHasta, selectedWorkerId, allWorkers, globalRecords, metric]);
 
@@ -264,15 +269,43 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
           <div className="flex items-center justify-between mb-6 md:mb-8">
             <div className="flex items-baseline gap-2">
               <span className="text-xl md:text-2xl font-normal text-slate-800 dark:text-stone-100 tracking-tight font-display tabular-nums">
-                {metric === 'dinero' ? fmtEur(animatedTotal) : `${Math.floor(animatedTotal)}`}
+                {metric === 'dinero'
+                  ? fmtEur(animatedTotal)
+                  : metric === 'km'
+                    ? `${animatedTotal.toFixed(1)} km`
+                    : `${Math.floor(animatedTotal)}`}
               </span>
               <span className="text-[10px] md:text-xs font-light text-slate-400 dark:text-stone-500 lowercase">
                 {periodLabel}
               </span>
             </div>
             <div className="p-2 rounded-xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
-              {metric === 'dinero' ? <TrendingUp size={18} /> : <Sparkles size={18} />}
+              {metric === 'dinero' ? <TrendingUp size={18} /> : metric === 'km' ? <Route size={18} /> : <Sparkles size={18} />}
             </div>
+          </div>
+
+          {/* Selector de métrica visible */}
+          <div className="grid grid-cols-3 gap-2 mb-4 md:mb-6">
+            {([
+              { id: 'dinero',    label: 'Dinero' },
+              { id: 'limpiezas', label: 'Servicios' },
+              { id: 'km',        label: 'Km' },
+            ] as { id: Metric; label: string }[]).map(m => {
+              const active = metric === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setMetric(m.id)}
+                  className={`flex items-center justify-center px-3 py-2 rounded-xl text-xs transition-all border active:scale-[0.98] ${
+                    active
+                      ? 'bg-orange-100 dark:bg-orange-400/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-medium'
+                      : 'bg-white/60 dark:bg-stone-800/40 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
           </div>
 
           <div className="h-[220px] md:h-[350px] w-full">
@@ -291,7 +324,7 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
                   tick={{ fontSize: 9, fill: '#94a3b8' }} 
                   axisLine={false} 
                   tickLine={false}
-                  tickFormatter={(v) => metric === 'dinero' ? (v >= 1000 ? `${(v/1000).toFixed(1)}k` : `${v}`) : `${v}`}
+                  tickFormatter={(v) => metric === 'dinero' ? (v >= 1000 ? `${(v/1000).toFixed(1)}k` : `${v}`) : metric === 'km' ? `${v}` : `${v}`}
                   width={30}
                 />
                 <Tooltip content={<CustomTooltip activeTab={metric} />} cursor={{ stroke: '#e2e8f0', strokeWidth: 1 }} />

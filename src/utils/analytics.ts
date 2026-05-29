@@ -9,6 +9,26 @@ export interface ChartPoint {
   km: number;
 }
 
+const normName = (s: string) =>
+  (s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+// Igual que `matchRecord` en WorkerPanel: teléfono si ambos existen; si no, nombre+apellidos.
+const matchRecordVsWorker = (
+  recordPhone: string,
+  recordNombre: string,
+  recordApellidos: string,
+  worker: Worker
+): boolean => {
+  const recPhone = cleanPhone(recordPhone);
+  const wPhone = cleanPhone(worker.telefono);
+  if (recPhone && wPhone) return recPhone === wPhone;
+
+  const full = normName(`${recordNombre} ${recordApellidos}`);
+  const target = normName(worker.fullName);
+  if (!full || !target) return false;
+  return target.split(/\s+/).every(part => full.includes(part));
+};
+
 export const aggregateDailyData = (
   workers: Worker[],
   normalCleans: NormalCleanRecord[],
@@ -20,6 +40,10 @@ export const aggregateDailyData = (
   selectedWorkerId?: string | null
 ): ChartPoint[] => {
   const result: Record<string, ChartPoint> = {};
+
+  // Clave YYYY-MM-DD en hora LOCAL (evita el desfase de toISOString a UTC).
+  const localKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   // Base date = hoy; permitimos sobrescribir con customHasta para modo personalizado.
   const today = new Date();
@@ -41,7 +65,7 @@ export const aggregateDailyData = (
   for (let i = iterations - 1; i >= 0; i--) {
     const d = new Date(endDate);
     d.setDate(endDate.getDate() - i * step);
-    const iso = d.toISOString().split('T')[0];
+    const iso = localKey(d);
     const label = d.toLocaleString('es-ES', { day: 'numeric', month: 'short' });
     result[iso] = { label, dinero: 0, limpiezas: 0, km: 0 };
   }
@@ -55,19 +79,22 @@ export const aggregateDailyData = (
   const processClean = (
     fecha: string,
     telefono: string,
+    nombre: string,
+    apellidos: string,
     apartamento: string,
     horaEntrada: string,
     horaSalida: string,
     km: number
   ) => {
-    const datePart = fecha.split(' ')[0].split('T')[0];
+    if (!fecha) return;
+    const datePart = String(fecha).split(' ')[0].split('T')[0];
     if (!result[datePart]) return;
 
     if (selectedWorker) {
-      if (!matchesWorkerByPhone(telefono, selectedWorker.telefono)) return;
+      if (!matchRecordVsWorker(telefono, nombre, apellidos, selectedWorker)) return;
     }
 
-    const worker = findWorker(telefono);
+    const worker = findWorker(telefono) ?? selectedWorker ?? undefined;
     const pagoPorReserva = worker?.pagoPorReserva ?? 20;
     const precioPorKm = worker?.precioPorKm ?? 0.19;
 
@@ -80,29 +107,32 @@ export const aggregateDailyData = (
   const processHandyman = (
     fecha: string,
     telefono: string,
+    nombre: string,
+    apellidos: string,
     km: number
   ) => {
-    const datePart = fecha.split(' ')[0].split('T')[0];
+    if (!fecha) return;
+    const datePart = String(fecha).split(' ')[0].split('T')[0];
     if (!result[datePart]) return;
 
     if (selectedWorker) {
-      if (!matchesWorkerByPhone(telefono, selectedWorker.telefono)) return;
+      if (!matchRecordVsWorker(telefono, nombre, apellidos, selectedWorker)) return;
     }
 
-    const worker = findWorker(telefono);
+    const worker = findWorker(telefono) ?? selectedWorker ?? undefined;
     const precioPorKm = worker?.precioPorKm ?? 0.19;
     result[datePart].dinero += (km || 0) * precioPorKm;
     result[datePart].km += km || 0;
   };
 
   normalCleans.forEach(r =>
-    processClean(r.checkinFecha, r.telefono, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+    processClean(r.checkoutFecha || r.checkinFecha, r.telefono, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
   );
   initialCleans.forEach(r =>
-    processClean(r.checkinFecha, r.telefono, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+    processClean(r.checkoutFecha || r.checkinFecha, r.telefono, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
   );
   handymanRecords.forEach(r =>
-    processHandyman(r.fechaLlegada, r.telefono, r.cantidadMinutos)
+    processHandyman(r.fechaFin || r.fechaLlegada, r.telefono, r.nombre, r.apellidos, r.cantidadMinutos)
   );
 
   return Object.values(result);
