@@ -97,19 +97,31 @@ const WorkerRecordsFilterModal: React.FC<WorkerRecordsFilterModalProps> = ({ isO
           <div className="space-y-2.5">
             <p className="text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest text-left">Tipo de Servicio</p>
             <div className="flex flex-wrap gap-2">
-              {(['all', 'Normal', 'Inicial', 'Manitas'] as const).map(s => {
+              {([
+                { value: 'all',        label: 'Cualquiera', color: '' },
+                { value: 'Normal',     label: 'Normal',     color: '' },
+                { value: 'Inicial',    label: 'Inicial',    color: '' },
+                { value: 'Manitas',    label: 'Manitas',    color: '' },
+                { value: 'Incidencia', label: 'Incidencia', color: 'incidencia' },
+                { value: 'Llaves',     label: 'Llaves',     color: 'llaves' },
+              ] as const).map(({ value: s, label, color }) => {
                 const isActive = filters.type === s;
+                const activeClass = color === 'incidencia'
+                  ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/50 font-normal'
+                  : color === 'llaves'
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800/50 font-normal'
+                  : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal';
                 return (
                   <button
                     key={s}
                     onClick={() => updateFilters({ type: s })}
                     className={`px-4 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] border ${
                       isActive
-                        ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
+                        ? activeClass
                         : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
                     }`}
                   >
-                    {s === 'all' ? 'Cualquiera' : s}
+                    {label}
                   </button>
                 );
               })}
