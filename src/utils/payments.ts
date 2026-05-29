@@ -205,8 +205,10 @@ export const filterRecordsByPeriod = <T extends { date: string }>(
 
   const startDate = new Date(endDate);
   startDate.setDate(endDate.getDate() - (days - 1));
-  const startIso = startDate.toISOString().split('T')[0];
-  const endIso = endDate.toISOString().split('T')[0];
+  const localKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const startIso = localKey(startDate);
+  const endIso = localKey(endDate);
 
   return records.filter(r => {
     const raw = r.date;

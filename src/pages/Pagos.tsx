@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Banknote, Clock, ChevronLeft, ChevronRight, Search, CheckCircle2, Calculator, Wallet, X, TrendingUp } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
-import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Incidencia } from '../services/mockData';
+import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Incidencia, User as AppUser } from '../services/mockData';
 import { computeWorkerEarnings, matchesWorkerByPhone, EXTRA_HOUR_RATE } from '../utils/payments';
 import { supabase } from '../services/supabaseClient';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
@@ -56,12 +56,13 @@ interface MonthlySummary {
 }
 
 interface PagosProps {
+  user?: AppUser;
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 type EstadoFilter = 'all' | 'pendiente' | 'pagado';
 
-const Pagos: React.FC<PagosProps> = ({ userRole }) => {
+const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
   const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);

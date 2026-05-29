@@ -155,7 +155,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             .map((cat) => {
       const filteredItems = cat.items.filter(item => {
         if (userRole === 'trabajador') {
-          return item.label === 'Dashboard' || item.label === 'Resumen' || item.label === 'Registros';
+          return item.label === 'Dashboard' || item.label === 'Resumen';
         }
         // Para admin, no mostrar 'Registros' ni 'Resumen'
         return item.label !== 'Registros' && item.label !== 'Resumen';

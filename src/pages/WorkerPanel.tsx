@@ -310,8 +310,8 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
         {/* Stats Boxes (Saldo, Limpiezas, Horas) */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {[
-            { label: 'Saldo Pendiente', value: totals.owed.toFixed(2), suffix: '€', highlight: true },
-            { label: 'Limpiezas Mes', value: totals.cleans, suffix: '' },
+            { label: 'Dinero Debido', value: totals.owed.toFixed(2), suffix: '€', highlight: true },
+            { label: 'Servicios este Mes', value: totals.cleans, suffix: '' },
             { label: 'Horas Totales', value: totals.hours.toFixed(1), suffix: 'h' },
           ].map(stat => (
             <div

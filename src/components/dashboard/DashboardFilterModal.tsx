@@ -1,9 +1,9 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, RotateCcw, Clock, BarChart3, PieChart, Banknote, Sparkles } from 'lucide-react';
+import { X, Calendar, RotateCcw, Clock, BarChart3, PieChart, Banknote, Sparkles, Route } from 'lucide-react';
 
 export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
-export type Metric = 'dinero' | 'limpiezas';
+export type Metric = 'dinero' | 'limpiezas' | 'km';
 
 interface DashboardFilterModalProps {
   isOpen: boolean;
@@ -27,7 +27,8 @@ const DashboardFilterModal: React.FC<DashboardFilterModalProps> = ({
 
   const metrics = [
     { id: 'dinero',    label: 'Dinero',    icon: <Banknote size={14} /> },
-    { id: 'limpiezas', label: 'Limpiezas', icon: <Sparkles size={14} /> },
+    { id: 'limpiezas', label: 'Servicios', icon: <Sparkles size={14} /> },
+    { id: 'km',        label: 'Km',        icon: <Route size={14} /> },
   ];
 
   const clearFilters = () => {
@@ -54,7 +55,7 @@ const DashboardFilterModal: React.FC<DashboardFilterModalProps> = ({
           <p className="text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest">
             Métrica de visualización
           </p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {metrics.map(m => {
               const isActive = metric === m.id;
               return (

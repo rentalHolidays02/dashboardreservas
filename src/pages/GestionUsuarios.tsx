@@ -17,8 +17,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useUndoToast } from '../context/UndoToastContext';
-import { appsScriptApi } from '../services/api';
-import { User, Worker } from '../services/mockData';
+import { appsScriptApi, activityLogApi } from '../services/api';
+import { User, Worker, User as AppUserType } from '../services/mockData';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -666,9 +666,11 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
   );
 };
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+interface GestionUsuariosProps {
+  user: User;
+}
 
-const GestionUsuarios: React.FC = () => {
+const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
   const { showUndoToast } = useUndoToast();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -759,6 +761,14 @@ const GestionUsuarios: React.FC = () => {
           throw new Error('No se pudo enviar la invitación. ' + (inviteResult.error || ''));
         }
 
+        // Log action: Crear/Invitar usuario
+        await activityLogApi.log(
+          user.id || null,
+          user.name || 'Usuario',
+          `Creó el usuario/trabajador "${u.name}" con rol "${u.role}"`,
+          'crear_usuario'
+        );
+
         showToast('Invitación enviada con éxito');
 
         // 2. Si es trabajador, vincular su ficha con la cuenta recién creada.
@@ -813,6 +823,14 @@ const GestionUsuarios: React.FC = () => {
           bank_account: u.bank_account
         });
 
+        // Log action: Modificar usuario
+        await activityLogApi.log(
+          user.id || null,
+          user.name || 'Usuario',
+          `Modificó los datos del usuario "${u.name}"`,
+          'editar_usuario'
+        );
+
         setUsers(prev => prev.map(p => p.id === targetId ? u : p));
         showToast('Usuario actualizado correctamente');
       }
@@ -829,6 +847,14 @@ const GestionUsuarios: React.FC = () => {
       // 2. Borrar datos sensibles (FK al perfil) y luego el perfil. Detecta RLS si borra 0 filas.
       await appsScriptApi.deleteSensitiveData(u.id);
       await appsScriptApi.deleteProfile(u.id);
+
+      // Log action: Eliminar usuario
+      await activityLogApi.log(
+        user.id || null,
+        user.name || 'Usuario',
+        `Eliminó al usuario "${u.name}" del sistema`,
+        'eliminar_usuario'
+      );
 
       showToast('Usuario eliminado del sistema (auth.users NO; necesita Apps Script)');
       // 3. Recargar desde Supabase para reflejar el estado real, no un filter optimista.

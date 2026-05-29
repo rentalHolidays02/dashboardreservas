@@ -6,13 +6,17 @@ import {
   Sparkles, WrenchIcon, TriangleAlert,
   ZoomIn, ZoomOut,
 } from 'lucide-react';
-import { appsScriptApi } from '../services/api';
-import { PagoRecord, Incidencia, NormalCleanRecord, HandymanRecord } from '../services/mockData';
+import { appsScriptApi, activityLogApi } from '../services/api';
+import { PagoRecord, Incidencia, NormalCleanRecord, HandymanRecord, User as AppUser } from '../services/mockData';
 import { generatePDF, ReportData } from '../services/pdfExport';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import logoSrc from '../assets/logo/LogoEstandar.png';
 
 type ExportStep = 'idle' | 'collecting' | 'building' | 'done';
+
+interface GenerarInformeProps {
+  user: AppUser;
+}
 
 const fmt = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
@@ -53,7 +57,7 @@ const SAMPLE = {
   ],
 };
 
-const GenerarInforme: React.FC = () => {
+const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
   const [workers, setWorkers]               = useState<{ id: string; fullName: string }[]>([]);
   const [accommodations, setAccommodations] = useState<{ id: string; name: string }[]>([]);
   const [pagos, setPagos]                   = useState<PagoRecord[]>([]);
@@ -163,6 +167,14 @@ const GenerarInforme: React.FC = () => {
 
       // Subir a Drive
       await appsScriptApi.uploadReportPDF(blob, fileName);
+
+      // Log action to activity log
+      await activityLogApi.log(
+        user.id || null,
+        user.name || 'Usuario',
+        `Generó informe PDF: "${fileName}"`,
+        'generar_informe'
+      );
     }
     setExportStep('done');
     setTimeout(() => setExportStep('idle'), 3000);

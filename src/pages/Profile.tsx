@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Mail,
   Shield,
   KeyRound,
-  Bell,
   Moon,
   Sun,
   Check,
@@ -20,6 +19,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { activityLogApi, ActivityLog } from '../services/api';
 
 import type { User as AppUser } from '../services/mockData';
 
@@ -32,21 +32,29 @@ const ROLE_LABEL: Record<string, string> = {
   admin: 'Administrador',
   viewer: 'Visualizador',
   editor: 'Editor',
+  trabajador: 'Trabajador',
 };
 
 const ROLE_COLOR: Record<string, string> = {
   admin: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
   editor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   viewer: 'bg-slate-100 text-slate-600 dark:bg-stone-800 dark:text-stone-400',
+  trabajador: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
 };
 
-const ACTIVITY_LOG = [
-  { id: 1, action: 'Generó informe mensual', time: 'Hace 2 horas', icon: Activity },
-  { id: 2, action: 'Editó trabajador "María García"', time: 'Hace 5 horas', icon: Pencil },
-  { id: 3, action: 'Accedió a Pagos', time: 'Ayer a las 14:30', icon: Activity },
-  { id: 4, action: 'Creó incidencia en Apt. Ramblas 12', time: 'Ayer a las 11:15', icon: AlertTriangle },
-  { id: 5, action: 'Modificó alojamiento "Casa Marina 3B"', time: 'Hace 2 días', icon: Pencil },
-];
+function formatActivityTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+
+  if (diffMins < 1) return 'Ahora mismo';
+  if (diffMins < 60) return `Hace ${diffMins} min`;
+  if (diffHours < 24) return `Hace ${diffHours} h`;
+  
+  return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 
 const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const { theme, toggleTheme } = useTheme();
@@ -66,10 +74,23 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const [pwSaved, setPwSaved] = useState(false);
   const [pwError, setPwError] = useState('');
 
-  // Notification prefs
-  const [notifIncidencias, setNotifIncidencias] = useState(true);
-  const [notifPagos, setNotifPagos] = useState(true);
-  const [notifInformes, setNotifInformes] = useState(false);
+  // Actividades reales
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(true);
+
+  useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        const data = await activityLogApi.getLatest(10);
+        setActivities(data);
+      } catch (err) {
+        console.error('Error fetching activities:', err);
+      } finally {
+        setLoadingActivities(false);
+      }
+    };
+    fetchActivities();
+  }, []);
 
   const initials = savedName
     .split(' ')
@@ -314,17 +335,34 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                 <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Actividad reciente</span>
               </div>
             </div>
-            <ul className="divide-y divide-stone-100 dark:divide-stone-800">
-              {ACTIVITY_LOG.map((item) => (
-                <li key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
-                  <span className="w-7 h-7 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center shrink-0">
-                    <item.icon size={13} className="text-orange-400" />
-                  </span>
-                  <span className="text-sm text-slate-600 dark:text-stone-300 flex-1">{item.action}</span>
-                  <span className="text-xs text-slate-400 dark:text-stone-500 whitespace-nowrap">{item.time}</span>
-                </li>
-              ))}
-            </ul>
+            {loadingActivities ? (
+              <div className="p-6 text-center text-xs text-slate-400 dark:text-stone-500">
+                Cargando actividad...
+              </div>
+            ) : activities.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400 dark:text-stone-500">
+                No hay actividad reciente registrada.
+              </div>
+            ) : (
+              <ul className="divide-y divide-stone-100 dark:divide-stone-800">
+                {activities.map((item) => (
+                  <li key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
+                    <span className="w-7 h-7 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center shrink-0">
+                      <Activity size={13} className="text-orange-400" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-600 dark:text-stone-300 truncate">
+                        {item.action}
+                      </p>
+                      <p className="text-[10px] text-slate-400 dark:text-stone-500">
+                        Por {item.user_name}
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-400 dark:text-stone-500 whitespace-nowrap">{formatActivityTime(item.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         </div>
 
@@ -361,37 +399,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
             </div>
           </section>
 
-          {/* Notifications */}
-          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
-            <div className="module-header">
-              <div className="flex items-center gap-2">
-                <Bell size={15} className="text-orange-500" />
-                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Notificaciones</span>
-              </div>
-            </div>
-            <ul className="divide-y divide-stone-100 dark:divide-stone-800 px-2 py-1">
-              {[
-                { label: 'Incidencias nuevas', sub: 'Alertas de incidencias registradas', value: notifIncidencias, set: setNotifIncidencias },
-                { label: 'Pagos pendientes', sub: 'Avisos de pagos sin confirmar', value: notifPagos, set: setNotifPagos },
-                { label: 'Informes generados', sub: 'Notificación al generar un informe', value: notifInformes, set: setNotifInformes },
-              ].map(({ label, sub, value, set }) => (
-                <li key={label} className="flex items-center justify-between px-3 py-3.5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors rounded-xl">
-                  <div>
-                    <p className="text-sm text-slate-700 dark:text-stone-200">{label}</p>
-                    <p className="text-xs text-slate-400 dark:text-stone-500">{sub}</p>
-                  </div>
-                  <button
-                    onClick={() => set((v: boolean) => !v)}
-                    className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${value ? 'bg-orange-500' : 'bg-slate-200 dark:bg-stone-700'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-300 ${value ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-
         </div>
       </div>
     </div>
@@ -399,3 +406,4 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
 };
 
 export default Profile;
+

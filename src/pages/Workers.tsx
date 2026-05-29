@@ -4,16 +4,17 @@ import WorkerCard from '../components/workers/WorkerCard';
 import WorkerModal from '../components/workers/WorkerModal';
 import WorkerProfile from '../components/workers/WorkerProfile';
 import WorkerFilterModal, { WorkerFilters } from '../components/workers/WorkerFilterModal';
-import { appsScriptApi } from '../services/api';
+import { appsScriptApi, activityLogApi } from '../services/api';
 import { Worker, User } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useUndoToast } from '../context/UndoToastContext';
 
 interface WorkersProps {
+  user: User;
   userRole?: User['role'];
 }
 
-const Workers: React.FC<WorkersProps> = ({ userRole }) => {
+const Workers: React.FC<WorkersProps> = ({ user, userRole }) => {
   const isReadOnly = userRole === 'viewer';
   const { showUndoToast } = useUndoToast();
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -104,10 +105,23 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
       }
 
       // 2. Guardar los datos del operario
-      if (workerData.id && !workerData.id.startsWith('temp_')) {
+      const isNew = !workerData.id || workerData.id.startsWith('temp_');
+      if (!isNew) {
         await appsScriptApi.updateWorker(workerData as Worker);
+        await activityLogApi.log(
+          user.id || null,
+          user.name || 'Usuario',
+          `Modificó los datos del trabajador "${workerData.fullName}"`,
+          'editar_trabajador'
+        );
       } else {
         await appsScriptApi.addWorker(workerData);
+        await activityLogApi.log(
+          user.id || null,
+          user.name || 'Usuario',
+          `Creó el trabajador "${workerData.fullName}" en el sistema`,
+          'crear_trabajador'
+        );
       }
       
       // Solo recargamos la lista completa una vez
@@ -130,6 +144,12 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
 
     try {
       await appsScriptApi.deleteWorker(id);
+      await activityLogApi.log(
+        user.id || null,
+        user.name || 'Usuario',
+        `Eliminó al trabajador "${workerToDelete.fullName}"`,
+        'eliminar_trabajador'
+      );
     } catch (error) {
       console.error('Error deleting worker:', error);
       await fetchWorkers();
@@ -140,6 +160,12 @@ const Workers: React.FC<WorkersProps> = ({ userRole }) => {
       `Trabajador "${workerToDelete.fullName}" eliminado`,
       async () => {
         await appsScriptApi.restoreWorker(workerToDelete);
+        await activityLogApi.log(
+          user.id || null,
+          user.name || 'Usuario',
+          `Restauró al trabajador "${workerToDelete.fullName}"`,
+          'restaurar_trabajador'
+        );
         setWorkers(prev => [workerToDelete, ...prev.filter(w => w.id !== workerToDelete.id)]);
       }
     );

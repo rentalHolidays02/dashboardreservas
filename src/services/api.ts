@@ -1076,7 +1076,23 @@ export const appsScriptApi = {
 
       // 2. GESTIÓN DE BAJAS: Los que están en DB pero ya no en Excel
       const dbPhones = dbWorkers.map(w => w.phone);
-      const phonesToDeactivate = dbPhones.filter(p => !activePhonesInExcel.includes(p) && p !== '');
+      const phonesToDeactivate = dbPhones.filter(p => {
+        if (activePhonesInExcel.includes(p)) return false;
+        if (p === '') return false;
+
+        // Buscar el trabajador en la lista de Supabase
+        const w = dbWorkers.find(x => x.phone === p);
+        if (w && w.created_at) {
+          const createdAtTime = new Date(w.created_at).getTime();
+          const nowTime = Date.now();
+          const diffMin = (nowTime - createdAtTime) / 60000;
+          if (diffMin < 3) {
+            console.log(`Sincronización: Omitiendo desactivación de trabajador recién creado en Supabase: ${w.full_name}`);
+            return false; // Omitir desactivación
+          }
+        }
+        return true;
+      });
       
       if (phonesToDeactivate.length > 0) {
         // En lugar de borrar (delete), marcamos como inactivos (active: false)
@@ -1311,7 +1327,8 @@ export const appsScriptApi = {
           worker_type: workerData.tipoTrabajador,
           photo_url: workerData.photo,
           iban: workerData.iban,
-          dni: workerData.dni
+          dni: workerData.dni,
+          active: true
         }])
         .select()
         .single();
@@ -2438,6 +2455,60 @@ export const appsScriptApi = {
     } catch (error) {
       console.error('Error deleteCheckinRecord:', error);
       throw error;
+    }
+  }
+};
+
+
+// --- API de Actividad Reciente (Log de Actividades en Supabase) ---
+export interface ActivityLog {
+  id: string;
+  user_id: string | null;
+  user_name: string;
+  action: string;
+  action_type: string;
+  created_at: string;
+}
+
+export const activityLogApi = {
+  async log(userId: string | null, userName: string, action: string, actionType: string): Promise<ActivityLog | null> {
+    try {
+      const { data, error } = await supabase
+        .from('activity_log')
+        .insert({
+          user_id: userId,
+          user_name: userName,
+          action,
+          action_type: actionType
+        })
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Error logging activity:', error);
+        return null;
+      }
+      return data as ActivityLog;
+    } catch (err) {
+      console.error('Exception logging activity:', err);
+      return null;
+    }
+  },
+
+  async getLatest(limit = 10): Promise<ActivityLog[]> {
+    try {
+      const { data, error } = await supabase
+        .from('activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('Error fetching activity log:', error);
+        return [];
+      }
+      return data ?? [];
+    } catch (err) {
+      console.error('Exception fetching activity log:', err);
+      return [];
     }
   }
 };
