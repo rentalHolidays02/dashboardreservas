@@ -658,9 +658,6 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
         <button onClick={() => onEdit(user)} title="Editar" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors">
           <Edit2 size={14} />
         </button>
-        <button onClick={() => onPassword(user)} title="Contraseña" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-slate-700 dark:hover:text-stone-200 transition-colors">
-          <KeyRound size={14} />
-        </button>
         <button onClick={() => onDelete(user)} title="Eliminar" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-red-500 transition-colors">
           <Trash2 size={14} />
         </button>
