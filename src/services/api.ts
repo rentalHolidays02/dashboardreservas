@@ -1075,7 +1075,23 @@ export const appsScriptApi = {
 
       // 2. GESTIÓN DE BAJAS: Los que están en DB pero ya no en Excel
       const dbPhones = dbWorkers.map(w => w.phone);
-      const phonesToDeactivate = dbPhones.filter(p => !activePhonesInExcel.includes(p) && p !== '');
+      const phonesToDeactivate = dbPhones.filter(p => {
+        if (activePhonesInExcel.includes(p)) return false;
+        if (p === '') return false;
+
+        // Buscar el trabajador en la lista de Supabase
+        const w = dbWorkers.find(x => x.phone === p);
+        if (w && w.created_at) {
+          const createdAtTime = new Date(w.created_at).getTime();
+          const nowTime = Date.now();
+          const diffMin = (nowTime - createdAtTime) / 60000;
+          if (diffMin < 3) {
+            console.log(`Sincronización: Omitiendo desactivación de trabajador recién creado en Supabase: ${w.full_name}`);
+            return false; // Omitir desactivación
+          }
+        }
+        return true;
+      });
       
       if (phonesToDeactivate.length > 0) {
         // En lugar de borrar (delete), marcamos como inactivos (active: false)
@@ -1310,7 +1326,8 @@ export const appsScriptApi = {
           worker_type: workerData.tipoTrabajador,
           photo_url: workerData.photo,
           iban: workerData.iban,
-          dni: workerData.dni
+          dni: workerData.dni,
+          active: true
         }])
         .select()
         .single();

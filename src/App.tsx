@@ -177,7 +177,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <Workers userRole={user.role} />
+                      <Workers user={user} userRole={user.role} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
