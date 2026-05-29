@@ -399,6 +399,43 @@ export interface PagoRecord {
   estado: 'pagado' | 'pendiente';
 }
 
+export type PaymentReportStatus = 'PENDIENTE' | 'PAGO';
+
+// Espejo de la tabla public.monthly_payments. Los campos `monto*`, `total` y
+// `saldoPendienteAPagar` son GENERATED en Postgres (no se escriben).
+export interface MonthlyPayment {
+  id: string;
+  workerId: string;
+  period: string;                            // 'YYYY-MM-01'
+  numReservations: number;
+  numExtraReservations: number;
+  numLinenServices: number;
+  numOvertimeHours: number;
+  numKilometers: number;
+  numIncidents: number;
+  rateReservation: number;
+  rateExtraReservation: number;
+  rateLinenService: number;
+  rateKilometer: number;
+  rateIncident: number;
+  rateOvertime: number;                      // 10 por defecto
+  otros: number;
+  abonosRecogidos: number;
+  saldoMesAnteriorPendiente: number | null;  // null = el trigger lo rellena del mes previo
+  reporte: PaymentReportStatus;
+  observaciones: string;
+  // GENERATED (solo lectura)
+  montoReservas: number;
+  montoSabanasToallas: number;
+  montoHorasExtra: number;
+  montoKilometraje: number;
+  montoIncidencias: number;
+  total: number;
+  saldoPendienteAPagar: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Suggestion {
   id: string;
   subject: string;
