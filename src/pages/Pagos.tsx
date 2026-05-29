@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Banknote, Clock, ChevronLeft, ChevronRight, Search, PlusCircle, Loader2, CheckCircle2, Calculator } from 'lucide-react';
-import { appsScriptApi, monthlyPaymentsApi, MonthlyPaymentInput } from '../services/api';
-import { MonthlyPayment, Worker } from '../services/mockData';
+import { appsScriptApi, monthlyPaymentsApi, MonthlyPaymentInput, activityLogApi } from '../services/api';
+import { MonthlyPayment, Worker, User as AppUser } from '../services/mockData';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import MonthlyPaymentDetailModal from '../components/pagos/MonthlyPaymentDetailModal';
@@ -28,12 +28,13 @@ const shiftPeriod = (period: string, deltaMonths: number): string => {
 };
 
 interface PagosProps {
+  user: AppUser;
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
 
 type ReporteFilter = 'all' | 'PENDIENTE' | 'PAGO';
 
-const Pagos: React.FC<PagosProps> = ({ userRole }) => {
+const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
   const [payments, setPayments] = useState<MonthlyPayment[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +103,15 @@ const Pagos: React.FC<PagosProps> = ({ userRole }) => {
     try {
       const res = await monthlyPaymentsApi.bulkGenerateForMonth(period);
       await refresh(period);
+      
+      // Log action
+      await activityLogApi.log(
+        user.id || null,
+        user.name || 'Usuario',
+        `Generó ${res.created} nóminas para el periodo ${fmtMonthYear(period)}`,
+        'generar_nominas'
+      );
+
       alert(`Generadas ${res.created} nóminas nuevas. ${res.skipped} ya existían.`);
     } catch (e: any) {
       console.error(e);
@@ -112,13 +122,45 @@ const Pagos: React.FC<PagosProps> = ({ userRole }) => {
   };
 
   const handleSave = async (input: MonthlyPaymentInput) => {
-    await monthlyPaymentsApi.upsert(input);
+    const originalPayment = payments.find(p => p.workerId === input.workerId && p.period === input.period);
+    const result = await monthlyPaymentsApi.upsert(input);
     await refresh(period);
+
+    const workerObj = workers.find(w => w.id === input.workerId);
+    const workerNameStr = workerObj?.fullName || 'trabajador';
+
+    let actionStr = `Modificó nómina de ${workerNameStr} para ${fmtMonthYear(input.period)}`;
+    if (originalPayment?.reporte !== input.reporte) {
+      if (input.reporte === 'PAGO') {
+        actionStr = `Marcó como PAGADO a ${workerNameStr} para ${fmtMonthYear(input.period)}`;
+      } else {
+        actionStr = `Marcó como PENDIENTE a ${workerNameStr} para ${fmtMonthYear(input.period)}`;
+      }
+    }
+
+    await activityLogApi.log(
+      user.id || null,
+      user.name || 'Usuario',
+      actionStr,
+      'editar_nomina'
+    );
   };
 
   const handleDelete = async (id: string) => {
+    const paymentToDelete = payments.find(p => p.id === id);
+    const workerObj = workers.find(w => w.id === paymentToDelete?.workerId);
+    const workerNameStr = workerObj?.fullName || 'trabajador';
+    const periodStr = paymentToDelete ? fmtMonthYear(paymentToDelete.period) : '';
+
     await monthlyPaymentsApi.delete(id);
     await refresh(period);
+
+    await activityLogApi.log(
+      user.id || null,
+      user.name || 'Usuario',
+      `Eliminó la nómina de ${workerNameStr} para ${periodStr}`,
+      'eliminar_nomina'
+    );
   };
 
   return (

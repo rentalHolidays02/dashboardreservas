@@ -2611,3 +2611,57 @@ export const monthlyPaymentsApi = {
   },
 };
 
+// --- API de Actividad Reciente (Log de Actividades en Supabase) ---
+export interface ActivityLog {
+  id: string;
+  user_id: string | null;
+  user_name: string;
+  action: string;
+  action_type: string;
+  created_at: string;
+}
+
+export const activityLogApi = {
+  async log(userId: string | null, userName: string, action: string, actionType: string): Promise<ActivityLog | null> {
+    try {
+      const { data, error } = await supabase
+        .from('activity_log')
+        .insert({
+          user_id: userId,
+          user_name: userName,
+          action,
+          action_type: actionType
+        })
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Error logging activity:', error);
+        return null;
+      }
+      return data as ActivityLog;
+    } catch (err) {
+      console.error('Exception logging activity:', err);
+      return null;
+    }
+  },
+
+  async getLatest(limit = 10): Promise<ActivityLog[]> {
+    try {
+      const { data, error } = await supabase
+        .from('activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('Error fetching activity log:', error);
+        return [];
+      }
+      return data ?? [];
+    } catch (err) {
+      console.error('Exception fetching activity log:', err);
+      return [];
+    }
+  }
+};
+
+

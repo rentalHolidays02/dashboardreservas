@@ -112,7 +112,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <GestionUsuarios />
+                      <GestionUsuarios user={user} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
@@ -216,7 +216,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <Pagos userRole={user.role} />
+                      <Pagos user={user} userRole={user.role} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
@@ -255,7 +255,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <GenerarInforme />
+                      <GenerarInforme user={user} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
