@@ -43,6 +43,33 @@ const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL |
 const PDF_FOLDER_ID = import.meta.env.VITE_PDF_FOLDER_ID || '';
 
 
+// --- Sheets cache (TTL + in-flight deduplication) ---
+const SHEETS_CACHE_TTL_MS = 90_000; // 90 segundos
+interface CacheEntry<T> { data: T; ts: number; }
+const sheetsCache = new Map<string, CacheEntry<any>>();
+const sheetsInflight = new Map<string, Promise<any>>();
+
+function withSheetsCache<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const cached = sheetsCache.get(key);
+  if (cached && now - cached.ts < SHEETS_CACHE_TTL_MS) {
+    return Promise.resolve(cached.data);
+  }
+  const inflight = sheetsInflight.get(key);
+  if (inflight) return inflight;
+  const promise = fetcher().then(data => {
+    sheetsCache.set(key, { data, ts: Date.now() });
+    sheetsInflight.delete(key);
+    return data;
+  }).catch(err => {
+    sheetsInflight.delete(key);
+    throw err;
+  });
+  sheetsInflight.set(key, promise);
+  return promise;
+}
+// --- Fin cache ---
+
 type AppsScriptJsonResponse = { ok: boolean; error?: string; [k: string]: any };
 
 const postToCleansScript = async (payload: Record<string, any>): Promise<AppsScriptJsonResponse> => {
@@ -772,10 +799,47 @@ export const appsScriptApi = {
   },
 
   deleteProfile: async (userId: string) => {
-    const { error } = await supabase
+    // .select() nos devuelve las filas borradas: si RLS impide el DELETE, llega [] sin error.
+    const { data, error } = await supabase
       .from('profiles')
       .delete()
-      .eq('id', userId);
+      .eq('id', userId)
+      .select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error('No se borró ningún perfil. Probable RLS sin política DELETE en "profiles".');
+    }
+  },
+
+  // Vincula un trabajador (workers.id) con la cuenta de usuario (profiles.id) recién creada.
+  linkWorkerProfile: async (workerId: string, profileId: string) => {
+    const { error } = await supabase
+      .from('workers')
+      .update({ profile_id: profileId })
+      .eq('id', workerId);
+    if (error) throw error;
+  },
+
+  // Reenvía acceso al email: dispara a la vez magic link (signInWithOtp) y recuperación de contraseña
+  // (resetPasswordForEmail). Así el usuario recibe ambos correos: uno para entrar directo y otro para
+  // (re)establecer contraseña. No pasa por el Apps Script.
+  resendInvitation: async (email: string): Promise<{ ok: boolean; error?: string }> => {
+    const [otpRes, resetRes] = await Promise.all([
+      supabase.auth.signInWithOtp({ email }),
+      supabase.auth.resetPasswordForEmail(email),
+    ]);
+    const errors = [otpRes.error?.message, resetRes.error?.message].filter(Boolean) as string[];
+    // Si al menos uno se envió, lo damos por bueno.
+    if (errors.length === 2) return { ok: false, error: errors.join(' | ') };
+    return { ok: true, error: errors[0] };
+  },
+
+  // Desvincula cualquier trabajador apuntando a este perfil (evita violar la FK al borrar el perfil).
+  unlinkWorkerByProfile: async (profileId: string) => {
+    const { error } = await supabase
+      .from('workers')
+      .update({ profile_id: null })
+      .eq('profile_id', profileId);
     if (error) throw error;
   },
 
@@ -1582,6 +1646,7 @@ export const appsScriptApi = {
   },
 
   getEntregaLlaves: async (): Promise<EntregaLlaves[]> => {
+    return withSheetsCache('entregaLlaves', async () => {
     try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${INCIDENCIAS_SPREADSHEET_ID}/values/${encodeURIComponent(ENTREGA_LLAVES_RANGE)}?key=${GOOGLE_API_KEY}`;
       const response = await fetch(url);
@@ -1636,6 +1701,7 @@ export const appsScriptApi = {
       console.error('Error in getEntregaLlaves:', error);
       return [];
     }
+    });
   },
 
   addEntregaLlaves: async (data: Omit<EntregaLlaves, 'id'>): Promise<boolean> => {
@@ -1921,8 +1987,10 @@ export const appsScriptApi = {
   },
 
   getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
-    const res = await appsScriptApi.getNormalCleansResult();
-    return res.records;
+    return withSheetsCache('normalCleans', async () => {
+      const res = await appsScriptApi.getNormalCleansResult();
+      return res.records;
+    });
   },
 
   updateCleanStatus: async (type: CleanSheetType, id: string, checked: boolean): Promise<boolean> => {
@@ -2077,8 +2145,10 @@ export const appsScriptApi = {
   },
 
   getInitialCleans: async (): Promise<InitialCleanRecord[]> => {
-    const res = await appsScriptApi.getInitialCleansResult();
-    return res.records;
+    return withSheetsCache('initialCleans', async () => {
+      const res = await appsScriptApi.getInitialCleansResult();
+      return res.records;
+    });
   },
 
   getHandymanRecordsResult: async (): Promise<CleansFetchResult<HandymanRecord>> => {
@@ -2142,8 +2212,10 @@ export const appsScriptApi = {
   },
 
   getHandymanRecords: async (): Promise<HandymanRecord[]> => {
-    const res = await appsScriptApi.getHandymanRecordsResult();
-    return res.records;
+    return withSheetsCache('handymanRecords', async () => {
+      const res = await appsScriptApi.getHandymanRecordsResult();
+      return res.records;
+    });
   },
 
   getNormalCheckins: async (): Promise<NormalCleanRecord[]> => {
