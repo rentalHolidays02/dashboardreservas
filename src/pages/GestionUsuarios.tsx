@@ -555,7 +555,7 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
       {/* Acciones */}
       <div className="flex items-center justify-end gap-1">
         {user.status === 'pending' && (
-          <button onClick={() => onResend(user)} title="Reenviar invitación" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
+          <button onClick={() => onResend(user)} title="Reenviar invitación y recuperar contraseña" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
             <RotateCcw size={14} />
           </button>
         )}
@@ -749,9 +749,9 @@ const GestionUsuarios: React.FC = () => {
   const handleResend = async (u: AppUser) => {
     const res = await appsScriptApi.resendInvitation(u.email);
     if (res.ok) {
-      showToast(`Invitación reenviada a ${u.email}`);
+      showToast(`Enviado a ${u.email}: acceso + recuperación de contraseña`);
     } else {
-      showToast(`No se pudo reenviar: ${res.error || 'error desconocido'}`);
+      showToast(`No se pudo enviar: ${res.error || 'error desconocido'}`);
     }
   };
 

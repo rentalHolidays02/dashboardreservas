@@ -820,12 +820,18 @@ export const appsScriptApi = {
     if (error) throw error;
   },
 
-  // Reenvía un magic link al email del usuario invitado (sin pasar por el Apps Script).
-  // El Apps Script de invitación no permite reenviar; usar signInWithOtp es la vía cliente.
+  // Reenvía acceso al email: dispara a la vez magic link (signInWithOtp) y recuperación de contraseña
+  // (resetPasswordForEmail). Así el usuario recibe ambos correos: uno para entrar directo y otro para
+  // (re)establecer contraseña. No pasa por el Apps Script.
   resendInvitation: async (email: string): Promise<{ ok: boolean; error?: string }> => {
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    if (error) return { ok: false, error: error.message };
-    return { ok: true };
+    const [otpRes, resetRes] = await Promise.all([
+      supabase.auth.signInWithOtp({ email }),
+      supabase.auth.resetPasswordForEmail(email),
+    ]);
+    const errors = [otpRes.error?.message, resetRes.error?.message].filter(Boolean) as string[];
+    // Si al menos uno se envió, lo damos por bueno.
+    if (errors.length === 2) return { ok: false, error: errors.join(' | ') };
+    return { ok: true, error: errors[0] };
   },
 
   // Desvincula cualquier trabajador apuntando a este perfil (evita violar la FK al borrar el perfil).
