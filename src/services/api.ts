@@ -2514,3 +2514,65 @@ export const activityLogApi = {
 };
 
 
+// --- API de Historial de Informes (report_history en Supabase) ---
+export interface ReportHistoryEntry {
+  id: string;
+  user_id: string | null;
+  user_name: string;
+  file_name: string;
+  periodo: string;
+  periodo_label: string;
+  worker_name: string | null;
+  acc_name: string | null;
+  sections: string[];
+  summary_text: string | null;
+  created_at: string;
+}
+
+export const reportHistoryApi = {
+  async save(entry: Omit<ReportHistoryEntry, 'id' | 'created_at'>): Promise<ReportHistoryEntry | null> {
+    try {
+      const { data, error } = await supabase
+        .from('report_history')
+        .insert({
+          user_id:      entry.user_id,
+          user_name:    entry.user_name,
+          file_name:    entry.file_name,
+          periodo:      entry.periodo,
+          periodo_label: entry.periodo_label,
+          worker_name:  entry.worker_name,
+          acc_name:     entry.acc_name,
+          sections:     entry.sections,
+          summary_text: entry.summary_text,
+        })
+        .select('*')
+        .single();
+      if (error) {
+        console.error('Error saving report history:', error);
+        return null;
+      }
+      return data as ReportHistoryEntry;
+    } catch (err) {
+      console.error('Exception saving report history:', err);
+      return null;
+    }
+  },
+
+  async getLatest(limit = 20): Promise<ReportHistoryEntry[]> {
+    try {
+      const { data, error } = await supabase
+        .from('report_history')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) {
+        console.error('Error fetching report history:', error);
+        return [];
+      }
+      return (data ?? []) as ReportHistoryEntry[];
+    } catch (err) {
+      console.error('Exception fetching report history:', err);
+      return [];
+    }
+  },
+};

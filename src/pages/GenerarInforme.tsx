@@ -4,9 +4,9 @@ import {
   ChevronRight, AlertCircle, ChevronDown,
   Download, Loader2, CheckCircle2, Banknote,
   Sparkles, WrenchIcon, TriangleAlert,
-  ZoomIn, ZoomOut,
+  ZoomIn, ZoomOut, History, Clock,
 } from 'lucide-react';
-import { appsScriptApi, activityLogApi } from '../services/api';
+import { appsScriptApi, activityLogApi, reportHistoryApi, ReportHistoryEntry } from '../services/api';
 import { PagoRecord, Incidencia, NormalCleanRecord, HandymanRecord, User as AppUser } from '../services/mockData';
 import { generatePDF, ReportData } from '../services/pdfExport';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -31,6 +31,53 @@ const PERIOD_LABELS: Record<string, string> = {
   'trimestre':     'Último trimestre',
   'personalizado': 'Personalizado',
 };
+
+// ── Calcula el rango de fechas [desde, hasta] para cada periodo ───────────────
+function getDateRange(periodo: string): { from: Date; to: Date } | null {
+  const now = new Date();
+  if (periodo === 'este-mes') {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    const to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    return { from, to };
+  }
+  if (periodo === 'mes-pasado') {
+    const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const to   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+    return { from, to };
+  }
+  if (periodo === 'trimestre') {
+    const from = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    const to   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    return { from, to };
+  }
+  return null; // 'personalizado' → sin filtro de fecha
+}
+
+// ── Etiqueta legible del periodo (ej: "Mayo 2026") ────────────────────────────
+function getPeriodoLabel(periodo: string): string {
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio',
+                 'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const now = new Date();
+  if (periodo === 'este-mes') {
+    return `${MESES[now.getMonth()]} ${now.getFullYear()}`;
+  }
+  if (periodo === 'mes-pasado') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${MESES[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  if (periodo === 'trimestre') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    return `${MESES[d.getMonth()]} – ${MESES[now.getMonth()]} ${now.getFullYear()}`;
+  }
+  return 'Personalizado';
+}
+
+// ── Comprueba si una cadena de fecha cae dentro de [from, to] ─────────────────
+function isInRange(dateStr: string | undefined, range: { from: Date; to: Date } | null): boolean {
+  if (!range || !dateStr) return true; // sin rango → incluir siempre
+  const d = new Date(dateStr.length === 10 ? dateStr + 'T00:00:00' : dateStr);
+  return !isNaN(d.getTime()) && d >= range.from && d <= range.to;
+}
 
 // ── Datos de muestra para la vista previa ─────────────────────────────────────
 const SAMPLE = {
@@ -70,10 +117,15 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
   const [pan, setPan]                       = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging]         = useState(false);
   const dragOrigin = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
   const ZOOM_STEP = 0.15;
   const WHEEL_ZOOM_STEP = 0.05;
+
+  // Historial de informes
+  const [reportHistory, setReportHistory] = useState<ReportHistoryEntry[]>([]);
+  const [showHistory, setShowHistory]     = useState(false);
 
   const handleZoomChange = useCallback((delta: number) => {
     setZoom(z => {
@@ -82,6 +134,21 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    const container = previewContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      handleZoomChange(e.deltaY > 0 ? -WHEEL_ZOOM_STEP : WHEEL_ZOOM_STEP);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleZoomChange]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -122,24 +189,61 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
       setPagos(p); setIncidencias(i as Incidencia[]);
       setCleans(c); setHandyman(h);
     }).finally(() => setLoading(false));
+
+    // Cargar historial de informes
+    reportHistoryApi.getLatest(15).then(setReportHistory).catch(() => {});
   }, []);
 
   const workerName = workers.find(w => w.id === selectedWorker)?.fullName ?? null;
   const accName    = accommodations.find(a => a.id === selectedAcc)?.name ?? null;
 
-  const fPagos  = useMemo(() => pagos.filter(p => !workerName || p.workerName === workerName), [pagos, workerName]);
+  // Rango de fechas activo para el periodo seleccionado
+  const dateRange = useMemo(() => getDateRange(selectedPeriod), [selectedPeriod]);
+
+  // Filtros: periodo + trabajador + alojamiento
+  const fPagos  = useMemo(() => pagos.filter(p =>
+    isInRange(p.fecha, dateRange) &&
+    (!workerName || p.workerName === workerName)
+  ), [pagos, workerName, dateRange]);
+
   const fCleans = useMemo(() => cleans.filter(c =>
+    isInRange(c.checkoutFecha || c.checkinFecha, dateRange) &&
     (!workerName || `${c.nombre} ${c.apellidos}` === workerName) &&
-    (!accName    || c.apartamento === accName)),
-  [cleans, workerName, accName]);
+    (!accName    || c.apartamento === accName)
+  ), [cleans, workerName, accName, dateRange]);
+
   const fIncid  = useMemo(() => incidencias.filter(i =>
+    isInRange(i.timestamp, dateRange) &&
     (!workerName || i.userName === workerName) &&
-    (!accName    || i.accommodationName === accName)),
-  [incidencias, workerName, accName]);
+    (!accName    || i.accommodationName === accName)
+  ), [incidencias, workerName, accName, dateRange]);
+
   const fHandy  = useMemo(() => handyman.filter(h =>
+    isInRange(h.fechaFin || h.fechaLlegada, dateRange) &&
     (!workerName || `${h.nombre} ${h.apellidos}` === workerName) &&
-    (!accName    || h.alojamiento === accName)),
-  [handyman, workerName, accName]);
+    (!accName    || h.alojamiento === accName)
+  ), [handyman, workerName, accName, dateRange]);
+
+  const reportDate = useMemo(() => {
+    const now = new Date();
+    if (selectedPeriod === 'mes-pasado') {
+      return new Date(now.getFullYear(), now.getMonth(), 0);
+    }
+    return now;
+  }, [selectedPeriod]);
+
+  const reportDateStr = useMemo(() => {
+    return reportDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  }, [reportDate]);
+
+  const reportDateShort = useMemo(() => {
+    if (selectedPeriod === 'mes-pasado') {
+      const now = new Date();
+      const lastDay = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59);
+      return lastDay.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+    }
+    return new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  }, [selectedPeriod]);
 
   const handleExport = async () => {
     setExportStep('collecting');
@@ -153,7 +257,7 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
       logoSrc,
       true
     );
-    
+
     if (result) {
       const { blob, fileName } = result;
 
@@ -168,7 +272,35 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
       // Subir a Drive
       await appsScriptApi.uploadReportPDF(blob, fileName);
 
-      // Log action to activity log
+      // Texto resumen del informe para el historial
+      const totalPagado    = fPagos.filter(p => p.estado === 'pagado').reduce((s, p) => s + p.importe, 0);
+      const totalPendiente = fPagos.filter(p => p.estado === 'pendiente').reduce((s, p) => s + p.importe, 0);
+      const summaryText = [
+        `Pagos: ${fPagos.length} registros · Pagado: ${fmt(totalPagado)} · Pendiente: ${fmt(totalPendiente)}`,
+        `Limpiezas: ${fCleans.length} · Incidencias: ${fIncid.length} · Mantenimiento: ${fHandy.length}`,
+        workerName ? `Trabajador: ${workerName}` : 'Todos los trabajadores',
+        accName    ? `Alojamiento: ${accName}`   : 'Todos los alojamientos',
+      ].join('\n');
+
+      const activeSections = Object.entries(options)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+
+      // Guardar en historial
+      const saved = await reportHistoryApi.save({
+        user_id:      user.id || null,
+        user_name:    user.name || 'Usuario',
+        file_name:    fileName,
+        periodo:      selectedPeriod,
+        periodo_label: getPeriodoLabel(selectedPeriod),
+        worker_name:  workerName,
+        acc_name:     accName,
+        sections:     activeSections,
+        summary_text: summaryText,
+      });
+      if (saved) setReportHistory(prev => [saved, ...prev].slice(0, 15));
+
+      // Log actividad
       await activityLogApi.log(
         user.id || null,
         user.name || 'Usuario',
@@ -198,31 +330,20 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
     { id: 'handyman',    label: 'Tareas de Mantenimiento', Icon: WrenchIcon,    count: Math.max(fHandy.length,  SAMPLE.handyman.length)    },
   ];
 
-  // Preview: usa datos reales si existen, si no muestra de ejemplo
-  const previewPagos  = fPagos.length  > 0
-    ? fPagos.slice(0, 4).map(p  => ({ w: p.workerName, d: fmtShort(p.fecha), c: p.concepto, v: fmt(p.importe), paid: p.estado === 'pagado' }))
-    : SAMPLE.pagos;
-  const previewCleans = fCleans.length > 0
-    ? fCleans.slice(0, 4).map(c => ({ w: `${c.nombre} ${c.apellidos}`, apt: c.apartamento, e: c.horaEntrada, s: c.horaSalida, km: c.km }))
-    : SAMPLE.cleans;
-  const previewIncid  = fIncid.length  > 0
-    ? fIncid.slice(0, 3).map(i  => ({ w: i.userName, apt: i.accommodationName, desc: i.description, v: fmt(i.coste) }))
-    : SAMPLE.incidencias;
-  const previewHandy  = fHandy.length  > 0
-    ? fHandy.slice(0, 2).map(h  => ({ w: `${h.nombre} ${h.apellidos}`, apt: h.alojamiento, t: h.observacionesTarea, min: h.cantidadMinutos }))
-    : SAMPLE.handyman;
-
-  const today = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
-  const todayShort = new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  // Preview: mapeo directo de datos filtrados
+  const previewPagos  = fPagos.slice(0, 4).map(p  => ({ w: p.workerName, d: fmtShort(p.fecha), c: p.concepto, v: fmt(p.importe), paid: p.estado === 'pagado' }));
+  const previewCleans = fCleans.slice(0, 4).map(c => ({ w: `${c.nombre} ${c.apellidos}`, apt: c.apartamento, fecha: fmtShort(c.checkoutFecha), e: c.horaEntrada, s: c.horaSalida, km: c.km }));
+  const previewIncid  = fIncid.slice(0, 3).map(i  => ({ w: i.userName, apt: i.accommodationName, desc: i.description, v: fmt(i.coste) }));
+  const previewHandy  = fHandy.slice(0, 2).map(h  => ({ w: `${h.nombre} ${h.apellidos}`, apt: h.alojamiento, t: h.observacionesTarea, min: h.cantidadMinutos }));
 
   const totalPagado    = fPagos.filter(p => p.estado === 'pagado').reduce((s, p) => s + p.importe, 0);
   const totalPendiente = fPagos.filter(p => p.estado === 'pendiente').reduce((s, p) => s + p.importe, 0);
 
   const kpis = [
-    { l: 'Total pagado',  v: fPagos.length > 0 ? fmt(totalPagado)    : '3.790,70 €' },
-    { l: 'Pendiente',     v: fPagos.length > 0 ? fmt(totalPendiente) : '2.350,50 €' },
-    { l: 'Limpiezas',     v: String(fCleans.length > 0 ? fCleans.length : SAMPLE.cleans.length)     },
-    { l: 'Incidencias',   v: String(fIncid.length  > 0 ? fIncid.length  : SAMPLE.incidencias.length) },
+    { l: 'Total pagado',  v: fmt(totalPagado) },
+    { l: 'Pendiente',     v: fmt(totalPendiente) },
+    { l: 'Limpiezas',     v: String(fCleans.length) },
+    { l: 'Incidencias',   v: String(fIncid.length) },
   ];
 
   return (
@@ -241,7 +362,7 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
       {/* Body — 65 / 35 */}
       <div className="flex-1 grid gap-4 min-h-0" style={{ gridTemplateColumns: '1fr 1fr' }}>
 
-        {/* ── Columna izquierda (65%): Filtros ── */}
+        {/* ── Columna izquierda: Filtros + Historial ── */}
         <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
 
           {/* Periodo + Filtros en una fila */}
@@ -252,6 +373,11 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
               <div className="px-5 py-3 border-b border-stone-100 dark:border-stone-800 bg-stone-50/30 dark:bg-stone-800/20 flex items-center gap-2">
                 <Calendar size={13} className="text-orange-500" />
                 <span className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-stone-500">Periodo</span>
+                {dateRange && (
+                  <span className="ml-auto text-[10px] text-orange-500 font-medium tabular-nums">
+                    {getPeriodoLabel(selectedPeriod)}
+                  </span>
+                )}
               </div>
               <div className="p-3 grid grid-cols-2 gap-2">
                 {periods.map(p => (
@@ -341,8 +467,8 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
             </div>
           </div>
 
-          {/* Botón exportar — en la columna izquierda, siempre visible */}
-          <div className="shrink-0 mt-auto">
+          {/* Botón exportar */}
+          <div className="shrink-0">
             <button
               onClick={handleExport}
               disabled={isExporting || exportStep === 'done'}
@@ -363,6 +489,87 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
               <AlertCircle size={11}/>
               El PDF exportado usa los datos reales filtrados, no los de muestra.
             </p>
+          </div>
+
+          {/* ── Historial de informes ── */}
+          <div className="bg-white/80 dark:bg-stone-900 border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden shrink-0">
+            <button
+              onClick={() => setShowHistory(h => !h)}
+              className="w-full px-5 py-3 border-b border-stone-100 dark:border-stone-800 bg-stone-50/30 dark:bg-stone-800/20 flex items-center gap-2 hover:bg-stone-50/60 dark:hover:bg-stone-800/40 transition-colors"
+            >
+              <History size={13} className="text-orange-500" />
+              <span className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-stone-500">
+                Historial de informes
+              </span>
+              <span className="ml-auto flex items-center gap-1.5">
+                {reportHistory.length > 0 && (
+                  <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-md text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10">
+                    {reportHistory.length}
+                  </span>
+                )}
+                <ChevronDown
+                  size={12}
+                  className={`text-slate-400 transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`}
+                />
+              </span>
+            </button>
+
+            {showHistory && (
+              <div className="divide-y divide-stone-100 dark:divide-stone-800 max-h-64 overflow-y-auto">
+                {reportHistory.length === 0 ? (
+                  <div className="px-5 py-6 text-center">
+                    <FileText size={20} className="mx-auto text-stone-300 dark:text-stone-600 mb-2" />
+                    <p className="text-xs text-slate-400 dark:text-stone-500">
+                      Aún no hay informes generados.
+                    </p>
+                  </div>
+                ) : (
+                  reportHistory.map(entry => (
+                    <div key={entry.id} className="px-5 py-3 hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-700 dark:text-stone-200 truncate">
+                            {entry.periodo_label}
+                          </p>
+                          <p className="text-[10px] text-slate-400 dark:text-stone-500 truncate mt-0.5">
+                            {entry.file_name}
+                          </p>
+                          {entry.summary_text && (
+                            <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-1 line-clamp-1">
+                              {entry.summary_text.split('\n')[0]}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            {(entry.sections || []).map(s => (
+                              <span
+                                key={s}
+                                className="text-[9px] px-1 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-stone-500">
+                            <Clock size={9} />
+                            {new Date(entry.periodo === 'mes-pasado'
+                              ? new Date(new Date(entry.created_at).getFullYear(), new Date(entry.created_at).getMonth(), 0)
+                              : entry.created_at
+                            ).toLocaleDateString('es-ES', {
+                              day: '2-digit', month: '2-digit', year: '2-digit',
+                            })}
+                          </div>
+                          <p className="text-[10px] text-slate-400 dark:text-stone-500 mt-0.5">
+                            {entry.user_name}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
         </div>
@@ -397,6 +604,7 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
 
             {/* Área fija — overflow hidden, cursor mano, drag para pan */}
             <div
+              ref={previewContainerRef}
               className="flex-1 min-h-0 relative overflow-hidden select-none"
               style={{
                 background: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)',
@@ -409,7 +617,6 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
               onMouseUp={stopDrag}
               onMouseLeave={stopDrag}
               onDoubleClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-              onWheel={(e) => { e.preventDefault(); handleZoomChange(e.deltaY > 0 ? -WHEEL_ZOOM_STEP : WHEEL_ZOOM_STEP); }}
             >
               {/* Capa de transformación — translate + scale sin afectar layout externo */}
               <div
@@ -429,9 +636,9 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                 style={{ width: '100%', aspectRatio: '210 / 297', containerType: 'inline-size', flexShrink: 0 }}
               >
                 {/* Cabecera */}
-                <div style={{ padding: '4% 5% 2.5%', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                  <img src={logoSrc} alt="Logo" style={{ height: '6cqw', width: 'auto', objectFit: 'contain', display: 'block' }} />
-                  <span style={{ fontSize: '1.8cqw', color: '#9ca3af' }}>{today}</span>
+                <div style={{ padding: '4% 5% 2.5%', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <img src={logoSrc} alt="Logo" style={{ height: '8cqw', width: 'auto', objectFit: 'contain', display: 'block' }} />
+                  <span style={{ fontSize: '1.8cqw', color: '#9ca3af' }}>{reportDateStr}</span>
                 </div>
 
                 {/* Cuerpo */}
@@ -449,7 +656,7 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                       {PERIOD_LABELS[selectedPeriod]}
                       {workerName ? ` · ${workerName}` : ''}
                       {accName    ? ` · ${accName}`    : ''}
-                      {' · '}{todayShort}
+                      {' · '}{reportDateShort}
                     </p>
                   </div>
 
@@ -470,12 +677,15 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                       <A4Section title="Pagos y Liquidaciones">
                         <A4Table
                           heads={['Trabajador', 'Fecha', 'Concepto', 'Importe', 'Estado']}
-                          rows={previewPagos.map(p => [
-                            p.w, p.d, p.c, p.v,
-                            <span style={{ color: p.paid ? '#16a34a' : '#d97706', fontWeight: 500 }}>
-                              {p.paid ? '● Pagado' : '○ Pendiente'}
-                            </span>
-                          ])}
+                          rows={previewPagos.length > 0
+                            ? previewPagos.map(p => [
+                                p.w, p.d, p.c, p.v,
+                                <span style={{ color: p.paid ? '#16a34a' : '#d97706', fontWeight: 500 }}>
+                                  {p.paid ? '● Pagado' : '○ Pendiente'}
+                                </span>
+                              ])
+                            : [['No hay pagos registrados para este periodo', '', '', '', '']]
+                          }
                         />
                       </A4Section>
                     )}
@@ -483,8 +693,11 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                     {options.limpiezas && (
                       <A4Section title="Registro de Limpiezas">
                         <A4Table
-                          heads={['Limpiador/a', 'Apartamento', 'Entrada', 'Salida', 'Km']}
-                          rows={previewCleans.map(c => [c.w, c.apt, c.e, c.s, c.km])}
+                          heads={['Limpiador/a', 'Apartamento', 'Fecha', 'Entrada', 'Salida', 'Km']}
+                          rows={previewCleans.length > 0
+                            ? previewCleans.map(c => [c.w, c.apt, c.fecha, c.e, c.s, c.km])
+                            : [['No hay limpiezas registradas para este periodo', '', '', '', '', '']]
+                          }
                         />
                       </A4Section>
                     )}
@@ -493,7 +706,10 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                       <A4Section title="Reporte de Incidencias">
                         <A4Table
                           heads={['Reportado por', 'Alojamiento', 'Descripción', 'Coste']}
-                          rows={previewIncid.map(i => [i.w, i.apt, i.desc, i.v])}
+                          rows={previewIncid.length > 0
+                            ? previewIncid.map(i => [i.w, i.apt, i.desc, i.v])
+                            : [['No hay incidencias registradas para este periodo', '', '', '']]
+                          }
                         />
                       </A4Section>
                     )}
@@ -502,7 +718,10 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                       <A4Section title="Tareas de Mantenimiento">
                         <A4Table
                           heads={['Técnico', 'Alojamiento', 'Tarea', 'Min.']}
-                          rows={previewHandy.map(h => [h.w, h.apt, h.t, h.min])}
+                          rows={previewHandy.length > 0
+                            ? previewHandy.map(h => [h.w, h.apt, h.t, h.min])
+                            : [['No hay tareas de mantenimiento registradas para este periodo', '', '', '']]
+                          }
                         />
                       </A4Section>
                     )}

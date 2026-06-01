@@ -46,8 +46,8 @@ const PERIOD_LABELS: Record<string, string> = {
   'personalizado': 'Personalizado',
 };
 
-// Carga la imagen como base64 desde una URL
-async function loadImageBase64(url: string): Promise<string> {
+// Carga la imagen como base64 y devuelve también sus dimensiones naturales
+async function loadImageBase64(url: string): Promise<{ base64: string; width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -56,7 +56,11 @@ async function loadImageBase64(url: string): Promise<string> {
       canvas.width  = img.naturalWidth;
       canvas.height = img.naturalHeight;
       canvas.getContext('2d')!.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
+      resolve({
+        base64: canvas.toDataURL('image/png'),
+        width:  img.naturalWidth,
+        height: img.naturalHeight,
+      });
     };
     img.onerror = reject;
     img.src = url;
@@ -97,12 +101,12 @@ export async function generatePDF(
   doc.setLineWidth(0.25);
   doc.line(margin, 22, pageW - margin, 22);
 
-  // Logo como imagen (altura 10mm, ancho proporcional)
+  // Logo como imagen (altura 10mm, ancho proporcional a las dimensiones reales)
   try {
-    const logoB64 = await loadImageBase64(logoUrl);
-    const logoH   = 8;
-    const logoW   = logoH * 3; // ajusta según la proporción real del logo
-    doc.addImage(logoB64, 'PNG', margin, 7, logoW, logoH);
+    const { base64: logoB64, width: imgW, height: imgH } = await loadImageBase64(logoUrl);
+    const logoH = 10;
+    const logoW = logoH * (imgW / imgH);
+    doc.addImage(logoB64, 'PNG', margin, 6, logoW, logoH);
   } catch {
     // Fallback de texto si la imagen falla
     doc.setFont('helvetica', 'bold');
@@ -111,11 +115,16 @@ export async function generatePDF(
     doc.text('RH Pagos', margin, 15);
   }
 
-  // Fecha
+  // Fecha (si es mes-pasado, retrocedemos al mes anterior)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...C.midGray);
-  const dateStr = new Date().toLocaleDateString('es-ES', {
+  const now = new Date();
+  let headerDate = now;
+  if (filters.periodo === 'mes-pasado') {
+    headerDate = new Date(now.getFullYear(), now.getMonth(), 0);
+  }
+  const dateStr = headerDate.toLocaleDateString('es-ES', {
     day: '2-digit', month: 'long', year: 'numeric',
   });
   doc.text(dateStr, pageW - margin, 15, { align: 'right' });
@@ -191,69 +200,87 @@ export async function generatePDF(
     margin: { left: margin, right: margin },
   };
 
-  if (options.pagos && data.pagos.length > 0) {
+  if (options.pagos) {
     y = drawSectionTitle(doc, 'Pagos y Liquidaciones', y, pageW, pageH, margin);
+    const bodyRows = data.pagos.length > 0
+      ? data.pagos.map(p => [
+          p.workerName, fmtDate(p.fecha), p.concepto,
+          p.limpiezas, p.km, fmtCurrency(p.importe),
+          p.estado === 'pagado' ? 'Pagado' : 'Pendiente',
+        ])
+      : [['No hay pagos registrados para este periodo', '', '', '', '', '', '']];
+
     autoTable(doc, {
       ...tableStyles, startY: y,
       head: [['Trabajador', 'Fecha', 'Concepto', 'Limpiezas', 'Km', 'Importe', 'Estado']],
-      body: data.pagos.map(p => [
-        p.workerName, fmtDate(p.fecha), p.concepto,
-        p.limpiezas, p.km, fmtCurrency(p.importe),
-        p.estado === 'pagado' ? 'Pagado' : 'Pendiente',
-      ]),
+      body: bodyRows,
       columnStyles: { 5: { halign: 'right', fontStyle: 'bold' }, 6: { halign: 'center' } },
       didParseCell(d) {
-        if (d.column.index === 6 && d.section === 'body')
+        if (d.column.index === 6 && d.section === 'body' && data.pagos.length > 0)
           d.cell.styles.textColor = d.cell.raw === 'Pagado' ? [34, 197, 94] : [245, 158, 11];
       },
     });
     const endY = (doc as any).lastAutoTable.finalY;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...C.midGray);
-    doc.text(
-      `Pagado ${fmtCurrency(totalPagado)}   Pendiente ${fmtCurrency(totalPendiente)}`,
-      pageW - margin, endY + 5, { align: 'right' },
-    );
+    if (data.pagos.length > 0) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...C.midGray);
+      doc.text(
+        `Pagado ${fmtCurrency(totalPagado)}   Pendiente ${fmtCurrency(totalPendiente)}`,
+        pageW - margin, endY + 5, { align: 'right' },
+      );
+    }
     y = endY + 12;
   }
 
-  if (options.limpiezas && data.cleans.length > 0) {
+  if (options.limpiezas) {
     y = drawSectionTitle(doc, 'Registro de Limpiezas', y, pageW, pageH, margin);
+    const bodyRows = data.cleans.length > 0
+      ? data.cleans.map(c => [
+          `${c.nombre} ${c.apellidos}`, c.apartamento,
+          fmtDate(c.checkoutFecha), c.horaEntrada, c.horaSalida, c.km, c.observaciones || '—',
+        ])
+      : [['No hay limpiezas registradas para este periodo', '', '', '', '', '', '']];
+
     autoTable(doc, {
       ...tableStyles, startY: y,
-      head: [['Limpiador/a', 'Apartamento', 'Entrada', 'Salida', 'Km', 'Observaciones']],
-      body: data.cleans.map(c => [
-        `${c.nombre} ${c.apellidos}`, c.apartamento,
-        c.horaEntrada, c.horaSalida, c.km, c.observaciones || '—',
-      ]),
+      head: [['Limpiador/a', 'Apartamento', 'Fecha', 'Entrada', 'Salida', 'Km', 'Observaciones']],
+      body: bodyRows,
     });
     y = (doc as any).lastAutoTable.finalY + 12;
   }
 
-  if (options.incidencias && data.incidencias.length > 0) {
+  if (options.incidencias) {
     y = drawSectionTitle(doc, 'Reporte de Incidencias', y, pageW, pageH, margin);
+    const bodyRows = data.incidencias.length > 0
+      ? data.incidencias.map(i => [
+          i.userName, i.accommodationName, fmtDate(i.timestamp),
+          i.description, fmtCurrency(i.coste),
+          i.pagadoPor === 'empresa' ? 'Empresa' : 'Limpiador',
+        ])
+      : [['No hay incidencias registradas para este periodo', '', '', '', '', '']];
+
     autoTable(doc, {
       ...tableStyles, startY: y,
       head: [['Reportado por', 'Alojamiento', 'Fecha', 'Descripción', 'Coste', 'Pagado por']],
-      body: data.incidencias.map(i => [
-        i.userName, i.accommodationName, fmtDate(i.timestamp),
-        i.description, fmtCurrency(i.coste),
-        i.pagadoPor === 'empresa' ? 'Empresa' : 'Limpiador',
-      ]),
+      body: bodyRows,
       columnStyles: { 4: { halign: 'right' } },
     });
     y = (doc as any).lastAutoTable.finalY + 12;
   }
 
-  if (options.handyman && data.handyman.length > 0) {
+  if (options.handyman) {
     y = drawSectionTitle(doc, 'Tareas de Mantenimiento', y, pageW, pageH, margin);
+    const bodyRows = data.handyman.length > 0
+      ? data.handyman.map(h => [
+          `${h.nombre} ${h.apellidos}`, h.alojamiento,
+          h.horaInicioTarea, h.horaFinTarea, h.cantidadMinutos,
+          h.observacionesTarea, h.estadoCompletado,
+        ])
+      : [['No hay tareas de mantenimiento registradas para este periodo', '', '', '', '', '', '']];
+
     autoTable(doc, {
       ...tableStyles, startY: y,
       head: [['Técnico', 'Alojamiento', 'Inicio', 'Fin', 'Min.', 'Tarea', 'Estado']],
-      body: data.handyman.map(h => [
-        `${h.nombre} ${h.apellidos}`, h.alojamiento,
-        h.horaInicioTarea, h.horaFinTarea, h.cantidadMinutos,
-        h.observacionesTarea, h.estadoCompletado,
-      ]),
+      body: bodyRows,
       columnStyles: { 4: { halign: 'center' } },
     });
   }
@@ -270,7 +297,16 @@ export async function generatePDF(
     doc.text(`${pg} / ${totalPages}`, pageW - margin, pageH - 7, { align: 'right' });
   }
 
-  const fileName = `informe_rh_${filters.periodo}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  // Fecha del nombre del archivo: refleja el periodo real, no siempre el día de hoy
+  const fileDate = (() => {
+    const n = new Date();
+    if (filters.periodo === 'mes-pasado') {
+      // Último día del mes anterior
+      return new Date(n.getFullYear(), n.getMonth(), 0);
+    }
+    return n;
+  })();
+  const fileName = `informe_rh_${filters.periodo}_${fileDate.toISOString().slice(0, 10)}.pdf`;
   if (returnBlob) {
     const blob = doc.output('blob');
     return { blob, fileName };
