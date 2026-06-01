@@ -48,8 +48,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
 
   // Edit name state
   const [editingName, setEditingName] = useState(false);
-  const [nameValue, setNameValue] = useState(user.name);
-  const [savedName, setSavedName] = useState(user.name);
+  const [nameValue, setNameValue] = useState(user.name ?? '');
+  const [savedName, setSavedName] = useState(user.name ?? '');
 
   // Password change state
   const [pwSection, setPwSection] = useState(false);
@@ -82,7 +82,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
     loadAvatar();
   }, [user.id]);
 
-  const initials = savedName
+  const initials = (savedName || '')
     .split(' ')
     .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''))
     .filter(Boolean)

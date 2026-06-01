@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Incidencia, EntregaLlaves } from '../services/mockData';
 import { appsScriptApi } from '../services/api';
-import { computeCleanPay, computeHoursWorked, cleanPhone } from '../utils/payments';
+import { computeCleanPay, computeHoursPay, computeHoursWorked, cleanPhone } from '../utils/payments';
 import {
   Search,
   Calendar,
@@ -129,7 +129,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
           ...initial
             .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
             .map((r: InitialCleanRecord) => {
-              const pay = computeCleanPay(r.apartamento, r.horaEntrada, r.horaSalida, pagoPorReserva);
+              const hp = computeHoursPay(r.horaEntrada, r.horaSalida);
               const kmPay = (r.km || 0) * precioPorKm;
               return {
                 id: r.id,
@@ -137,8 +137,8 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 date: r.checkoutFecha || r.checkinFecha,
                 accommodation: r.apartamento,
                 kms: r.km || 0,
-                hoursWorked: pay.hoursWorked,
-                earnings: pay.base + pay.extraPay + kmPay,
+                hoursWorked: hp.hours,
+                earnings: hp.pay + kmPay,
                 observations: r.observaciones || '',
                 horaEntrada: r.horaEntrada,
                 horaSalida: r.horaSalida,
@@ -147,7 +147,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
           ...handyman
             .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
             .map((r: HandymanRecord) => {
-              const hrs = computeHoursWorked(r.horaInicioTarea, r.horaFinTarea);
+              const hp = computeHoursPay(r.horaInicioTarea, r.horaFinTarea);
               const kms = r.cantidadMinutos || 0;
               return {
                 id: r.id,
@@ -156,8 +156,8 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 accommodation: r.alojamiento,
                 kms,
                 minutes: r.cantidadMinutos || 0,
-                hoursWorked: hrs,
-                earnings: kms * precioPorKm,
+                hoursWorked: hp.hours,
+                earnings: hp.pay + kms * precioPorKm,
                 observations: r.observacionesTarea || '',
                 horaEntrada: r.horaInicioTarea,
                 horaSalida: r.horaFinTarea,
@@ -185,6 +185,8 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 calculatedHours = computeHoursWorked(tIni, tFin);
               }
 
+              const pagoPorIncidencia = workerData?.pagoPorIncidencia ?? 0;
+              const kmPay = (r.kms || 0) * precioPorKm;
               return {
                 id: r.id,
                 type: 'Incidencia' as RecordType,
@@ -192,7 +194,7 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                 accommodation: r.accommodationName,
                 kms: r.kms || 0,
                 hoursWorked: calculatedHours,
-                earnings: 0,
+                earnings: pagoPorIncidencia + kmPay,
                 observations: r.observaciones || '',
                 description: r.description,
                 coste: r.coste,

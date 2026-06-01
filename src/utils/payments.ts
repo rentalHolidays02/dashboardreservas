@@ -1,7 +1,13 @@
 import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Worker } from '../services/mockData';
 
 export const EXTRA_HOUR_RATE = 10; // €/h para horas extra
-export const SABANAS_TOALLAS_COST = 5; // € por entrega con sábanas/toallas en efectivo
+export const HOURLY_RATE     = 10; // €/h para limpieza inicial y manitas (todas las horas, no solo "extras")
+
+// Calcula pago por hora (limpieza inicial / manitas / horas extra).
+export const computeHoursPay = (horaEntrada: string, horaSalida: string): { hours: number; pay: number } => {
+  const hours = computeHoursWorked(horaEntrada, horaSalida);
+  return { hours, pay: hours * HOURLY_RATE };
+};
 
 // Detecta horas esperadas por tipo de alojamiento a partir del nombre
 export const getExpectedHours = (apartmentName: string): number => {
@@ -83,15 +89,19 @@ export const matchesWorkerByPhone = (recordPhone?: string, workerPhone?: string)
 };
 
 export interface WorkerEarnings {
-  cleanCount: number;          // Nº de limpiezas (normal + inicial)
-  reservasPay: number;         // Suma de pagoPorReserva por cada limpieza
-  hoursWorked: number;         // Total horas trabajadas (esperadas + extras)
-  extraHours: number;          // Total de horas extra (por encima de las esperadas)
-  extraPay: number;            // Pago por horas extra
-  kms: number;                 // Km totales
-  kmsPay: number;              // Pago por km
-  totalOwed: number;           // Total debido por trabajo (reservas + extras + km)
-  efectivoRetenido: number; // Dinero en efectivo cobrado y retenido por el trabajador (Sábanas, Fianzas, Garantías)
+  cleanCount: number;          // Total servicios (normal + inicial + manitas)
+  reservasPay: number;         // Pago por reservas NORMALES (count_normal × pagoPorReserva)
+  hoursWorked: number;         // Total horas trabajadas (todos los tipos)
+  extraHours: number;          // Horas extra SOLO de reservas normales (sobre lo esperado)
+  extraPay: number;            // extraHours × 10
+  initialHours: number;        // Total horas en limpieza inicial
+  initialPay: number;          // initialHours × 10
+  manitasHours: number;        // Total horas en manitas
+  manitasPay: number;          // manitasHours × 10
+  kms: number;                 // Km totales (todos los tipos)
+  kmsPay: number;              // kms × precioPorKm
+  totalOwed: number;           // reservasPay + extraPay + initialPay + manitasPay + kmsPay
+  efectivoRetenido: number;    // Fianzas (Monto + Garantía) cobradas en efectivo
 }
 
 // Calcula ingresos de un trabajador a partir de todos los registros disponibles.
@@ -111,63 +121,64 @@ export const computeWorkerEarnings = (
   let hoursWorked = 0;
   let extraHours = 0;
   let extraPay = 0;
+  let initialHours = 0;
+  let initialPay = 0;
+  let manitasHours = 0;
+  let manitasPay = 0;
   let kms = 0;
 
-  const applyClean = (apartamento: string, horaEntrada: string, horaSalida: string, km: number) => {
+  // Normales: base por reserva + horas extra (sobre lo esperado) × 10
+  normalCleans.forEach(r => {
+    if (!matchesWorkerByPhone(r.telefono, worker.telefono)) return;
     cleanCount += 1;
-    const calc = computeCleanPay(apartamento, horaEntrada, horaSalida, pagoPorReserva);
+    const calc = computeCleanPay(r.apartamento, r.horaEntrada, r.horaSalida, pagoPorReserva);
     reservasPay += calc.base;
     hoursWorked += calc.hoursWorked;
     extraHours += calc.extraHours;
     extraPay += calc.extraPay;
-    kms += km || 0;
-  };
-
-  normalCleans.forEach(r => {
-    if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
-      applyClean(r.apartamento, r.horaEntrada, r.horaSalida, r.km);
-    }
+    kms += r.km || 0;
   });
 
+  // Iniciales: TODAS las horas × 10. Sin base de reserva, sin "extras" aparte.
   initialCleans.forEach(r => {
-    if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
-      applyClean(r.apartamento, r.horaEntrada, r.horaSalida, r.km);
-    }
+    if (!matchesWorkerByPhone(r.telefono, worker.telefono)) return;
+    cleanCount += 1;
+    const hp = computeHoursPay(r.horaEntrada, r.horaSalida);
+    initialHours += hp.hours;
+    initialPay += hp.pay;
+    hoursWorked += hp.hours;
+    kms += r.km || 0;
   });
 
-  // Manitas: aporta km pero no reserva, pero sí cuenta como trabajo
+  // Manitas: TODAS las horas × 10 + km (no hay base de reserva).
   handymanRecords.forEach(r => {
-    if (matchesWorkerByPhone(r.telefono, worker.telefono)) {
-      cleanCount += 1;
-      kms += r.cantidadMinutos || 0; // el campo "Km" está en cantidadMinutos por historial del parser
-    }
+    if (!matchesWorkerByPhone(r.telefono, worker.telefono)) return;
+    cleanCount += 1;
+    const hp = computeHoursPay(r.horaInicioTarea, r.horaFinTarea);
+    manitasHours += hp.hours;
+    manitasPay += hp.pay;
+    hoursWorked += hp.hours;
+    kms += r.cantidadMinutos || 0; // el parser guarda km en cantidadMinutos
   });
 
   const kmsPay = kms * precioPorKm;
-  const totalOwed = reservasPay + extraPay + kmsPay;
+  const totalOwed = reservasPay + extraPay + initialPay + manitasPay + kmsPay;
 
-  // Efectivo retenido: Cobros en efectivo de fianzas, garantías y recargos por sábanas
+  // Efectivo retenido: SOLO importes de fianza pagados en efectivo (Monto + Garantía).
+  // Sábanas/toallas se paga al trabajador vía `pagoPorServicioSabanas` (montoSabanas) — no entra aquí.
+  // Formato esperado: fianzaMonto/fianzaGarantia = "Efectivo"|"Bizum"|"Tarjeta";
+  // cantidadPagada* en string con coma o punto decimal ("0,00" / "10.50").
   let efectivoRetenido = 0;
   entregaLlaves.forEach(e => {
     if (!matchesWorkerByPhone(e.telefono, worker.telefono)) return;
-    const entregado = String(e.sabanasToallas || '').toLowerCase();
-    const tieneSabanas = entregado.includes('si') || entregado.includes('sí') || entregado === 'true';
-    
-    const montoEfectivo = String(e.fianzaMonto || '').toLowerCase() === 'efectivo';
-    const garantiaEfectivo = String(e.fianzaGarantia || '').toLowerCase() === 'efectivo';
-    
-    if (tieneSabanas && (montoEfectivo || garantiaEfectivo)) {
-      efectivoRetenido += SABANAS_TOALLAS_COST;
+
+    if (String(e.fianzaMonto || '').toLowerCase() === 'efectivo') {
+      const v = parseFloat(String(e.cantidadPagadaMonto || '0').replace(',', '.')) || 0;
+      efectivoRetenido += v;
     }
-    
-    if (montoEfectivo) {
-      const valorMonto = parseFloat(String(e.cantidadPagadaMonto || '0').replace(',', '.')) || 0;
-      efectivoRetenido += valorMonto;
-    }
-    
-    if (garantiaEfectivo) {
-      const valorGarantia = parseFloat(String(e.cantidadPagadaGarantia || '0').replace(',', '.')) || 0;
-      efectivoRetenido += valorGarantia;
+    if (String(e.fianzaGarantia || '').toLowerCase() === 'efectivo') {
+      const v = parseFloat(String(e.cantidadPagadaGarantia || '0').replace(',', '.')) || 0;
+      efectivoRetenido += v;
     }
   });
 
@@ -177,6 +188,10 @@ export const computeWorkerEarnings = (
     hoursWorked,
     extraHours,
     extraPay,
+    initialHours,
+    initialPay,
+    manitasHours,
+    manitasPay,
     kms,
     kmsPay,
     totalOwed,
@@ -339,7 +354,8 @@ const aggregateWorkerDaily = (
     return bags[iso];
   };
 
-  const handleClean = (r: NormalCleanRecord | InitialCleanRecord) => {
+  // Normales: base por reserva + extras × 10 + km
+  normalCleans.forEach(r => {
     if (!targetPhone || cleanPhone(r.telefono) !== targetPhone) return;
     const iso = extractDate(r.checkinFecha);
     if (!iso) return;
@@ -352,20 +368,35 @@ const aggregateWorkerDaily = (
     if (minutes > 0) { bag.durTotal += minutes; bag.durCount += 1; }
     bag.totalRegs += 1;
     if ((r as any).checked) bag.checkedCount += 1;
-  };
+  });
 
-  normalCleans.forEach(handleClean);
-  initialCleans.forEach(handleClean);
+  // Iniciales: TODAS las horas × 10 + km (no base por reserva)
+  initialCleans.forEach(r => {
+    if (!targetPhone || cleanPhone(r.telefono) !== targetPhone) return;
+    const iso = extractDate(r.checkinFecha);
+    if (!iso) return;
+    const bag = ensure(iso);
+    const hp = computeHoursPay(r.horaEntrada, r.horaSalida);
+    bag.ingresos += hp.pay + (r.km || 0) * precioPorKm;
+    bag.limpiezas += 1;
+    bag.km += r.km || 0;
+    const minutes = hp.hours * 60;
+    if (minutes > 0) { bag.durTotal += minutes; bag.durCount += 1; }
+    bag.totalRegs += 1;
+    if ((r as any).checked) bag.checkedCount += 1;
+  });
 
+  // Manitas: horas × 10 + km
   handymanRecords.forEach(r => {
     if (!targetPhone || cleanPhone(r.telefono) !== targetPhone) return;
     const iso = extractDate(r.fechaLlegada);
     if (!iso) return;
     const bag = ensure(iso);
-    const km = r.cantidadMinutos || 0; // nota: el parser guarda Km aquí
-    bag.ingresos += km * precioPorKm;
+    const km = r.cantidadMinutos || 0; // el parser guarda km aquí
+    const hp = computeHoursPay(r.horaInicioTarea, r.horaFinTarea);
+    bag.ingresos += hp.pay + km * precioPorKm;
     bag.km += km;
-    const mins = computeHoursWorked(r.horaInicioTarea, r.horaFinTarea) * 60;
+    const mins = hp.hours * 60;
     if (mins > 0) { bag.durTotal += mins; bag.durCount += 1; }
     bag.totalRegs += 1;
     if (String(r.estadoCompletado).toLowerCase().includes('complet')) bag.checkedCount += 1;

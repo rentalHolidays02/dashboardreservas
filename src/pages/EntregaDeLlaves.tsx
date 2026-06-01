@@ -565,13 +565,32 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
 
   const filtered = useMemo(() => {
     const q = searchTerm.toLowerCase();
-    if (!q) return entregas;
-    return entregas.filter(e =>
-      e.nombre.toLowerCase().includes(q) ||
-      e.apellidos.toLowerCase().includes(q) ||
-      e.telefono.includes(q) ||
-      e.apartamento.toLowerCase().includes(q)
-    );
+    const base = q
+      ? entregas.filter(e =>
+          e.nombre.toLowerCase().includes(q) ||
+          e.apellidos.toLowerCase().includes(q) ||
+          e.telefono.includes(q) ||
+          e.apartamento.toLowerCase().includes(q)
+        )
+      : entregas;
+    // Orden por fecha de entrega descendente (las más recientes primero).
+    // El campo mezcla formatos: ISO "YYYY-MM-DDTHH:MM" (input manual),
+    // locale "D/M/YYYY, HH:MM:SS | coords" (captura auto). Parseo a timestamp.
+    const ts = (raw: string): number => {
+      if (!raw) return -Infinity;
+      const datePart = raw.split('|')[0].trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(datePart)) {
+        const t = Date.parse(datePart);
+        return isNaN(t) ? -Infinity : t;
+      }
+      const m = datePart.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (m) {
+        const [, d, mo, y, h, mi, s] = m;
+        return new Date(+y, +mo - 1, +d, +(h ?? 0), +(mi ?? 0), +(s ?? 0)).getTime();
+      }
+      return -Infinity;
+    };
+    return [...base].sort((a, b) => ts(b.fechaUbicacionEntrega || '') - ts(a.fechaUbicacionEntrega || ''));
   }, [entregas, searchTerm]);
 
   const handleRowClick = (id: string) =>
