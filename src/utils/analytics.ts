@@ -1,6 +1,6 @@
 import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
 import { Period } from '../components/dashboard/DashboardFilterModal';
-import { computeCleanPay, cleanPhone, matchesWorkerByPhone } from './payments';
+import { computeCleanPay, computeHoursPay, cleanPhone, matchesWorkerByPhone } from './payments';
 
 export interface ChartPoint {
   label: string;
@@ -104,11 +104,14 @@ export const aggregateDailyData = (
     result[datePart].limpiezas += 1;
   };
 
-  const processHandyman = (
+  // Limpieza inicial: TODAS las horas × 10 + km (no base por reserva)
+  const processInitial = (
     fecha: string,
     telefono: string,
     nombre: string,
     apellidos: string,
+    horaEntrada: string,
+    horaSalida: string,
     km: number
   ) => {
     if (!fecha) return;
@@ -121,7 +124,34 @@ export const aggregateDailyData = (
 
     const worker = findWorker(telefono) ?? selectedWorker ?? undefined;
     const precioPorKm = worker?.precioPorKm ?? 0.19;
-    result[datePart].dinero += (km || 0) * precioPorKm;
+    const hp = computeHoursPay(horaEntrada, horaSalida);
+    result[datePart].dinero += hp.pay + (km || 0) * precioPorKm;
+    result[datePart].km += km || 0;
+    result[datePart].limpiezas += 1;
+  };
+
+  // Manitas: horas × 10 + km
+  const processHandyman = (
+    fecha: string,
+    telefono: string,
+    nombre: string,
+    apellidos: string,
+    horaInicio: string,
+    horaFin: string,
+    km: number
+  ) => {
+    if (!fecha) return;
+    const datePart = String(fecha).split(' ')[0].split('T')[0];
+    if (!result[datePart]) return;
+
+    if (selectedWorker) {
+      if (!matchRecordVsWorker(telefono, nombre, apellidos, selectedWorker)) return;
+    }
+
+    const worker = findWorker(telefono) ?? selectedWorker ?? undefined;
+    const precioPorKm = worker?.precioPorKm ?? 0.19;
+    const hp = computeHoursPay(horaInicio, horaFin);
+    result[datePart].dinero += hp.pay + (km || 0) * precioPorKm;
     result[datePart].km += km || 0;
   };
 
@@ -129,10 +159,10 @@ export const aggregateDailyData = (
     processClean(r.checkoutFecha || r.checkinFecha, r.telefono, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
   );
   initialCleans.forEach(r =>
-    processClean(r.checkoutFecha || r.checkinFecha, r.telefono, r.nombre, r.apellidos, r.apartamento, r.horaEntrada, r.horaSalida, r.km)
+    processInitial(r.checkoutFecha || r.checkinFecha, r.telefono, r.nombre, r.apellidos, r.horaEntrada, r.horaSalida, r.km)
   );
   handymanRecords.forEach(r =>
-    processHandyman(r.fechaFin || r.fechaLlegada, r.telefono, r.nombre, r.apellidos, r.cantidadMinutos)
+    processHandyman(r.fechaFin || r.fechaLlegada, r.telefono, r.nombre, r.apellidos, r.horaInicioTarea, r.horaFinTarea, r.cantidadMinutos)
   );
 
   return Object.values(result);

@@ -26,7 +26,7 @@ import { formatName } from '../utils/formatters';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 import { useTheme } from '../context/ThemeContext';
 import DashboardFilterModal, { Period, Metric } from '../components/dashboard/DashboardFilterModal';
-import { filterRecordsByPeriod, matchesWorkerByPhone, cleanPhone, computeCleanPay } from '../utils/payments';
+import { filterRecordsByPeriod, matchesWorkerByPhone, cleanPhone, computeCleanPay, computeHoursPay } from '../utils/payments';
 
 interface WorkerAnalyticsProps {
   user: User;
@@ -214,7 +214,13 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
       if (r._type === 'handyman') {
         const qty = (r as any).cantidadMinutos || 0;
         stats[name].km += qty;
-        stats[name].dinero += qty * precioPorKm;
+        const hp = computeHoursPay((r as any).horaInicioTarea, (r as any).horaFinTarea);
+        stats[name].dinero += hp.pay + qty * precioPorKm;
+      } else if (r._type === 'initial') {
+        const qty = (r as any).km || 0;
+        stats[name].km += qty;
+        const hp = computeHoursPay((r as any).horaEntrada, (r as any).horaSalida);
+        stats[name].dinero += hp.pay + qty * precioPorKm;
       } else {
         const qty = (r as any).km || 0;
         stats[name].km += qty;
