@@ -8,18 +8,35 @@ interface SignaturePadProps {
   readOnly?: boolean;
 }
 
+const isDisplayableSignature = (v?: string) => {
+  const s = v?.trim();
+  if (!s) return false;
+  return s.startsWith('data:image/') || /^https?:\/\//i.test(s);
+};
+
 const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, readOnly }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
-  const [hasContent, setHasContent] = useState(false);
+  const [hasContent, setHasContent] = useState(() => isDisplayableSignature(value));
+  const [imgError, setImgError] = useState(false);
+  const [imgSrc, setImgSrc] = useState(() => (isDisplayableSignature(value) ? value!.trim() : ''));
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
-  // Cargar imagen existente (URL o base64) al montar
+  const displayUrl = isDisplayableSignature(value) ? value!.trim() : '';
+
   useEffect(() => {
-    if (!value || !canvasRef.current) return;
+    setImgError(false);
+    setHasContent(isDisplayableSignature(value));
+    setImgSrc(isDisplayableSignature(value) ? value!.trim() : '');
+  }, [value]);
+
+  useEffect(() => {
+    if (!value || readOnly || !canvasRef.current) return;
+
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -27,8 +44,9 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       setHasContent(true);
     };
+    img.onerror = () => setHasContent(false);
     img.src = value;
-  }, []);
+  }, [value, readOnly]);
 
   const getPos = useCallback(
     (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
@@ -94,6 +112,8 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     onChange('');
   };
 
+  const showPlaceholder = !hasContent || (readOnly && imgError);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
@@ -122,24 +142,49 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
               : 'border-dashed border-orange-300/70 dark:border-orange-800/50 hover:border-orange-400 dark:hover:border-orange-600'
           }`}
       >
-        <canvas
-          ref={canvasRef}
-          width={600}
-          height={180}
-          className={`w-full block ${readOnly ? 'cursor-default' : 'cursor-crosshair'}`}
-          style={{ height: 110 }}
-          onMouseDown={startDraw}
-          onMouseMove={draw}
-          onMouseUp={stopDraw}
-          onMouseLeave={stopDraw}
-          onTouchStart={startDraw}
-          onTouchMove={draw}
-          onTouchEnd={stopDraw}
-        />
-        {!hasContent && (
+        {readOnly && imgSrc && !imgError ? (
+          <img
+            src={imgSrc}
+            alt={label}
+            referrerPolicy="no-referrer"
+            className="w-full block object-contain bg-white dark:bg-stone-950"
+            style={{ height: 110 }}
+            onLoad={() => setHasContent(true)}
+            onError={() => {
+              const id = imgSrc.match(/(?:id=|\/d\/)([a-zA-Z0-9_-]+)/)?.[1];
+              const thumb = id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` : '';
+              if (thumb && imgSrc !== thumb) {
+                setImgSrc(thumb);
+                return;
+              }
+              setImgError(true);
+              setHasContent(false);
+            }}
+          />
+        ) : (
+          <canvas
+            ref={canvasRef}
+            width={600}
+            height={180}
+            className={`w-full block ${readOnly ? 'cursor-default' : 'cursor-crosshair'}`}
+            style={{ height: 110 }}
+            onMouseDown={startDraw}
+            onMouseMove={draw}
+            onMouseUp={stopDraw}
+            onMouseLeave={stopDraw}
+            onTouchStart={startDraw}
+            onTouchMove={draw}
+            onTouchEnd={stopDraw}
+          />
+        )}
+        {showPlaceholder && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <p className="text-[11px] text-slate-300 dark:text-stone-700">
-              {readOnly ? 'Sin firma registrada' : 'Firmar aquí...'}
+              {readOnly
+                ? imgError
+                  ? 'No se pudo cargar la firma'
+                  : 'Sin firma registrada'
+                : 'Firmar aquí...'}
             </p>
           </div>
         )}

@@ -36,7 +36,9 @@ const WORKERS_APPS_SCRIPT_URL = import.meta.env.VITE_WORKERS_APPS_SCRIPT_URL || 
 const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || '';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
 const INCIDENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_APPS_SCRIPT_URL || '';
-const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:S";
+const ENTREGA_LLAVES_SPREADSHEET_ID = import.meta.env.VITE_ENTREGA_LLAVES_SPREADSHEET_ID || '';
+const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:U";
+const FIRMAS_ENTREGA_BUCKET = 'firmas-entrega';
 const ENTREGA_LLAVES_APPS_SCRIPT_URL = import.meta.env.VITE_ENTREGA_LLAVES_APPS_SCRIPT_URL || '';
 const SUGERENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || '';
 const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL || '';
@@ -67,6 +69,66 @@ function withSheetsCache<T>(key: string, fetcher: () => Promise<T>): Promise<T> 
   });
   sheetsInflight.set(key, promise);
   return promise;
+}
+
+function invalidateSheetsCache(key: string) {
+  sheetsCache.delete(key);
+  sheetsInflight.delete(key);
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/png';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+/** URL de imagen que el navegador puede mostrar (Drive → thumbnail) */
+function toDisplayableFirmaUrl(url: string): string {
+  if (!url.includes('drive.google.com')) return url;
+  const idMatch = url.match(/(?:[?&]id=|\/d\/)([a-zA-Z0-9_-]+)/);
+  if (idMatch?.[1]) {
+    return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1000`;
+  }
+  return url;
+}
+
+/** Convierte celda del Sheet (URL, =IMAGE("url") o base64) en URL usable en la web */
+function parseEntregaFirmaCell(raw: unknown): string | undefined {
+  const s = String(raw ?? '').trim();
+  if (!s) return undefined;
+  if (s.startsWith('data:image/')) return s;
+  let url: string | undefined;
+  if (/^https?:\/\//i.test(s)) {
+    url = s;
+  } else {
+    const imageMatch =
+      s.match(/=IMAGE\s*\(\s*"([^"]+)"/i) ||
+      s.match(/=IMAGE\s*\(\s*'([^']+)'/i);
+    url = imageMatch?.[1]?.trim();
+  }
+  return url ? toDisplayableFirmaUrl(url) : undefined;
+}
+
+async function uploadEntregaFirmaIfNeeded(
+  value: string | undefined,
+  storageKey: string
+): Promise<string | undefined> {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (!trimmed.startsWith('data:image/')) return trimmed;
+
+  const path = `entrega-llaves/${storageKey}.png`;
+  const blob = dataUrlToBlob(trimmed);
+  const { error } = await supabase.storage
+    .from(FIRMAS_ENTREGA_BUCKET)
+    .upload(path, blob, { upsert: true, contentType: 'image/png' });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(FIRMAS_ENTREGA_BUCKET).getPublicUrl(path);
+  return `${data.publicUrl}?t=${Date.now()}`;
 }
 // --- Fin cache ---
 
@@ -231,9 +293,29 @@ export const reverseGeocode = async (coords: string | undefined): Promise<string
 // Utilidad global para parsear fechas y horas de Excel/Sheets
 export const parseDateTime = (dateVal: any, timeVal?: any): string => {
   if (!dateVal && !timeVal) return '';
-  
+
+  const excelSerialToIso = (serial: number): string => {
+    const ms = (serial - 25569) * 86400000;
+    const d = new Date(ms);
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const h = String(d.getUTCHours()).padStart(2, '0');
+    const mi = String(d.getUTCMinutes()).padStart(2, '0');
+    return `${y}-${mo}-${day}T${h}:${mi}`;
+  };
+
+  if (typeof dateVal === 'number' && dateVal > 1000) {
+    return excelSerialToIso(dateVal);
+  }
+
   let datePart = String(dateVal || '').trim();
   let timePart = String(timeVal || '12:00').trim();
+
+  const serialNum = Number(datePart.replace(',', '.'));
+  if (!Number.isNaN(serialNum) && serialNum > 30000 && serialNum < 1000000) {
+    return excelSerialToIso(serialNum);
+  }
 
   // Si datePart trae fecha y hora (ej: "20/04/2026 13:05")
   if (datePart.includes(' ') || datePart.includes(',')) {
@@ -1680,25 +1762,49 @@ export const appsScriptApi = {
   },
 
   getEntregaLlaves: async (): Promise<EntregaLlaves[]> => {
-    return withSheetsCache('entregaLlaves', async () => {
+    return withSheetsCache('entregaLlaves_v3', async () => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${INCIDENCIAS_SPREADSHEET_ID}/values/${encodeURIComponent(ENTREGA_LLAVES_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Error fetching Entrega de Llaves: ${response.statusText}`);
+      const sheetBase = `https://sheets.googleapis.com/v4/spreadsheets/${ENTREGA_LLAVES_SPREADSHEET_ID}/values/`;
+      const [fmtResponse, formulaResponse] = await Promise.all([
+        fetch(`${sheetBase}${encodeURIComponent(ENTREGA_LLAVES_RANGE)}?key=${GOOGLE_API_KEY}`),
+        fetch(
+          `${sheetBase}${encodeURIComponent("'Informe_Entrega_Llaves'!S:U")}?valueRenderOption=FORMULA&key=${GOOGLE_API_KEY}`
+        ),
+      ]);
+      if (!fmtResponse.ok) throw new Error(`Error fetching Entrega de Llaves: ${fmtResponse.statusText}`);
 
-      const data = await response.json();
+      const data = await fmtResponse.json();
       if (!data.values || data.values.length === 0) return [];
+
+      const formulaData = formulaResponse.ok ? await formulaResponse.json() : { values: [] as string[][] };
+      const formulaRows = (formulaData.values || []).slice(1) as string[][];
 
       const headers = data.values[0] as string[];
       const rows = data.values.slice(1);
 
+      const normalizeHeader = (h: string) =>
+        h.trim().toUpperCase().normalize('NFD').replace(/\p{M}/gu, '');
+
+      const headerIndex = (...names: string[]) => {
+        for (const name of names) {
+          const target = normalizeHeader(name);
+          const idx = headers.findIndex(h => h && normalizeHeader(String(h)) === target);
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
       return rows.map((row: any[], index: number) => {
         const getVal = (headerName: string) => {
-          const idx = headers.findIndex(h => h && h.trim().toUpperCase() === headerName.toUpperCase());
+          const idx = headerIndex(headerName);
           return idx !== -1 ? row[idx] : undefined;
         };
 
-        const rawTel = String(getVal('TELEFONO') || '').replace(/\D/g, '');
+        const formulaRow = formulaRows[index] || [];
+        const firmaFromFormula = (colInS: number) =>
+          parseEntregaFirmaCell(formulaRow[colInS]);
+
+        const rawTel = String(getVal('TELEFONO') || getVal('Telefono') || '').replace(/\D/g, '');
         const cleanTel = (rawTel.startsWith('34') && rawTel.length >= 11) ? rawTel.slice(-9) : rawTel;
 
         const parsePaymentMethod = (val: any) => {
@@ -1708,27 +1814,58 @@ export const appsScriptApi = {
           return 'Efectivo';
         };
 
+        const rawEntrega = String(getVal('ENTREGA LLAVES') || getVal('Entrega Llaves') || '').toUpperCase();
+        const rawChecked = String(getVal('CHECKED') || getVal('Checked') || '').toUpperCase();
+
         return {
           id: `real_key_${index + 2}`,
           telefono: cleanTel,
-          nombre: String(getVal('NOMBRE') || ''),
-          apellidos: String(getVal('APELLIDOS') || ''),
-          fechaUbicacionEntrega: String(getVal('FECHA Y UBICACION DE LLAVES ENTREGADAS') || ''),
-          apartamento: String(getVal('APARTAMENTO') || ''),
-          nombreCliente: String(getVal('NOMBRE CLIENTE') || ''),
-          fechaEntradaReserva: parseDateTime(getVal('FECHA ENTRADA RESERVA')),
-          fechaSalidaReserva: parseDateTime(getVal('FECHA SALIDA RE') || getVal('FECHA SALIDA RESERVA')),
-          entregaLlaves: String(getVal('ENTREGA LLAVES')).toUpperCase() === 'SÍ',
-          sabanasToallas: String(getVal('SÁBANAS Y TOALLAS') || ''),
-          km: parseExcelNumber(getVal('KM')),
-          observaciones: String(getVal('OBSERVACIONES') || ''),
-          fianzaMonto: parsePaymentMethod(getVal('FIANZA (MONTO)')),
-          bizumMonto: String(getVal('NUMERO BIZUM (MONTO)') || ''),
-          cantidadPagadaMonto: String(parseExcelNumber(getVal('CANTIDAD PAGADA (MONTO)'))),
-          fianzaGarantia: parsePaymentMethod(getVal('FIANZA (GARANTIA)')),
-          bizumGarantia: String(getVal('NUMERO BIZUM (GARANTIA)') || ''),
-          cantidadPagadaGarantia: String(parseExcelNumber(getVal('CANTIDAD PAGADA (GARANTIA)'))),
-          checked: String(getVal('CHECKED')).toUpperCase() === 'TRUE'
+          nombre: String(getVal('NOMBRE') || getVal('Nombre') || ''),
+          apellidos: String(getVal('APELLIDOS') || getVal('Apellidos') || ''),
+          fechaUbicacionEntrega: String(
+            getVal('FECHA Y UBICACION DE LLAVES ENTREGADAS') ||
+            getVal('Fecha y ubicacion de llaves entregadas') ||
+            ''
+          ),
+          apartamento: String(getVal('APARTAMENTO') || getVal('Apartamento') || ''),
+          nombreCliente: String(getVal('NOMBRE CLIENTE') || getVal('Nombre Cliente') || ''),
+          fechaEntradaReserva: parseDateTime(
+            getVal('FECHA ENTRADA RESERVA') || getVal('Fecha Entrada Reserva')
+          ),
+          fechaSalidaReserva: parseDateTime(
+            getVal('FECHA SALIDA RE') ||
+            getVal('FECHA SALIDA RESERVA') ||
+            getVal('Fecha Salida Reserva')
+          ),
+          entregaLlaves:
+            rawEntrega === 'SÍ' || rawEntrega === 'SI' || rawEntrega === 'YES' || rawEntrega === 'TRUE',
+          sabanasToallas: String(
+            getVal('SÁBANAS Y TOALLAS') || getVal('Sábanas y Toallas') || 'No'
+          ),
+          km: parseExcelNumber(getVal('KM') || getVal('Km')),
+          observaciones: String(getVal('OBSERVACIONES') || getVal('Observaciones') || ''),
+          fianzaMonto: parsePaymentMethod(getVal('FIANZA (MONTO)') || getVal('Fianza (Monto)')),
+          bizumMonto: String(getVal('NUMERO BIZUM (MONTO)') || getVal('Numero Bizum (Monto)') || ''),
+          cantidadPagadaMonto: String(
+            parseExcelNumber(getVal('CANTIDAD PAGADA (MONTO)') || getVal('Cantidad Pagada (Monto)'))
+          ),
+          fianzaGarantia: parsePaymentMethod(
+            getVal('FIANZA (GARANTIA)') || getVal('Fianza (Garantia)')
+          ),
+          bizumGarantia: String(
+            getVal('NUMERO BIZUM (GARANTIA)') || getVal('Numero Bizum (Garantia)') || ''
+          ),
+          cantidadPagadaGarantia: String(
+            parseExcelNumber(getVal('CANTIDAD PAGADA (GARANTIA)') || getVal('Cantidad Pagada (Garantia)'))
+          ),
+          checked: rawChecked === 'TRUE' || rawChecked === 'VERDADERO',
+          // S:U → col 0 = Firma Trabajador, col 1 = Firma Huésped, col 2 = Checked
+          firmaTrabajador:
+            firmaFromFormula(0) ||
+            parseEntregaFirmaCell(getVal('FIRMA TRABAJADOR') || getVal('Firma Trabajador')),
+          firmaHuesped:
+            firmaFromFormula(1) ||
+            parseEntregaFirmaCell(getVal('FIRMA HUESPED') || getVal('Firma Huesped')),
         };
       });
     } catch (error) {
@@ -1736,6 +1873,22 @@ export const appsScriptApi = {
       return [];
     }
     });
+  },
+
+  prepareEntregaLlavesForSave: async (
+    data: Omit<EntregaLlaves, 'id'>,
+    options?: { rowKey?: string }
+  ): Promise<Omit<EntregaLlaves, 'id'>> => {
+    const rowKey = options?.rowKey ?? `${data.telefono || 'entrega'}-${Date.now()}`;
+    let firmaTrabajador = data.firmaTrabajador;
+    let firmaHuesped = data.firmaHuesped;
+    if (firmaTrabajador?.startsWith('data:image/')) {
+      firmaTrabajador = (await uploadEntregaFirmaIfNeeded(firmaTrabajador, `${rowKey}-trabajador`)) ?? '';
+    }
+    if (firmaHuesped?.startsWith('data:image/')) {
+      firmaHuesped = (await uploadEntregaFirmaIfNeeded(firmaHuesped, `${rowKey}-huesped`)) ?? '';
+    }
+    return { ...data, firmaTrabajador, firmaHuesped };
   },
 
   addEntregaLlaves: async (data: Omit<EntregaLlaves, 'id'>): Promise<boolean> => {
@@ -1746,6 +1899,7 @@ export const appsScriptApi = {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ ...data, action: 'add' })
       });
+      invalidateSheetsCache('entregaLlaves_v3');
       return true;
     } catch (error) {
       console.error('Error adding Entrega de Llaves:', error);
@@ -1761,6 +1915,7 @@ export const appsScriptApi = {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ ...data, action: 'update' })
       });
+      invalidateSheetsCache('entregaLlaves_v3');
       return true;
     } catch (error) {
       console.error('Error updating Entrega de Llaves:', error);
@@ -1776,6 +1931,7 @@ export const appsScriptApi = {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ id, action: 'delete' })
       });
+      invalidateSheetsCache('entregaLlaves_v3');
       return true;
     } catch (error) {
       console.error('Error deleting Entrega de Llaves:', error);

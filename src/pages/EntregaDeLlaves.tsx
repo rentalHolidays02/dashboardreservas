@@ -17,22 +17,25 @@ import {
 import { appsScriptApi } from '../services/api';
 import { EntregaLlaves, Accommodation } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import SignaturePad from '../components/ui/SignaturePad';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmtDate = (s: string) => {
   if (!s) return '—';
-  
+
   // Si viene en formato datetime-local: YYYY-MM-DDThh:mm
   if (s.includes('T')) {
     const [datePart, timePart] = s.split('T');
     const [y, m, d] = datePart.split('-');
+    if (!y || !m || !d || y === 'undefined') return '—';
     return `${d}/${m}/${y}, ${timePart}`;
   }
 
   // Soporta formato YYYY-MM-DD o DD/MM/YYYY con hora separado por coma
-  if (s.includes('/')) return s.split(',')[0]; 
+  if (s.includes('/')) return s.split(',')[0].trim() || '—';
   const [y, m, d] = s.split('-');
+  if (!y || !m || !d || y === 'undefined') return '—';
   return `${d}/${m}/${y}`;
 };
 
@@ -305,6 +308,25 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
             </div>
           </div>
 
+          {/* Firmas */}
+          <div>
+            <p className={sectionTitleCls}>Firmas</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <SignaturePad
+                label="Firma trabajador"
+                value={form.firmaTrabajador}
+                onChange={v => set('firmaTrabajador', v)}
+                readOnly={isReadOnly}
+              />
+              <SignaturePad
+                label="Firma huésped"
+                value={form.firmaHuesped}
+                onChange={v => set('firmaHuesped', v)}
+                readOnly={isReadOnly}
+              />
+            </div>
+          </div>
+
           {/* Fianzas */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -477,6 +499,25 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
           </div>
         </div>
 
+        {/* Firmas */}
+        <div className="col-span-3 pt-2 border-t border-stone-200/60 dark:border-stone-700/40">
+          <p className={`${sectionLabel} mb-3`}>Firmas</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+            <SignaturePad
+              label="Firma trabajador"
+              value={e.firmaTrabajador}
+              onChange={() => {}}
+              readOnly
+            />
+            <SignaturePad
+              label="Firma huésped"
+              value={e.firmaHuesped}
+              onChange={() => {}}
+              readOnly
+            />
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -545,13 +586,16 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
 
   const handleSave = async (data: Omit<EntregaLlaves, 'id'>) => {
     try {
+      const rowKey = modalData?.id?.replace(/^real_key_/, 'fila-') ?? `nueva-${data.telefono || 'entrega'}-${Date.now()}`;
+      const prepared = await appsScriptApi.prepareEntregaLlavesForSave(data, { rowKey });
+
       if (modalData?.id) {
         // Optimistic update
-        setEntregas(prev => prev.map(e => e.id === modalData.id ? { ...data, id: modalData.id } : e));
-        await appsScriptApi.updateEntregaLlaves({ ...data, id: modalData.id });
+        setEntregas(prev => prev.map(e => e.id === modalData.id ? { ...prepared, id: modalData.id } : e));
+        await appsScriptApi.updateEntregaLlaves({ ...prepared, id: modalData.id });
       } else {
         // En adición no podemos hacer update optimista tan fácil sin ID real
-        await appsScriptApi.addEntregaLlaves(data);
+        await appsScriptApi.addEntregaLlaves(prepared);
       }
       fetchData(false);
       setIsModalOpen(false);
