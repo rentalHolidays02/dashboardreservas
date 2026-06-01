@@ -128,6 +128,8 @@ export interface EntregaLlaves {
   bizumGarantia: string;
   cantidadPagadaGarantia: string;
   checked: boolean;
+  firmaTrabajador?: string;  // URL pública (Supabase Storage) o base64
+  firmaHuesped?: string;   // URL pública (Supabase Storage) o base64
 }
 
 export const MOCK_INCIDENCIAS: Incidencia[] = [
