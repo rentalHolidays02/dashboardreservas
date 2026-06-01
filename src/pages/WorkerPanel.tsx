@@ -248,6 +248,14 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
         const recordDate = (r.date || '').split('T')[0].split(' ')[0];
         if (filters.startDate && recordDate < filters.startDate) matchesDate = false;
         if (filters.endDate && recordDate > filters.endDate) matchesDate = false;
+      } else {
+        // Por defecto, mostrar solo el mes actual
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const d = new Date(r.date || '');
+        if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) {
+          matchesDate = false;
+        }
       }
       
       return matchesType && matchesSearch && matchesDate;
@@ -271,10 +279,11 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
     });
 
     const totalHours = recordsThisMonth.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0);
+    const cleansThisMonth = recordsThisMonth.filter(r => r.type === 'Normal' || r.type === 'Inicial').length;
 
     return {
         owed: workerData?.owedMoney || 0,
-        cleans: workerData?.cleansCountMonth || 0,
+        cleans: cleansThisMonth,
         hours: totalHours
     };
   }, [workerData, records]);
@@ -312,7 +321,7 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
           {[
             { label: 'Dinero Debido', value: totals.owed.toFixed(2), suffix: '€', highlight: true },
             { label: 'Servicios este Mes', value: totals.cleans, suffix: '' },
-            { label: 'Horas Totales', value: totals.hours.toFixed(1), suffix: 'h' },
+            { label: 'Horas Totales este Mes', value: totals.hours.toFixed(1), suffix: 'h' },
           ].map(stat => (
             <div
               key={stat.label}

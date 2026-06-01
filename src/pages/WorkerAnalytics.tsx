@@ -26,7 +26,7 @@ import { formatName } from '../utils/formatters';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 import { useTheme } from '../context/ThemeContext';
 import DashboardFilterModal, { Period, Metric } from '../components/dashboard/DashboardFilterModal';
-import { filterRecordsByPeriod, matchesWorkerByPhone, cleanPhone } from '../utils/payments';
+import { filterRecordsByPeriod, matchesWorkerByPhone, cleanPhone, computeCleanPay } from '../utils/payments';
 
 interface WorkerAnalyticsProps {
   user: User;
@@ -191,35 +191,53 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
   }, [period, customDesde, customHasta]);
 
   const topAccommodations = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const stats: Record<string, { count: number; dinero: number; km: number }> = {};
     const filterByWorker = (r: any) => !workerData || matchesWorkerByPhone(r.telefono, workerData.telefono);
 
-    const normal = globalRecords.normal.filter(filterByWorker).map(r => ({ accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha }));
-    const initial = globalRecords.initial.filter(filterByWorker).map(r => ({ accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha }));
-    const handyman = globalRecords.handyman.filter(filterByWorker).map(r => ({ accommodation: r.alojamiento, date: r.fechaFin || r.fechaLlegada }));
+    const normal = globalRecords.normal.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha, _type: 'normal' }));
+    const initial = globalRecords.initial.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha, _type: 'initial' }));
+    const handyman = globalRecords.handyman.filter(filterByWorker).map(r => ({ ...r, accommodation: r.alojamiento, date: r.fechaFin || r.fechaLlegada, _type: 'handyman' }));
 
     const combined = [...normal, ...initial, ...handyman];
     const filtered = filterRecordsByPeriod(combined, period, customDesde, customHasta);
 
     filtered.forEach(r => {
-      if (r.accommodation) {
-        counts[r.accommodation] = (counts[r.accommodation] || 0) + 1;
+      const name = r.accommodation;
+      if (!name) return;
+      if (!stats[name]) stats[name] = { count: 0, dinero: 0, km: 0 };
+      
+      const pagoPorReserva = workerData?.pagoPorReserva ?? 20;
+      const precioPorKm = workerData?.precioPorKm ?? 0.19;
+
+      stats[name].count += 1;
+
+      if (r._type === 'handyman') {
+        const qty = (r as any).cantidadMinutos || 0;
+        stats[name].km += qty;
+        stats[name].dinero += qty * precioPorKm;
+      } else {
+        const qty = (r as any).km || 0;
+        stats[name].km += qty;
+        const pay = computeCleanPay(name, (r as any).horaEntrada, (r as any).horaSalida, pagoPorReserva);
+        stats[name].dinero += pay.base + pay.extraPay + qty * precioPorKm;
       }
     });
 
-    return Object.entries(counts)
-      .map(([name, count]) => {
+    return Object.entries(stats)
+      .map(([name, data]) => {
         const accInfo = accommodations.find(a => a.name.toLowerCase() === name.toLowerCase());
         return { 
           name, 
-          count, 
+          count: data.count,
+          dinero: data.dinero,
+          km: data.km,
           location: accInfo?.city || 'Varios',
           image: accInfo?.image || `https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&q=80&w=200&h=200` 
         };
       })
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => metric === 'dinero' ? b.dinero - a.dinero : metric === 'km' ? b.km - a.km : b.count - a.count)
       .slice(0, 5);
-  }, [globalRecords, workerData, period, customDesde, customHasta, accommodations]);
+  }, [globalRecords, workerData, period, customDesde, customHasta, accommodations, metric]);
 
   if (loading) {
     return <LoadingSpinner message="Preparando tu resumen..." />;
@@ -378,7 +396,9 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
                 </div>
                 <div className="text-right shrink-0 ml-4">
                   <div className="flex flex-col items-end bg-stone-50/50 dark:bg-stone-800/50 px-3 py-2 rounded-2xl border border-white/40 dark:border-stone-700/30">
-                    <span className="text-base font-normal text-slate-800 dark:text-stone-100 tabular-nums leading-none">{acc.count}</span>
+                    <span className="text-base font-normal text-slate-800 dark:text-stone-100 tabular-nums leading-none">
+                      {metric === 'dinero' ? fmtEur(acc.dinero) : metric === 'km' ? `${acc.km.toFixed(1)} km` : acc.count}
+                    </span>
                   </div>
                 </div>
               </div>

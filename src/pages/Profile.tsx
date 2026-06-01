@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Mail,
@@ -10,16 +10,17 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  Activity,
   Lock,
   ChevronRight,
   Pencil,
   X,
   Save,
   AlertTriangle,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import { activityLogApi, ActivityLog } from '../services/api';
+import { supabase } from '../services/supabaseClient';
 
 import type { User as AppUser } from '../services/mockData';
 
@@ -42,20 +43,6 @@ const ROLE_COLOR: Record<string, string> = {
   trabajador: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
 };
 
-function formatActivityTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-
-  if (diffMins < 1) return 'Ahora mismo';
-  if (diffMins < 60) return `Hace ${diffMins} min`;
-  if (diffHours < 24) return `Hace ${diffHours} h`;
-  
-  return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
 const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const { theme, toggleTheme } = useTheme();
 
@@ -73,28 +60,31 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const [showNewPw, setShowNewPw] = useState(false);
   const [pwSaved, setPwSaved] = useState(false);
   const [pwError, setPwError] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
 
-  // Actividades reales
-  const [activities, setActivities] = useState<ActivityLog[]>([]);
-  const [loadingActivities, setLoadingActivities] = useState(true);
+  // Avatar state
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Cargar avatar desde Supabase profiles al montar
   useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        const data = await activityLogApi.getLatest(10);
-        setActivities(data);
-      } catch (err) {
-        console.error('Error fetching activities:', err);
-      } finally {
-        setLoadingActivities(false);
-      }
+    const loadAvatar = async () => {
+      if (!user.id) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', user.id)
+        .single();
+      if (data?.avatar_url) setAvatarUrl(data.avatar_url);
     };
-    fetchActivities();
-  }, []);
+    loadAvatar();
+  }, [user.id]);
 
   const initials = savedName
     .split(' ')
-    .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, '')) // Limpiar caracteres especiales
+    .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''))
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0])
@@ -113,14 +103,87 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
     setEditingName(false);
   };
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     setPwError('');
     if (!currentPw) { setPwError('Introduce tu contraseña actual.'); return; }
     if (newPw.length < 6) { setPwError('La nueva contraseña debe tener al menos 6 caracteres.'); return; }
     if (newPw !== confirmPw) { setPwError('Las contraseñas no coinciden.'); return; }
-    setPwSaved(true);
-    setCurrentPw(''); setNewPw(''); setConfirmPw('');
-    setTimeout(() => { setPwSaved(false); setPwSection(false); }, 2000);
+
+    setPwLoading(true);
+    try {
+      // Verificar contraseña actual re-autenticando
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPw,
+      });
+      if (signInError) {
+        setPwError('La contraseña actual es incorrecta.');
+        setPwLoading(false);
+        return;
+      }
+
+      // Actualizar contraseña en Supabase
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPw });
+      if (updateError) {
+        setPwError(updateError.message);
+        setPwLoading(false);
+        return;
+      }
+
+      setPwSaved(true);
+      setCurrentPw(''); setNewPw(''); setConfirmPw('');
+      setTimeout(() => { setPwSaved(false); setPwSection(false); }, 2500);
+    } catch {
+      setPwError('Error inesperado. Inténtalo de nuevo.');
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user.id) return;
+
+    // Validar tipo y tamaño (máx. 2 MB)
+    if (!file.type.startsWith('image/')) {
+      setAvatarError('Solo se permiten imágenes.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError('La imagen no puede superar 2 MB.');
+      return;
+    }
+
+    setAvatarError('');
+    setAvatarLoading(true);
+
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const path = `${user.id}/avatar.${ext}`;
+
+      // Subir a Supabase Storage (bucket: avatars)
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      // Obtener URL pública
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`; // evitar caché
+
+      // Guardar en profiles
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+
+      setAvatarUrl(publicUrl);
+    } catch (err: any) {
+      setAvatarError('No se pudo subir la imagen. Inténtalo de nuevo.');
+      console.error('Avatar upload error:', err);
+    } finally {
+      setAvatarLoading(false);
+      // Reset input para permitir re-subir el mismo archivo
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -135,15 +198,46 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
 
       {/* ── Top card: avatar + info ── */}
       <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
-
-
         <div className="px-6 py-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             {/* Avatar */}
             <div className="flex items-end gap-4">
-              <div className="w-20 h-20 rounded-2xl bg-stone-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 text-lg font-normal transition-colors">
-                {initials}
+              {/* Avatar clickable */}
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarLoading}
+                  className="w-20 h-20 rounded-2xl bg-stone-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 text-lg font-normal transition-all overflow-hidden relative focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-offset-2"
+                  title="Cambiar foto de perfil"
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
+                  {/* Overlay de cámara al hover */}
+                  <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl">
+                    {avatarLoading
+                      ? <Loader2 size={20} className="text-white animate-spin" />
+                      : <Camera size={20} className="text-white" />
+                    }
+                  </span>
+                </button>
+                {/* Input oculto */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
               </div>
+
               <div className="mb-1">
                 {editingName ? (
                   <div className="flex items-center gap-2">
@@ -177,6 +271,17 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                     En línea
                   </span>
                 </div>
+                {/* Error de avatar */}
+                {avatarError && (
+                  <p className="text-[11px] text-red-500 flex items-center gap-1 mt-1">
+                    <AlertTriangle size={11} />{avatarError}
+                  </p>
+                )}
+                {!avatarError && (
+                  <p className="text-[11px] text-slate-400 dark:text-stone-500 mt-1">
+                    Haz clic en la foto para cambiarla
+                  </p>
+                )}
               </div>
             </div>
 
@@ -187,7 +292,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                   <Mail size={13} className="text-slate-400" />
                   {user.email}
                 </span>
-
               </div>
               <button
                 onClick={onLogout}
@@ -229,7 +333,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                     </span>
                     <div className="text-left">
                       <p className="text-sm font-medium text-slate-700 dark:text-stone-200">Cambiar contraseña</p>
-                      <p className="text-xs text-slate-400 dark:text-stone-500">Última vez hace 30 días</p>
+                      <p className="text-xs text-slate-400 dark:text-stone-500">Protege tu cuenta con una contraseña segura</p>
                     </div>
                   </div>
                   <ChevronRight size={16} className={`text-slate-300 dark:text-stone-600 transition-transform duration-200 ${pwSection ? 'rotate-90' : ''}`} />
@@ -294,9 +398,13 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                     <div className="flex gap-2 pt-1">
                       <button
                         onClick={handleSavePassword}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium transition-colors"
+                        disabled={pwLoading}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-xs font-medium transition-colors"
                       >
-                        <Save size={13} /> Guardar
+                        {pwLoading
+                          ? <><Loader2 size={13} className="animate-spin" /> Guardando...</>
+                          : <><Save size={13} /> Guardar</>
+                        }
                       </button>
                       <button
                         onClick={() => { setPwSection(false); setCurrentPw(''); setNewPw(''); setConfirmPw(''); setPwError(''); }}
@@ -325,44 +433,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                 </span>
               </div>
             </div>
-          </section>
-
-          {/* Activity log */}
-          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
-            <div className="module-header">
-              <div className="flex items-center gap-2">
-                <Activity size={15} className="text-orange-500" />
-                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Actividad reciente</span>
-              </div>
-            </div>
-            {loadingActivities ? (
-              <div className="p-6 text-center text-xs text-slate-400 dark:text-stone-500">
-                Cargando actividad...
-              </div>
-            ) : activities.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-400 dark:text-stone-500">
-                No hay actividad reciente registrada.
-              </div>
-            ) : (
-              <ul className="divide-y divide-stone-100 dark:divide-stone-800">
-                {activities.map((item) => (
-                  <li key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
-                    <span className="w-7 h-7 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center shrink-0">
-                      <Activity size={13} className="text-orange-400" />
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-600 dark:text-stone-300 truncate">
-                        {item.action}
-                      </p>
-                      <p className="text-[10px] text-slate-400 dark:text-stone-500">
-                        Por {item.user_name}
-                      </p>
-                    </div>
-                    <span className="text-xs text-slate-400 dark:text-stone-500 whitespace-nowrap">{formatActivityTime(item.created_at)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </section>
         </div>
 
@@ -406,4 +476,3 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
 };
 
 export default Profile;
-
