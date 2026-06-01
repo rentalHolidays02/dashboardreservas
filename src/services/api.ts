@@ -823,10 +823,15 @@ export const appsScriptApi = {
   // Reenvía acceso al email: dispara a la vez magic link (signInWithOtp) y recuperación de contraseña
   // (resetPasswordForEmail). Así el usuario recibe ambos correos: uno para entrar directo y otro para
   // (re)establecer contraseña. No pasa por el Apps Script.
+  //
+  // redirectTo: tras pulsar el enlace del correo, Supabase manda al usuario a esta URL con el token
+  // de recuperación en el hash. Login.tsx detecta `type=recovery` y abre el flujo de nueva contraseña.
+  // Esta URL DEBE estar en la whitelist de Dashboard → Authentication → URL Configuration → Redirect URLs.
   resendInvitation: async (email: string): Promise<{ ok: boolean; error?: string }> => {
+    const redirectTo = import.meta.env.VITE_AUTH_REDIRECT_URL || 'https://base-datos-pagos-rh.vercel.app/';
     const [otpRes, resetRes] = await Promise.all([
-      supabase.auth.signInWithOtp({ email }),
-      supabase.auth.resetPasswordForEmail(email),
+      supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } }),
+      supabase.auth.resetPasswordForEmail(email, { redirectTo }),
     ]);
     const errors = [otpRes.error?.message, resetRes.error?.message].filter(Boolean) as string[];
     // Si al menos uno se envió, lo damos por bueno.
