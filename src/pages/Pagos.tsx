@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Banknote, Clock, ChevronLeft, ChevronRight, Search, CheckCircle2, Calculator, Wallet, X, TrendingUp } from 'lucide-react';
-import { appsScriptApi } from '../services/api';
+import { appsScriptApi, activityLogApi } from '../services/api';
 import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Incidencia, User as AppUser } from '../services/mockData';
 import { computeWorkerEarnings, matchesWorkerByPhone, EXTRA_HOUR_RATE } from '../utils/payments';
+import { buildPayableItems, PayableItem } from '../utils/paymentItems';
 import { supabase } from '../services/supabaseClient';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import ItemSelectorModal from '../components/pagos/ItemSelectorModal';
+import CobrosBulkBar from '../components/pagos/CobrosBulkBar';
 
 const fmtCurrency = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
@@ -44,6 +47,7 @@ interface MonthlySummary {
   worker: Worker;
   numReservations: number;
   numKilometers: number;
+  hoursWorked: number;
   extraHours: number;
   numIncidents: number;
   numLinenServices: number;
@@ -77,31 +81,40 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
   const [selected, setSelected] = useState<string | null>(null);
   const [savingWorkerId, setSavingWorkerId] = useState<string | null>(null);
 
+  const [itemModalOpen, setItemModalOpen] = useState(false);
+
   const canEdit = userRole === 'admin' || userRole === 'editor';
 
-  useEffect(() => {
-    let mounted = true;
+  const loadAll = async () => {
     setLoading(true);
-    Promise.all([
-      appsScriptApi.getWorkers().catch(() => [] as Worker[]),
-      appsScriptApi.getNormalCleans().catch(() => [] as NormalCleanRecord[]),
-      appsScriptApi.getInitialCleans().catch(() => [] as InitialCleanRecord[]),
-      appsScriptApi.getHandymanRecords().catch(() => [] as HandymanRecord[]),
-      appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
-      appsScriptApi.getRecentIncidencias(500).catch(() => [] as Incidencia[]),
-    ]).then(([ws, nc, ic, hm, el, inc]) => {
-      if (!mounted) return;
+    try {
+      const [ws, nc, ic, hm, el, inc] = await Promise.all([
+        appsScriptApi.getWorkers().catch(() => [] as Worker[]),
+        appsScriptApi.getNormalCleans().catch(() => [] as NormalCleanRecord[]),
+        appsScriptApi.getInitialCleans().catch(() => [] as InitialCleanRecord[]),
+        appsScriptApi.getHandymanRecords().catch(() => [] as HandymanRecord[]),
+        appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
+        appsScriptApi.getRecentIncidencias(500).catch(() => [] as Incidencia[]),
+      ]);
       setWorkers(ws);
       setNormalCleans(nc);
       setInitialCleans(ic);
       setHandymanRecords(hm);
       setEntregaLlaves(el);
       setIncidencias(inc);
-    }).finally(() => {
-      if (mounted) setLoading(false);
-    });
-    return () => { mounted = false; };
-  }, []);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshWorkers = async () => {
+    try {
+      const ws = await appsScriptApi.getWorkers();
+      setWorkers(ws);
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => { loadAll(); }, []);
 
   const summaries = useMemo<MonthlySummary[]>(() => {
     const ym = periodToYearMonth(period);
@@ -136,6 +149,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
         worker: w,
         numReservations: earnings.cleanCount,
         numKilometers: Math.round(earnings.kms * 100) / 100,
+        hoursWorked: Math.round(earnings.hoursWorked * 100) / 100,
         extraHours: Math.round(earnings.extraHours * 100) / 100,
         numIncidents,
         numLinenServices,
@@ -174,13 +188,34 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
   const animRetenido = useAnimatedNumber(stats.totalRetenido);
   const animNumPendientes = useAnimatedNumber(stats.numPendientes);
 
+  const selectedSummary = useMemo(
+    () => selected ? summaries.find(s => s.workerId === selected) : null,
+    [selected, summaries]
+  );
+
+  // Items cobrables solo del trabajador seleccionado (modo single del ItemSelectorModal)
+  const selectedWorkerItems = useMemo<PayableItem[]>(() => {
+    if (!selectedSummary) return [];
+    return buildPayableItems(
+      [selectedSummary.worker],
+      normalCleans, initialCleans, handymanRecords, entregaLlaves, incidencias
+    );
+  }, [selectedSummary, normalCleans, initialCleans, handymanRecords, entregaLlaves, incidencias]);
+
   const handleMarcarPagado = async (workerId: string) => {
     if (!canEdit) return;
     setSavingWorkerId(workerId);
     try {
+      const w = workers.find(x => x.id === workerId);
+      const prevBalance = w?.owedMoney ?? 0;
       const { error } = await supabase.from('workers').update({ pending_balance: 0 }).eq('id', workerId);
       if (error) throw error;
-      setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, owedMoney: 0 } : w));
+      setWorkers(prev => prev.map(x => x.id === workerId ? { ...x, owedMoney: 0 } : x));
+      await activityLogApi.log(
+        user?.id || null, user?.name || 'Sistema',
+        `Marcó como pagado a ${w?.fullName || 'trabajador'} (saldaba ${prevBalance.toFixed(2)}€)`,
+        'marcar_pagado'
+      );
     } catch (e: any) {
       console.error('Error marcando como pagado:', e);
       alert(`Error: ${e?.message || e}`);
@@ -189,27 +224,21 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
     }
   };
 
-  const handleAcumular = async (workerId: string, totalMes: number) => {
-    if (!canEdit) return;
-    setSavingWorkerId(workerId);
-    try {
-      const current = workers.find(w => w.id === workerId)?.owedMoney ?? 0;
-      const next = Math.round((current + totalMes) * 100) / 100;
-      const { error } = await supabase.from('workers').update({ pending_balance: next }).eq('id', workerId);
-      if (error) throw error;
-      setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, owedMoney: next } : w));
-    } catch (e: any) {
-      console.error('Error acumulando saldo:', e);
-      alert(`Error: ${e?.message || e}`);
-    } finally {
-      setSavingWorkerId(null);
-    }
+  const handleSingleConfirm = async (items: PayableItem[]) => {
+    if (!selectedSummary) return;
+    const w = selectedSummary.worker;
+    const addAmount = items.reduce((s, it) => s + it.monto, 0);
+    const current = w.owedMoney ?? 0;
+    const next = Math.round((current + addAmount) * 100) / 100;
+    const { error } = await supabase.from('workers').update({ pending_balance: next }).eq('id', w.id);
+    if (error) throw error;
+    setWorkers(prev => prev.map(x => x.id === w.id ? { ...x, owedMoney: next } : x));
+    await activityLogApi.log(
+      user?.id || null, user?.name || 'Sistema',
+      `Sumó ${addAmount.toFixed(2)}€ (${items.length} items) al pendiente de ${w.fullName} · selección individual`,
+      'asignar_cobro_individual'
+    );
   };
-
-  const selectedSummary = useMemo(
-    () => selected ? summaries.find(s => s.workerId === selected) : null,
-    [selected, summaries]
-  );
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-700">
@@ -258,6 +287,10 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
               </button>
             ))}
           </div>
+
+          {canEdit && (
+            <CobrosBulkBar user={user} onAfterApply={refreshWorkers} />
+          )}
         </div>
       </header>
 
@@ -357,7 +390,8 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-stone-400">
                             <Calculator size={11} className="text-slate-300" />
-                            {s.numReservations} res · {s.numKilometers.toFixed(0)} km · {s.extraHours.toFixed(1)} h
+                            {s.numReservations} res · {s.numKilometers.toFixed(0)} km · {s.hoursWorked.toFixed(1)} h
+                            {s.extraHours > 0 && <span className="text-amber-600 dark:text-amber-400"> ({s.extraHours.toFixed(1)} extra)</span>}
                             {s.numIncidents > 0 && <span> · {s.numIncidents} inc</span>}
                           </div>
                         </td>
@@ -396,7 +430,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
         )}
       </div>
 
-      {/* Modal detalle */}
+      {/* Modal detalle individual */}
       {selectedSummary && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in"
              onClick={() => setSelected(null)}>
@@ -421,11 +455,12 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
               <section>
                 <h3 className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 mb-3">Actividad del mes</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <DetalleStat label="Reservas"        value={selectedSummary.numReservations} />
-                  <DetalleStat label="Kilómetros"      value={`${selectedSummary.numKilometers.toFixed(1)} km`} />
-                  <DetalleStat label="Horas extra"     value={`${selectedSummary.extraHours.toFixed(1)} h`} />
-                  <DetalleStat label="Incidencias"     value={selectedSummary.numIncidents} />
-                  <DetalleStat label="Sábanas/toallas" value={selectedSummary.numLinenServices} />
+                  <DetalleStat label="Reservas"         value={selectedSummary.numReservations} />
+                  <DetalleStat label="Kilómetros"       value={`${selectedSummary.numKilometers.toFixed(1)} km`} />
+                  <DetalleStat label="Horas trabajadas" value={`${selectedSummary.hoursWorked.toFixed(1)} h`} />
+                  <DetalleStat label="Horas extra"      value={`${selectedSummary.extraHours.toFixed(1)} h`} />
+                  <DetalleStat label="Incidencias"      value={selectedSummary.numIncidents} />
+                  <DetalleStat label="Sábanas/toallas"  value={selectedSummary.numLinenServices} />
                 </div>
               </section>
 
@@ -462,10 +497,10 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
             {canEdit && (
               <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50">
                 {selectedSummary.total > 0 && (
-                  <button onClick={() => handleAcumular(selectedSummary.workerId, selectedSummary.total)}
+                  <button onClick={() => setItemModalOpen(true)}
                     disabled={savingWorkerId === selectedSummary.workerId}
                     className="flex items-center gap-2 px-4 py-2 bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-stone-200 text-xs font-medium rounded-xl hover:bg-stone-200 dark:hover:bg-stone-700 transition-all disabled:opacity-50">
-                    <TrendingUp size={14} /> Acumular a pendiente
+                    <TrendingUp size={14} /> Añadir al pendiente
                   </button>
                 )}
                 {(selectedSummary.worker.owedMoney ?? 0) > 0 && (
@@ -479,6 +514,21 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Selector granular de items (individual) */}
+      {selectedSummary && (
+        <ItemSelectorModal
+          isOpen={itemModalOpen}
+          mode="single"
+          workerName={selectedSummary.worker.fullName}
+          currentBalance={selectedSummary.worker.owedMoney ?? 0}
+          items={selectedWorkerItems}
+          initialPeriod="this"
+          preselectAll={true}
+          onClose={() => setItemModalOpen(false)}
+          onConfirm={handleSingleConfirm}
+        />
       )}
     </div>
   );

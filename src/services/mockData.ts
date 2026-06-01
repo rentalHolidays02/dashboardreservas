@@ -4,7 +4,6 @@ export interface User {
   role: 'admin' | 'editor' | 'viewer' | 'trabajador';
   name: string;
   telefono?: string;
-  last_location?: any;
   last_seen?: string | null;
 }
 

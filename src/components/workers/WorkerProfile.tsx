@@ -3,7 +3,7 @@ import {
   ArrowLeft, Edit2, Phone, Mail, CreditCard, MapPin, Hash,
   ClipboardList, Car, Euro, CheckCircle2, Clock, Send, FileText,
   BarChart3, MessageSquare, Wrench, Sparkles, ChevronRight, Loader2,
-  RotateCcw, Check, Landmark, Building2, Smartphone, User as UserIcon,
+  RotateCcw, Check, Landmark, Building2, User as UserIcon,
   Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2, Pencil, XCircle, Plus, CheckCheck
 } from 'lucide-react';
 import {
@@ -946,7 +946,6 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
               <EditableRow icon={<Phone size={12} />} label="Teléfono" value={draft.telefono} isEditing={isEditing} onChange={v => setDraftField('telefono', v)} type="tel" />
               <EditableRow icon={<Mail size={12} />} label="Email" value={draft.email} isEditing={isEditing} onChange={v => setDraftField('email', v)} type="email" />
               <EditableRow icon={<MapPin size={12} />} label="Dirección" value={(draft as any).direccion} isEditing={isEditing} onChange={v => setDraftField('direccion' as any, v)} />
-              <EditableRow icon={<Smartphone size={12} />} label="Ubicación real-time" value={(draft as any).location} isEditing={isEditing} onChange={v => setDraftField('location' as any, v)} />
             </div>
 
             <SectionTitle>Configuración de pagos</SectionTitle>
@@ -957,6 +956,9 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
                 { value: 'efectivo', label: 'Efectivo' },
               ]} />
               <EditableRow icon={<Banknote size={12} />} label="Pago por reserva" value={String(draft.pagoPorReserva ?? 0)} isEditing={isEditing} onChange={v => setDraftField('pagoPorReserva', v === '' ? 0 : Number(v))} type="number" placeholder="0" />
+              <EditableRow icon={<Banknote size={12} />} label="Pago por reserva adicional" value={String(draft.pagoPorReservaAdicional ?? 0)} isEditing={isEditing} onChange={v => setDraftField('pagoPorReservaAdicional' as any, v === '' ? 0 : Number(v))} type="number" placeholder="0" />
+              <EditableRow icon={<Banknote size={12} />} label="Pago por sábanas y toallas" value={String(draft.pagoPorServicioSabanas ?? 0)} isEditing={isEditing} onChange={v => setDraftField('pagoPorServicioSabanas' as any, v === '' ? 0 : Number(v))} type="number" placeholder="0" />
+              <EditableRow icon={<Banknote size={12} />} label="Pago por incidencia" value={String(draft.pagoPorIncidencia ?? 0)} isEditing={isEditing} onChange={v => setDraftField('pagoPorIncidencia' as any, v === '' ? 0 : Number(v))} type="number" placeholder="0" />
               <EditableRow icon={<Activity size={12} />} label="Precio por Km" value={String(draft.precioPorKm ?? 0)} isEditing={isEditing} onChange={v => setDraftField('precioPorKm', v === '' ? 0 : Number(v))} type="number" placeholder="0" />
             </div>
 

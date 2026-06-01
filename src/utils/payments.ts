@@ -85,7 +85,8 @@ export const matchesWorkerByPhone = (recordPhone?: string, workerPhone?: string)
 export interface WorkerEarnings {
   cleanCount: number;          // Nº de limpiezas (normal + inicial)
   reservasPay: number;         // Suma de pagoPorReserva por cada limpieza
-  extraHours: number;          // Total de horas extra
+  hoursWorked: number;         // Total horas trabajadas (esperadas + extras)
+  extraHours: number;          // Total de horas extra (por encima de las esperadas)
   extraPay: number;            // Pago por horas extra
   kms: number;                 // Km totales
   kmsPay: number;              // Pago por km
@@ -107,6 +108,7 @@ export const computeWorkerEarnings = (
 
   let cleanCount = 0;
   let reservasPay = 0;
+  let hoursWorked = 0;
   let extraHours = 0;
   let extraPay = 0;
   let kms = 0;
@@ -115,6 +117,7 @@ export const computeWorkerEarnings = (
     cleanCount += 1;
     const calc = computeCleanPay(apartamento, horaEntrada, horaSalida, pagoPorReserva);
     reservasPay += calc.base;
+    hoursWorked += calc.hoursWorked;
     extraHours += calc.extraHours;
     extraPay += calc.extraPay;
     kms += km || 0;
@@ -171,6 +174,7 @@ export const computeWorkerEarnings = (
   return {
     cleanCount,
     reservasPay,
+    hoursWorked,
     extraHours,
     extraPay,
     kms,

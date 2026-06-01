@@ -34,6 +34,9 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
     tipoPago: 'bizum' as 'bizum' | 'tarjeta' | 'efectivo',
     tipoTrabajador: 'Limpiador' as 'Limpiador' | 'Manitas',
     pagoPorReserva: 0,
+    pagoPorReservaAdicional: 0,
+    pagoPorServicioSabanas: 0,
+    pagoPorIncidencia: 0,
     precioPorKm: 0,
     telefonoBizum: '',
     iban: '',
@@ -121,8 +124,11 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
       const dataToSave = {
         ...formData,
         dni: formData.dni?.trim().toUpperCase(),
-        pagoPorReserva: parseFloat(String(formData.pagoPorReserva).replace(',', '.')) || 0,
-        precioPorKm: parseFloat(String(formData.precioPorKm).replace(',', '.')) || 0,
+        pagoPorReserva:           parseFloat(String(formData.pagoPorReserva          ).replace(',', '.')) || 0,
+        pagoPorReservaAdicional:  parseFloat(String(formData.pagoPorReservaAdicional ).replace(',', '.')) || 0,
+        pagoPorServicioSabanas:   parseFloat(String(formData.pagoPorServicioSabanas  ).replace(',', '.')) || 0,
+        pagoPorIncidencia:        parseFloat(String(formData.pagoPorIncidencia       ).replace(',', '.')) || 0,
+        precioPorKm:              parseFloat(String(formData.precioPorKm             ).replace(',', '.')) || 0,
       };
       await onSave(dataToSave);
       onClose();
@@ -171,7 +177,7 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
       value = finalValue;
     }
 
-    if (['pagoPorReserva', 'precioPorKm'].includes(name)) {
+    if (['pagoPorReserva', 'pagoPorReservaAdicional', 'pagoPorServicioSabanas', 'pagoPorIncidencia', 'precioPorKm'].includes(name)) {
       setFormData((prev: any) => ({
         ...prev,
         [name]: value === '' ? '' : value.replace(',', '.')
@@ -357,27 +363,65 @@ const WorkerModal: React.FC<WorkerModalProps> = ({
             </div>
             <div>
               <label className={labelClass}><span className="text-slate-400">€</span> Pago por reserva</label>
-              <input 
-                type="text" 
-                name="pagoPorReserva" 
-                value={formData.pagoPorReserva} 
-                onChange={handleChange} 
-                placeholder="20" 
-                className={`${inputClass} tabular-nums`} 
+              <input
+                type="text"
+                name="pagoPorReserva"
+                value={formData.pagoPorReserva}
+                onChange={handleChange}
+                placeholder="20"
+                className={`${inputClass} tabular-nums`}
               />
             </div>
           </div>
 
-          <div>
-            <label className={labelClass}>Precio por km (€/km)</label>
-            <input 
-              type="text" 
-              name="precioPorKm" 
-              value={formData.precioPorKm} 
-              onChange={handleChange} 
-              placeholder="Ej. 0.19" 
-              className={`${inputClass} tabular-nums`} 
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}><span className="text-slate-400">€</span> Pago por reserva adicional</label>
+              <input
+                type="text"
+                name="pagoPorReservaAdicional"
+                value={formData.pagoPorReservaAdicional ?? 0}
+                onChange={handleChange}
+                placeholder="5"
+                className={`${inputClass} tabular-nums`}
+              />
+            </div>
+            <div>
+              <label className={labelClass}><span className="text-slate-400">€</span> Pago por sábanas y toallas</label>
+              <input
+                type="text"
+                name="pagoPorServicioSabanas"
+                value={formData.pagoPorServicioSabanas ?? 0}
+                onChange={handleChange}
+                placeholder="5"
+                className={`${inputClass} tabular-nums`}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}><span className="text-slate-400">€</span> Pago por incidencia</label>
+              <input
+                type="text"
+                name="pagoPorIncidencia"
+                value={formData.pagoPorIncidencia ?? 0}
+                onChange={handleChange}
+                placeholder="10"
+                className={`${inputClass} tabular-nums`}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Precio por km (€/km)</label>
+              <input
+                type="text"
+                name="precioPorKm"
+                value={formData.precioPorKm}
+                onChange={handleChange}
+                placeholder="Ej. 0.19"
+                className={`${inputClass} tabular-nums`}
+              />
+            </div>
           </div>
 
           {formData.tipoPago === 'bizum' && (
