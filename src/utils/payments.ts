@@ -1,4 +1,4 @@
-import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Worker } from '../services/mockData';
+import { NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Incidencia, Worker } from '../services/mockData';
 
 export const EXTRA_HOUR_RATE = 10; // €/h para horas extra
 export const HOURLY_RATE     = 10; // €/h para limpieza inicial y manitas (todas las horas, no solo "extras")
@@ -111,7 +111,8 @@ export const computeWorkerEarnings = (
   normalCleans: NormalCleanRecord[],
   initialCleans: InitialCleanRecord[],
   handymanRecords: HandymanRecord[],
-  entregaLlaves: EntregaLlaves[]
+  entregaLlaves: EntregaLlaves[],
+  incidencias: Incidencia[] = []
 ): WorkerEarnings => {
   const pagoPorReserva = worker.pagoPorReserva ?? 0;
   const precioPorKm = worker.precioPorKm ?? 0;
@@ -161,6 +162,18 @@ export const computeWorkerEarnings = (
     kms += r.cantidadMinutos || 0; // el parser guarda km en cantidadMinutos
   });
 
+  // Incidencias: sólo se cuentan los km del trayecto (el pago por incidencia se calcula aparte en Pagos.tsx).
+  incidencias.forEach(i => {
+    if (!matchesWorkerByPhone(i.telefono, worker.telefono)) return;
+    kms += Number(i.kms) || 0;
+  });
+
+  // Entregas de llaves: km del trayecto (las sábanas se pagan en Pagos.tsx como montoSabanas).
+  entregaLlaves.forEach(e => {
+    if (!matchesWorkerByPhone(e.telefono, worker.telefono)) return;
+    kms += Number(e.km) || 0;
+  });
+
   const kmsPay = kms * precioPorKm;
   const totalOwed = reservasPay + extraPay + initialPay + manitasPay + kmsPay;
 
@@ -199,6 +212,17 @@ export const computeWorkerEarnings = (
   };
 };
 
+// Acepta ISO "YYYY-MM-DD…", locale "D/M/YYYY…" y sufijo "… | lat, lng".
+const toIsoKey = (raw: string): string | null => {
+  if (!raw) return null;
+  const head = String(raw).split('|')[0].trim();
+  const iso = head.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+  const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (loc) return `${loc[3]}-${loc[2].padStart(2, '0')}-${loc[1].padStart(2, '0')}`;
+  return null;
+};
+
 // Filtra los registros para quedarse sólo con los que caen dentro de una ventana de periodo.
 export const filterRecordsByPeriod = <T extends { date: string }>(
   records: T[],
@@ -209,31 +233,33 @@ export const filterRecordsByPeriod = <T extends { date: string }>(
 ): T[] => {
   const today = referenceDate ? new Date(referenceDate) : new Date();
   today.setHours(0, 0, 0, 0);
-  let days = 30;
-  let endDate = today;
-
-  if (period === 'semanal') days = 7;
-  else if (period === 'mensual') days = 30;
-  else if (period === 'trimestral') days = 12 * 7;
-  else if (period === 'personalizado' && desde && hasta) {
-    const start = new Date(desde);
-    const end = new Date(hasta);
-    endDate = end;
-    days = Math.min(Math.round((end.getTime() - start.getTime()) / 86400000) + 1, 90);
-  }
-
-  const startDate = new Date(endDate);
-  startDate.setDate(endDate.getDate() - (days - 1));
   const localKey = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const startIso = localKey(startDate);
-  const endIso = localKey(endDate);
+
+  let startIso: string;
+  let endIso: string;
+
+  if (period === 'mensual') {
+    // Mes natural: día 1 → último día del mes actual.
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const last  = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    startIso = localKey(first);
+    endIso   = localKey(last);
+  } else if (period === 'personalizado' && desde && hasta) {
+    startIso = desde;
+    endIso   = hasta;
+  } else {
+    let days = period === 'semanal' ? 7 : period === 'trimestral' ? 12 * 7 : 30;
+    const endDate = today;
+    const startDate = new Date(endDate);
+    startDate.setDate(endDate.getDate() - (days - 1));
+    startIso = localKey(startDate);
+    endIso   = localKey(endDate);
+  }
 
   return records.filter(r => {
-    const raw = r.date;
-    if (!raw) return false;
-    const part = String(raw).split('T')[0].split(' ')[0];
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(part)) return false;
+    const part = toIsoKey(r.date);
+    if (!part) return false;
     return part >= startIso && part <= endIso;
   });
 };
@@ -248,7 +274,8 @@ export const computeWorkerEarningsInRange = (
   period: 'semanal' | 'mensual' | 'trimestral' | 'personalizado',
   desde?: string,
   hasta?: string,
-  referenceDate?: Date
+  referenceDate?: Date,
+  incidencias: Incidencia[] = []
 ): WorkerEarnings => {
   const nc = filterRecordsByPeriod(
     normalCleans.map(r => ({ ...r, date: r.checkinFecha })),
@@ -266,7 +293,11 @@ export const computeWorkerEarningsInRange = (
     entregaLlaves.map(e => ({ ...e, date: e.fechaUbicacionEntrega || '' })),
     period, desde, hasta, referenceDate
   );
-  return computeWorkerEarnings(worker, nc, ic, hm, el);
+  const inc = filterRecordsByPeriod(
+    incidencias.map(i => ({ ...i, date: i.timestamp || '' })),
+    period, desde, hasta, referenceDate
+  );
+  return computeWorkerEarnings(worker, nc, ic, hm, el, inc);
 };
 
 // ─── Series temporales por trabajador ────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../services/mockData';
+import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Incidencia, EntregaLlaves } from '../services/mockData';
 import { Period } from '../components/dashboard/DashboardFilterModal';
 import { computeCleanPay, computeHoursPay, cleanPhone, matchesWorkerByPhone } from './payments';
 
@@ -37,7 +37,9 @@ export const aggregateDailyData = (
   period: Period,
   customDesde?: string,
   customHasta?: string,
-  selectedWorkerId?: string | null
+  selectedWorkerId?: string | null,
+  incidencias: Incidencia[] = [],
+  entregaLlaves: EntregaLlaves[] = []
 ): ChartPoint[] => {
   const result: Record<string, ChartPoint> = {};
 
@@ -53,7 +55,20 @@ export const aggregateDailyData = (
   let endDate = today;
 
   if (period === 'semanal') { iterations = 7; step = 1; }
-  else if (period === 'mensual') { iterations = 30; step = 1; }
+  else if (period === 'mensual') {
+    // Mes natural: día 1 → último día del mes en curso (no últimos 30 días).
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const last  = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    endDate = last;
+    iterations = last.getDate();
+    step = 1;
+    for (let day = 1; day <= iterations; day++) {
+      const d = new Date(first.getFullYear(), first.getMonth(), day);
+      const iso = localKey(d);
+      const label = d.toLocaleString('es-ES', { day: 'numeric', month: 'short' });
+      result[iso] = { label, dinero: 0, limpiezas: 0, km: 0 };
+    }
+  }
   else if (period === 'trimestral') { iterations = 12; step = 7; }
   else if (period === 'personalizado' && customDesde && customHasta) {
     const start = new Date(customDesde);
@@ -62,18 +77,31 @@ export const aggregateDailyData = (
     iterations = Math.min(Math.round((end.getTime() - start.getTime()) / 86400000) + 1, 90);
   }
 
-  for (let i = iterations - 1; i >= 0; i--) {
-    const d = new Date(endDate);
-    d.setDate(endDate.getDate() - i * step);
-    const iso = localKey(d);
-    const label = d.toLocaleString('es-ES', { day: 'numeric', month: 'short' });
-    result[iso] = { label, dinero: 0, limpiezas: 0, km: 0 };
+  if (period !== 'mensual') {
+    for (let i = iterations - 1; i >= 0; i--) {
+      const d = new Date(endDate);
+      d.setDate(endDate.getDate() - i * step);
+      const iso = localKey(d);
+      const label = d.toLocaleString('es-ES', { day: 'numeric', month: 'short' });
+      result[iso] = { label, dinero: 0, limpiezas: 0, km: 0 };
+    }
   }
 
   const selectedWorker = selectedWorkerId ? workers.find(w => w.id === selectedWorkerId) : null;
 
   const findWorker = (telefono: string): Worker | undefined => {
     return workers.find(w => matchesWorkerByPhone(w.telefono, telefono));
+  };
+
+  // Acepta ISO "YYYY-MM-DD…", locale "D/M/YYYY…" y sufijo "… | lat, lng".
+  const extractKey = (raw: string): string | null => {
+    if (!raw) return null;
+    const head = String(raw).split('|')[0].trim();
+    const iso = head.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+    const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (loc) return `${loc[3]}-${loc[2].padStart(2, '0')}-${loc[1].padStart(2, '0')}`;
+    return null;
   };
 
   const processClean = (
@@ -86,9 +114,8 @@ export const aggregateDailyData = (
     horaSalida: string,
     km: number
   ) => {
-    if (!fecha) return;
-    const datePart = String(fecha).split(' ')[0].split('T')[0];
-    if (!result[datePart]) return;
+    const datePart = extractKey(fecha);
+    if (!datePart || !result[datePart]) return;
 
     if (selectedWorker) {
       if (!matchRecordVsWorker(telefono, nombre, apellidos, selectedWorker)) return;
@@ -114,9 +141,8 @@ export const aggregateDailyData = (
     horaSalida: string,
     km: number
   ) => {
-    if (!fecha) return;
-    const datePart = String(fecha).split(' ')[0].split('T')[0];
-    if (!result[datePart]) return;
+    const datePart = extractKey(fecha);
+    if (!datePart || !result[datePart]) return;
 
     if (selectedWorker) {
       if (!matchRecordVsWorker(telefono, nombre, apellidos, selectedWorker)) return;
@@ -140,9 +166,8 @@ export const aggregateDailyData = (
     horaFin: string,
     km: number
   ) => {
-    if (!fecha) return;
-    const datePart = String(fecha).split(' ')[0].split('T')[0];
-    if (!result[datePart]) return;
+    const datePart = extractKey(fecha);
+    if (!datePart || !result[datePart]) return;
 
     if (selectedWorker) {
       if (!matchRecordVsWorker(telefono, nombre, apellidos, selectedWorker)) return;
@@ -153,6 +178,41 @@ export const aggregateDailyData = (
     const hp = computeHoursPay(horaInicio, horaFin);
     result[datePart].dinero += hp.pay + (km || 0) * precioPorKm;
     result[datePart].km += km || 0;
+    result[datePart].limpiezas += 1;
+  };
+
+  // Incidencia: pagoPorIncidencia + km × precioPorKm
+  const processIncidencia = (i: Incidencia) => {
+    const datePart = extractKey(i.timestamp);
+    if (!datePart || !result[datePart]) return;
+    if (selectedWorker) {
+      if (!matchRecordVsWorker(i.telefono || '', i.nombre || '', i.apellidos || '', selectedWorker)) return;
+    }
+    const worker = findWorker(i.telefono || '') ?? selectedWorker ?? undefined;
+    const precioPorKm = worker?.precioPorKm ?? 0.19;
+    const pagoInc = worker?.pagoPorIncidencia ?? 0;
+    const km = Number(i.kms) || 0;
+    result[datePart].dinero += pagoInc + km * precioPorKm;
+    result[datePart].km += km;
+    result[datePart].limpiezas += 1;
+  };
+
+  // Entrega de llaves: sábanas (si entregadas) + km × precioPorKm
+  const processLlaves = (e: EntregaLlaves) => {
+    const datePart = extractKey(e.fechaUbicacionEntrega || '');
+    if (!datePart || !result[datePart]) return;
+    if (selectedWorker) {
+      if (!matchRecordVsWorker(e.telefono || '', e.nombre || '', e.apellidos || '', selectedWorker)) return;
+    }
+    const worker = findWorker(e.telefono || '') ?? selectedWorker ?? undefined;
+    const precioPorKm = worker?.precioPorKm ?? 0.19;
+    const sab = String(e.sabanasToallas || '').toLowerCase();
+    const sabPaga = sab.includes('entregad') || sab.includes('sí') || sab.includes('si') || sab === 'true';
+    const pagoSab = sabPaga ? (worker?.pagoPorServicioSabanas ?? 0) : 0;
+    const km = Number(e.km) || 0;
+    result[datePart].dinero += pagoSab + km * precioPorKm;
+    result[datePart].km += km;
+    result[datePart].limpiezas += 1;
   };
 
   normalCleans.forEach(r =>
@@ -164,6 +224,8 @@ export const aggregateDailyData = (
   handymanRecords.forEach(r =>
     processHandyman(r.fechaFin || r.fechaLlegada, r.telefono, r.nombre, r.apellidos, r.horaInicioTarea, r.horaFinTarea, r.cantidadMinutos)
   );
+  incidencias.forEach(processIncidencia);
+  entregaLlaves.forEach(processLlaves);
 
   return Object.values(result);
 };

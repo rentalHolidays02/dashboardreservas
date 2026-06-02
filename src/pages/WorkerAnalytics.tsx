@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Accommodation } from '../services/mockData';
+import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Accommodation, Incidencia, EntregaLlaves } from '../services/mockData';
 import { appsScriptApi } from '../services/api';
 import { 
   Banknote,
@@ -87,10 +87,14 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
     normal: NormalCleanRecord[];
     initial: InitialCleanRecord[];
     handyman: HandymanRecord[];
+    incidencias: Incidencia[];
+    llaves: EntregaLlaves[];
   }>({
     normal: [],
     initial: [],
     handyman: [],
+    incidencias: [],
+    llaves: [],
   });
 
   // Period state
@@ -110,17 +114,19 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [workers, normal, initial, handyman, accs] = await Promise.all([
+        const [workers, normal, initial, handyman, accs, incidencias, llaves] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getNormalCleans(),
           appsScriptApi.getInitialCleans(),
           appsScriptApi.getHandymanRecords(),
-          appsScriptApi.getAccommodations()
+          appsScriptApi.getAccommodations(),
+          appsScriptApi.getRecentIncidencias(200).catch(() => [] as Incidencia[]),
+          appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
         ]);
-        
+
         setAllWorkers(workers);
         setAccommodations(accs);
-        setGlobalRecords({ normal, initial, handyman });
+        setGlobalRecords({ normal, initial, handyman, incidencias, llaves });
 
         const foundWorker = workers.find(w => 
           (user.telefono && cleanPhone(w.telefono) === cleanPhone(user.telefono)) ||
@@ -161,7 +167,9 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
       period,
       customDesde,
       customHasta,
-      selectedWorkerId || undefined
+      selectedWorkerId || undefined,
+      globalRecords.incidencias,
+      globalRecords.llaves,
     );
     return dailyData.map(d => ({
       label: d.label,
@@ -197,8 +205,10 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
     const normal = globalRecords.normal.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha, _type: 'normal' }));
     const initial = globalRecords.initial.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha, _type: 'initial' }));
     const handyman = globalRecords.handyman.filter(filterByWorker).map(r => ({ ...r, accommodation: r.alojamiento, date: r.fechaFin || r.fechaLlegada, _type: 'handyman' }));
+    const inc = globalRecords.incidencias.filter(filterByWorker).map(r => ({ ...r, accommodation: r.accommodationName, date: r.timestamp || '', _type: 'incidencia' }));
+    const ll = globalRecords.llaves.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.fechaUbicacionEntrega || '', _type: 'llaves' }));
 
-    const combined = [...normal, ...initial, ...handyman];
+    const combined = [...normal, ...initial, ...handyman, ...inc, ...ll];
     const filtered = filterRecordsByPeriod(combined, period, customDesde, customHasta);
 
     filtered.forEach(r => {
@@ -221,6 +231,19 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
         stats[name].km += qty;
         const hp = computeHoursPay((r as any).horaEntrada, (r as any).horaSalida);
         stats[name].dinero += hp.pay + qty * precioPorKm;
+      } else if (r._type === 'incidencia') {
+        const qty = Number((r as any).kms) || 0;
+        stats[name].km += qty;
+        const pagoInc = workerData?.pagoPorIncidencia ?? 0;
+        stats[name].dinero += pagoInc + qty * precioPorKm;
+      } else if (r._type === 'llaves') {
+        // Entrega de llaves: paga sábanas/toallas (si entregadas) + km × precioPorKm.
+        const qty = Number((r as any).km) || 0;
+        stats[name].km += qty;
+        const sab = String((r as any).sabanasToallas || '').toLowerCase();
+        const sabPaga = sab.includes('entregad') || sab.includes('sí') || sab.includes('si') || sab === 'true';
+        const pagoSab = sabPaga ? (workerData?.pagoPorServicioSabanas ?? 0) : 0;
+        stats[name].dinero += pagoSab + qty * precioPorKm;
       } else {
         const qty = (r as any).km || 0;
         stats[name].km += qty;

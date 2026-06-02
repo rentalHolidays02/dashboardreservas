@@ -1562,16 +1562,15 @@ export const appsScriptApi = {
           const apellidos = String(getVal('APELLIDOS') || '').trim();
           const fechaExcel = String(getVal('FECHA') || '').trim();
           
-          // Formatear fecha para que sea válida para JS (Sheets suele venir en DD/MM/YYYY)
+          // Formatea D/M/YYYY [HH:MM[:SS]] con coma o espacio → ISO. Robusto al separador.
           let timestamp = new Date().toISOString();
           if (fechaExcel) {
             try {
-              if (fechaExcel.includes('/')) {
-                const parts = fechaExcel.split(',')[0].split('/');
-                const timePart = fechaExcel.includes(',') ? fechaExcel.split(',')[1].trim() : '00:00:00';
-                // DD/MM/YYYY -> YYYY-MM-DD
-                timestamp = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T${timePart}`;
-              } else {
+              const m = fechaExcel.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+              if (m) {
+                const [, dd, mo, yy, hh, mi, ss] = m;
+                timestamp = `${yy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}T${(hh || '00').padStart(2, '0')}:${(mi || '00').padStart(2, '0')}:${(ss || '00').padStart(2, '0')}`;
+              } else if (!fechaExcel.includes('/')) {
                 timestamp = new Date(fechaExcel).toISOString();
               }
             } catch (e) {
@@ -1603,7 +1602,8 @@ export const appsScriptApi = {
             observaciones: String(getVal('OBSERVACIONES') || '').trim()
           };
         })
-        .filter(inc => inc.description && inc.description.trim() !== '') // Solo las que tienen descripción
+        // Antes filtraba sólo las que tienen descripción — eso excluía incidencias de prueba
+        // (creadas sin texto) en el resumen del trabajador.
         .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
         .slice(0, limit);
   
