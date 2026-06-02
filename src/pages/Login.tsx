@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { appsScriptApi } from '../services/api';
 import { Eye, EyeOff, Loader2, AlertCircle, Users, BarChart3, FileText } from 'lucide-react';
 import type { User } from '../services/mockData';
+import TermsModal from '../components/auth/TermsModal';
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
@@ -23,6 +24,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isInviteFlow, setIsInviteFlow] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const location = useLocation();
 
   // Detectar si el usuario viene de un enlace de invitación
@@ -69,13 +72,23 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           return;
         }
 
+        if (!acceptedTerms) {
+          setError('Debes aceptar los Términos y Condiciones para crear tu cuenta.');
+          setLoading(false);
+          return;
+        }
+
         const res = await appsScriptApi.updateUserPassword(password);
         if (res.ok) {
           // Una vez actualizada, intentamos obtener el perfil para entrar
           const { data: { user } } = await (await import('../services/supabaseClient')).supabase.auth.getUser();
           if (user && user.email) {
             const appUser = await appsScriptApi.login(user.email, password);
-            if (appUser) onLoginSuccess(appUser);
+            if (appUser) {
+              // Registrar la aceptación de T&C (no bloqueante)
+              if (appUser.id) await appsScriptApi.acceptTerms(appUser.id);
+              onLoginSuccess(appUser);
+            }
           } else {
             // Si algo falla, recargar para login normal
             window.location.hash = '';
@@ -255,6 +268,29 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 </div>
               )}
 
+              {/* Aceptación T&C (solo en flujo de invitación) */}
+              {isInviteFlow && (
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-stone-600 text-orange-500 focus:ring-orange-500/30 cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-600 dark:text-stone-400 leading-relaxed">
+                    He leído y acepto los{' '}
+                    <button
+                      type="button"
+                      onClick={() => setShowTerms(true)}
+                      className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                    >
+                      Términos y Condiciones
+                    </button>{' '}
+                    de uso de la plataforma.
+                  </span>
+                </label>
+              )}
+
               {/* Error */}
               {error && (
                 <div className="flex items-center gap-2 text-red-600 bg-red-50 dark:bg-red-950/40 px-4 py-3 rounded-xl text-sm border border-red-100 dark:border-red-900/40">
@@ -272,20 +308,36 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 {loading ? (
                   <>
                     <Loader2 className="animate-spin" size={17} />
-                    <span>Verificando…</span>
+                    <span>{isInviteFlow ? 'Creando cuenta…' : 'Verificando…'}</span>
                   </>
                 ) : (
-                  <span>Iniciar sesión</span>
+                  <span>{isInviteFlow ? 'Crear cuenta' : 'Iniciar sesión'}</span>
                 )}
               </button>
             </form>
 
-            <p className="mt-8 text-xs text-center text-slate-400 dark:text-stone-600">
+            {!isInviteFlow && (
+              <p className="mt-6 text-[11px] text-center text-slate-500 dark:text-stone-500 leading-relaxed">
+                Al iniciar sesión confirmas que aceptas los{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowTerms(true)}
+                  className="text-orange-600 dark:text-orange-400 hover:underline font-medium"
+                >
+                  Términos y Condiciones
+                </button>{' '}
+                de la plataforma.
+              </p>
+            )}
+
+            <p className="mt-6 text-xs text-center text-slate-400 dark:text-stone-600">
               Base de Datos Pagos RH · {new Date().getFullYear()}
             </p>
           </div>
         </div>
       </div>
+
+      <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} />
     </>
   );
 };

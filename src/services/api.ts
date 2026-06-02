@@ -775,6 +775,25 @@ export const appsScriptApi = {
     }
   },
 
+  // Registra la fecha en la que el usuario aceptó los T&C (flujo de invitación).
+  // No bloquea el onboarding si falla; solo deja log.
+  acceptTerms: async (userId: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ terms_accepted_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (error) {
+        console.error('No se pudo registrar la aceptación de T&C:', error.message);
+        return { ok: false, error: error.message };
+      }
+      return { ok: true };
+    } catch (error: any) {
+      console.error('Excepción al registrar aceptación de T&C:', error);
+      return { ok: false, error: error?.message };
+    }
+  },
+
   uploadReportPDF: async (blob: Blob, filename: string): Promise<{ ok: boolean, error?: string }> => {
     try {
       if (!SAVE_PDF_APPS_SCRIPT_URL) {
