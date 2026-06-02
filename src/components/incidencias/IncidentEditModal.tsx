@@ -147,36 +147,20 @@ const IncidentEditModal: React.FC<IncidentEditModalProps> = ({ incident, isOpen,
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
-                  Coste Estimado (€)
-                </label>
+            <div>
+              <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
+                Kilómetros (KMS)
+              </label>
+              <div className="relative">
+                <MapPin size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
                 <input
                   type="number"
-                  step="0.01"
+                  step="0.1"
                   readOnly={isReadOnly}
-                  value={formData.coste || ''}
-                  onChange={e => setFormData({ ...formData, coste: parseFloat(e.target.value) })}
-                  className={`w-full px-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none transition-all font-light ${isReadOnly ? 'cursor-default focus:ring-0 focus:border-slate-100 dark:focus:border-stone-700/50' : 'focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40'}`}
-                  placeholder="0.00"
+                  value={formData.kms || 0}
+                  onChange={e => setFormData({ ...formData, kms: parseFloat(e.target.value) })}
+                  className={`w-full pl-10 pr-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none transition-all font-light ${isReadOnly ? 'cursor-default focus:ring-0 focus:border-slate-100 dark:focus:border-stone-700/50' : 'focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40'}`}
                 />
-              </div>
-              <div>
-                <label className="block text-[11px] font-normal text-slate-400 dark:text-stone-500 tracking-widest mb-2 px-1">
-                  Kilómetros (KMS)
-                </label>
-                <div className="relative">
-                  <MapPin size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
-                  <input
-                    type="number"
-                    step="0.1"
-                    readOnly={isReadOnly}
-                    value={formData.kms || 0}
-                    onChange={e => setFormData({ ...formData, kms: parseFloat(e.target.value) })}
-                    className={`w-full pl-10 pr-4 py-3 bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 rounded-2xl text-slate-700 dark:text-stone-200 text-sm focus:outline-none transition-all font-light ${isReadOnly ? 'cursor-default focus:ring-0 focus:border-slate-100 dark:focus:border-stone-700/50' : 'focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/40'}`}
-                  />
-                </div>
               </div>
             </div>
 
