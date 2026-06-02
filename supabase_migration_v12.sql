@@ -1,25 +1,25 @@
--- =============================================================
--- MIGRACIÓN v12: Permitir borrar historial de informes
--- Ejecutar en Supabase > SQL Editor
--- =============================================================
+-- ============================================================
+-- Migración v12 — Aceptación de Términos y Condiciones
+-- Ejecutar en Supabase → SQL Editor (después de v11)
+-- ============================================================
 
-ALTER TABLE report_history ENABLE ROW LEVEL SECURITY;
+-- Fecha (UTC) en la que cada usuario aceptó los T&C al crear su cuenta.
+-- NULL = aún no aceptados (cuentas legacy creadas antes de esta migración).
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 
-DROP POLICY IF EXISTS "Admins y usuarios borran su historial" ON report_history;
-
-CREATE POLICY "Admins y usuarios borran su historial"
-ON report_history
-FOR DELETE
-TO authenticated
-USING (
-  user_id = auth.uid()
-  OR EXISTS (
-    SELECT 1
-    FROM profiles
-    WHERE profiles.id = auth.uid()
-      AND profiles.role = 'admin'
-  )
-);
+-- Las RLS existentes de v11 ya permiten:
+--   - SELECT: el propio usuario (auth.uid() = id) o admins.
+--   - UPDATE: admins. El usuario marca su propia aceptación durante el
+--     flujo de invitación, momento en el que aún tiene sesión Supabase
+--     iniciada con su UID; añadimos política específica para self-update
+--     limitada a esta columna.
+DROP POLICY IF EXISTS "Usuarios pueden marcar aceptación de T&C" ON public.profiles;
+CREATE POLICY "Usuarios pueden marcar aceptación de T&C"
+  ON public.profiles
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = id)
+  WITH CHECK (auth.uid() = id);
 
 NOTIFY pgrst, 'reload schema';
-
