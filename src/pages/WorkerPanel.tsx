@@ -49,6 +49,7 @@ interface UnifiedRecord {
   nombreCliente?: string;
   fechaEntrada?: string;
   fechaSalida?: string;
+  sabanasEntregadas?: boolean;
 }
 
 const normName = (s: string) =>
@@ -189,7 +190,7 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                 calculatedHours = computeHoursWorked(tIni, tFin);
               }
 
-              const pagoPorIncidencia = workerData?.pagoPorIncidencia ?? 0;
+              const pagoPorIncidencia = worker?.pagoPorIncidencia ?? 0;
               const kmPay = (r.kms || 0) * precioPorKm;
               return {
                 id: r.id,
@@ -211,22 +212,39 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
           ...llaves
             .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
             .map((r: EntregaLlaves) => {
+              const sab = String(r.sabanasToallas || '').toLowerCase();
+              const sabPaga = sab.includes('entregad') || sab.includes('sí') || sab.includes('si') || sab === 'true';
+              const pagoSab = sabPaga ? (worker?.pagoPorServicioSabanas ?? 0) : 0;
+              const kmPay = (r.km || 0) * precioPorKm;
               return {
                 id: r.id,
                 type: 'Llaves' as RecordType,
-                date: r.fechaEntradaReserva || r.fechaUbicacionEntrega || new Date().toISOString(),
+                date: r.fechaUbicacionEntrega || r.fechaEntradaReserva || new Date().toISOString(),
                 accommodation: r.apartamento,
                 kms: r.km || 0,
-                hoursWorked: 0, // No se calcula tiempo de trabajo desde fechas de reserva del cliente
-                earnings: 0,
+                hoursWorked: 0,
+                earnings: pagoSab + kmPay,
                 observations: r.observaciones || '',
                 checked: r.checked,
                 nombreCliente: r.nombreCliente,
                 fechaEntrada: r.fechaEntradaReserva,
                 fechaSalida: r.fechaSalidaReserva,
+                sabanasEntregadas: sabPaga,
               };
             }),
-        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        ].sort((a, b) => {
+          // Ordena por fecha desc. parseYMD evita Invalid Date con locale "D/M/YYYY | coords".
+          const parseSort = (raw: string): number => {
+            if (!raw) return -Infinity;
+            const head = String(raw).split('|')[0].trim();
+            const iso = head.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+            const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (loc) return new Date(+loc[3], +loc[2] - 1, +loc[1]).getTime();
+            return -Infinity;
+          };
+          return parseSort(b.date) - parseSort(a.date);
+        });
 
         setRecords(unified);
       } catch (error) {
@@ -238,28 +256,46 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
     fetchData();
   }, [user]);
 
+  // Devuelve {year, month0-indexed, day} desde ISO "YYYY-MM-DD..." o locale "D/M/YYYY".
+  // new Date("2/6/2026") parsea como M/D en Chrome → bug; este helper evita eso.
+  const parseYMD = (raw: string): { y: number; m: number; d: number } | null => {
+    if (!raw) return null;
+    const head = String(raw).split('|')[0].trim();
+    const iso = head.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return { y: +iso[1], m: +iso[2] - 1, d: +iso[3] };
+    const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (loc) return { y: +loc[3], m: +loc[2] - 1, d: +loc[1] };
+    return null;
+  };
+
+  // Devuelve Date válido o null usando parseYMD (evita NaN al renderizar getDate()).
+  const safeDate = (raw: string): Date | null => {
+    const ymd = parseYMD(raw);
+    if (!ymd) return null;
+    return new Date(ymd.y, ymd.m, ymd.d);
+  };
+
   const filteredRecords = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
     return records.filter(r => {
       const matchesType = filters.type === 'all' || r.type === filters.type;
       const matchesSearch =
         r.accommodation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.observations?.toLowerCase().includes(searchTerm.toLowerCase());
-        
+
       let matchesDate = true;
+      const ymd = parseYMD(r.date || '');
       if (filters.startDate || filters.endDate) {
-        const recordDate = (r.date || '').split('T')[0].split(' ')[0];
-        if (filters.startDate && recordDate < filters.startDate) matchesDate = false;
-        if (filters.endDate && recordDate > filters.endDate) matchesDate = false;
+        const iso = ymd ? `${ymd.y}-${String(ymd.m + 1).padStart(2, '0')}-${String(ymd.d).padStart(2, '0')}` : '';
+        if (filters.startDate && iso < filters.startDate) matchesDate = false;
+        if (filters.endDate && iso > filters.endDate) matchesDate = false;
       } else {
-        // Por defecto, mostrar solo el mes actual
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        const d = new Date(r.date || '');
-        if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) {
-          matchesDate = false;
-        }
+        if (!ymd || ymd.m !== currentMonth || ymd.y !== currentYear) matchesDate = false;
       }
-      
+
       return matchesType && matchesSearch && matchesDate;
     });
   }, [records, filters, searchTerm]);
@@ -272,18 +308,19 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
   }, [filters]);
 
   const totals = useMemo(() => {
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
     const recordsThisMonth = records.filter(r => {
-      const d = new Date(r.date || '');
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      const ymd = parseYMD(r.date || '');
+      return !!ymd && ymd.m === currentMonth && ymd.y === currentYear;
     });
 
     const totalHours = recordsThisMonth.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0);
-    // Servicios del mes: limpiezas + manitas + incidencias (todo lo que es trabajo retribuido).
+    // Servicios del mes: limpiezas + manitas + incidencias + entregas de llaves (todo trabajo realizado).
     const cleansThisMonth = recordsThisMonth.filter(
-      r => r.type === 'Normal' || r.type === 'Inicial' || r.type === 'Manitas' || r.type === 'Incidencia'
+      r => r.type === 'Normal' || r.type === 'Inicial' || r.type === 'Manitas' || r.type === 'Incidencia' || r.type === 'Llaves'
     ).length;
 
     return {
@@ -415,9 +452,10 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                       <div className="group module-item grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_1.2fr_0.5fr] gap-4 px-8 py-4 items-center">
                         <div className="flex flex-col min-w-0">
                           <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
-                            {record.date
-                              ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-                              : '—'}
+                            {(() => {
+                              const d = safeDate(record.date);
+                              return d ? d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+                            })()}
                           </span>
                           {record.horaEntrada && record.horaSalida && (
                             <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
@@ -459,8 +497,8 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                             </div>
                           ) : record.type === 'Llaves' ? (
                             <div className="flex flex-col min-w-0">
-                              <span className="text-[11px] text-slate-600 dark:text-stone-300 truncate w-full" title={`Cliente: ${record.nombreCliente || '—'}`}>
-                                Cliente: {record.nombreCliente || '—'}
+                              <span className={`text-[11px] truncate w-full ${record.sabanasEntregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-stone-400'}`} title={`Sábanas y toallas: ${record.sabanasEntregadas ? 'Entregadas' : 'No entregadas'}`}>
+                                Sábanas: {record.sabanasEntregadas ? 'Entregadas' : 'No'}
                               </span>
                             </div>
                           ) : (
@@ -501,7 +539,10 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                           <div className="space-y-1">
                             <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Fecha Completa</span>
                             <p className="text-xs text-slate-700 dark:text-stone-200">
-                              {record.date ? new Date(record.date).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' }) : '—'}
+                              {(() => {
+                                const d = safeDate(record.date);
+                                return d ? d.toLocaleDateString('es-ES', { dateStyle: 'long' } as any) : '—';
+                              })()}
                             </p>
                           </div>
 
@@ -515,15 +556,17 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                           {record.type === 'Incidencia' && (
                             <>
                               <div className="space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Coste Estimado</span>
-                                <p className="text-xs text-red-500 font-semibold">
-                                  {record.coste != null && record.coste > 0 ? `${record.coste.toFixed(2)}€` : '—'}
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hora</span>
+                                <p className="text-xs text-slate-700 dark:text-stone-200 font-mono">
+                                  {record.horaEntrada && record.horaSalida
+                                    ? `${record.horaEntrada} – ${record.horaSalida}`
+                                    : record.horaEntrada || '—'}
                                 </p>
                               </div>
                               <div className="space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Pagado Por</span>
-                                <p className="text-xs text-slate-700 dark:text-stone-200 capitalize">
-                                  {record.pagadoPor || '—'}
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kilometraje</span>
+                                <p className="text-xs text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.kms > 0 ? `${record.kms} km` : '—'}
                                 </p>
                               </div>
                             </>
@@ -532,16 +575,19 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                           {record.type === 'Llaves' && (
                             <>
                               <div className="space-y-1">
-                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cliente</span>
-                                <p className="text-xs text-slate-700 dark:text-stone-200 font-medium">
-                                  {record.nombreCliente || '—'}
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sábanas y Toallas</span>
+                                <p className={`text-xs font-medium ${record.sabanasEntregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-stone-200'}`}>
+                                  {record.sabanasEntregadas ? 'Entregadas' : 'No entregadas'}
                                 </p>
                               </div>
                               {record.fechaEntrada && (
                                 <div className="space-y-1">
                                   <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Entrada de Reserva</span>
                                   <p className="text-xs text-slate-700 dark:text-stone-200">
-                                    {new Date(record.fechaEntrada).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                    {(() => {
+                                      const d = safeDate(record.fechaEntrada || '');
+                                      return d ? d.toLocaleDateString('es-ES', { dateStyle: 'short' } as any) : '—';
+                                    })()}
                                   </p>
                                 </div>
                               )}
@@ -606,10 +652,16 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl bg-stone-50 dark:bg-stone-800 shrink-0 border border-stone-100 dark:border-stone-800">
                           <span className="text-[10px] font-normal text-slate-500 capitalize leading-none mb-1">
-                            {record.date ? new Date(record.date).toLocaleDateString('es-ES', { month: 'short' }) : '—'}
+                            {(() => {
+                              const d = safeDate(record.date);
+                              return d ? d.toLocaleDateString('es-ES', { month: 'short' }) : '—';
+                            })()}
                           </span>
                           <span className="text-base font-bold text-slate-800 dark:text-stone-200 leading-none">
-                            {record.date ? new Date(record.date).getDate() : '—'}
+                            {(() => {
+                              const d = safeDate(record.date);
+                              return d ? d.getDate() : '—';
+                            })()}
                           </span>
                         </div>
                         <div className="min-w-0">
@@ -657,15 +709,17 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                           {record.type === 'Incidencia' && (
                             <>
                               <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Coste</p>
-                                <p className="text-xs font-semibold text-red-500 tabular-nums">
-                                  {record.coste != null && record.coste > 0 ? `${record.coste.toFixed(2)}€` : '—'}
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Hora</p>
+                                <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.horaEntrada && record.horaSalida
+                                    ? `${record.horaEntrada}-${record.horaSalida}`
+                                    : record.horaEntrada || '—'}
                                 </p>
                               </div>
                               <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Pagado</p>
-                                <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">
-                                  {record.pagadoPor === 'empresa' ? 'Empresa' : record.pagadoPor === 'limpiador' ? 'Limpiador' : '—'}
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">KM</p>
+                                <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.kms || 0}
                                 </p>
                               </div>
                             </>
@@ -674,8 +728,10 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
                           {record.type === 'Llaves' && (
                             <>
                               <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Cliente</p>
-                                <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{record.nombreCliente || '—'}</p>
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Sábanas</p>
+                                <p className={`text-[11px] font-semibold truncate w-full ${record.sabanasEntregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-stone-200'}`}>
+                                  {record.sabanasEntregadas ? 'Sí' : 'No'}
+                                </p>
                               </div>
                               <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
                                 <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">KM</p>

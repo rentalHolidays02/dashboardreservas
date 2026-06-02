@@ -134,13 +134,18 @@ export const buildPayableItems = (
 
     for (const e of entregaLlaves) {
       if (cleanPhone(e.telefono) !== phone) continue;
-      const v = String(e.sabanasToallas || '').toLowerCase();
-      // EntregaDeLlaves guarda "Sí, entregadas" cuando se han entregado.
-      // Aceptamos también legacy "Sí"/"Si"/"true" y cualquier variante con "entregad".
-      if (!(v.includes('entregad') || v.includes('sí') || v.includes('si') || v === 'true')) continue;
-      if (pagoSab <= 0) continue;
       const date = ymdOf(e.fechaUbicacionEntrega || '');
       if (!date) continue;
+      const v = String(e.sabanasToallas || '').toLowerCase();
+      const sabPaga = v.includes('entregad') || v.includes('sí') || v.includes('si') || v === 'true';
+      const sabMonto = sabPaga ? pagoSab : 0;
+      const km = Number(e.km) || 0;
+      const kmPay = km * precioKm;
+      const monto = sabMonto + kmPay;
+      if (monto <= 0) continue;
+      const parts: string[] = [];
+      if (sabMonto > 0) parts.push(`${sabMonto.toFixed(2)}€ sábanas`);
+      if (kmPay > 0)    parts.push(`${km.toFixed(1)} km × ${precioKm.toFixed(2)}€`);
       out.push({
         key: `el:${e.id}`,
         sourceId: e.id,
@@ -150,16 +155,23 @@ export const buildPayableItems = (
         date,
         yearMonth: ym(date),
         apartamento: e.apartamento || '—',
-        monto: pagoSab,
-        subtitle: 'sábanas/toallas',
+        monto: Math.round(monto * 100) / 100,
+        subtitle: parts.join(' + ') || undefined,
       });
     }
 
     for (const i of incidencias) {
       if (cleanPhone(i.telefono) !== phone) continue;
-      if (pagoInc <= 0) continue;
       const date = ymdOf(i.timestamp);
       if (!date) continue;
+      const km = Number(i.kms) || 0;
+      const kmPay = km * precioKm;
+      const monto = pagoInc + kmPay;
+      if (monto <= 0) continue;
+      const subParts: string[] = [];
+      if (pagoInc > 0) subParts.push(`${pagoInc.toFixed(2)}€ base`);
+      if (kmPay > 0)   subParts.push(`${km.toFixed(1)} km × ${precioKm.toFixed(2)}€`);
+      const desc = (i.description || '').slice(0, 60);
       out.push({
         key: `in:${i.id}`,
         sourceId: i.id,
@@ -168,9 +180,9 @@ export const buildPayableItems = (
         workerName: w.fullName,
         date,
         yearMonth: ym(date),
-        apartamento: i.accommodationName || (i.description || '').slice(0, 40) || '—',
-        monto: pagoInc,
-        subtitle: (i.description || '').slice(0, 60) || undefined,
+        apartamento: i.accommodationName || desc || '—',
+        monto: Math.round(monto * 100) / 100,
+        subtitle: subParts.join(' + ') || desc || undefined,
       });
     }
   }
@@ -292,29 +304,51 @@ export const buildDesgloseDetalle = (
 
   for (const e of entregaLlaves) {
     if (cleanPhone(e.telefono) !== phone) continue;
-    const v = String(e.sabanasToallas || '').toLowerCase();
-    if (!(v.includes('si') || v.includes('sí') || v === 'true')) continue;
-    if (pagoSab <= 0) continue;
     const date = ymdOf(e.fechaUbicacionEntrega || '');
     if (!date) continue;
-    out.sabanas.push({
-      id: `el:${e.id}`, date, concept: e.apartamento || '—',
-      sub: 'sábanas/toallas',
-      monto: pagoSab,
-    });
+    const aptName = e.apartamento || '—';
+    const v = String(e.sabanasToallas || '').toLowerCase();
+    const sabPaga = v.includes('entregad') || v.includes('sí') || v.includes('si') || v === 'true';
+    if (sabPaga && pagoSab > 0) {
+      out.sabanas.push({
+        id: `el:${e.id}`, date, concept: aptName,
+        sub: 'sábanas/toallas',
+        monto: pagoSab,
+      });
+    }
+    const km = Number(e.km) || 0;
+    if (km > 0 && precioKm > 0) {
+      out.km.push({
+        id: `elkm:${e.id}`, date,
+        concept: `${aptName} · entrega de llaves`,
+        sub: `${km.toFixed(1)} km × ${precioKm.toFixed(2)}€`,
+        monto: km * precioKm,
+      });
+    }
   }
 
   for (const i of incidencias) {
     if (cleanPhone(i.telefono) !== phone) continue;
-    if (pagoInc <= 0) continue;
     const date = ymdOf(i.timestamp);
     if (!date) continue;
-    out.incidencias.push({
-      id: `in:${i.id}`, date,
-      concept: i.accommodationName || (i.description || '—').slice(0, 40),
-      sub: (i.description || '').slice(0, 60) || undefined,
-      monto: pagoInc,
-    });
+    const aptName = i.accommodationName || (i.description || '—').slice(0, 40);
+    if (pagoInc > 0) {
+      out.incidencias.push({
+        id: `in:${i.id}`, date,
+        concept: aptName,
+        sub: (i.description || '').slice(0, 60) || undefined,
+        monto: pagoInc,
+      });
+    }
+    const km = Number(i.kms) || 0;
+    if (km > 0 && precioKm > 0) {
+      out.km.push({
+        id: `inkm:${i.id}`, date,
+        concept: `${aptName} · incidencia`,
+        sub: `${km.toFixed(1)} km × ${precioKm.toFixed(2)}€`,
+        monto: km * precioKm,
+      });
+    }
   }
 
   const sortByDateDesc = (a: DesgloseFila, b: DesgloseFila) => b.date.localeCompare(a.date);

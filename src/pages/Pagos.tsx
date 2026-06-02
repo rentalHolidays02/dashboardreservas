@@ -134,7 +134,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
     const incMonth = inMonth(incidencias,    i => i.timestamp,               ym);
 
     return workers.map(w => {
-      const earnings = computeWorkerEarnings(w, ncMonth, icMonth, hmMonth, elMonth);
+      const earnings = computeWorkerEarnings(w, ncMonth, icMonth, hmMonth, elMonth, incMonth);
 
       const numIncidents = incMonth.filter(i => matchesWorkerByPhone(i.telefono, w.telefono)).length;
       const rateIncidente = w.pagoPorIncidencia ?? 0;
