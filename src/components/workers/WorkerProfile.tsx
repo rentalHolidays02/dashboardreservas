@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Edit2, Phone, Mail, CreditCard, MapPin, Hash,
-  ClipboardList, Car, Euro, CheckCircle2, Clock, Send, FileText,
-  BarChart3, MessageSquare, Wrench, Sparkles, ChevronRight, Loader2,
+  ClipboardList, Car, Euro, CheckCircle2, Clock,
+  Wrench, Sparkles, ChevronRight, Loader2,
   RotateCcw, Check, Landmark, Building2, User as UserIcon,
   Banknote, CalendarRange, X, TrendingUp, TrendingDown, Activity, Trash2, Pencil, XCircle, Plus, CheckCheck
 } from 'lucide-react';
@@ -15,6 +15,7 @@ import { appsScriptApi, PaymentAction } from '../../services/api';
 import AccommodationAssignmentModal from './AccommodationAssignmentModal';
 import AccommodationDetailModal from '../accommodations/AccommodationDetailModal';
 import AccommodationCard from '../accommodations/AccommodationCard';
+import CobrosBulkBar from '../pagos/CobrosBulkBar';
 import { computeWorkerSeries, WorkerMetric } from '../../utils/payments';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
@@ -212,8 +213,6 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
   const [selectedPagoIds, setSelectedPagoIds] = useState<Set<string>>(new Set());
   const [paying, setPaying] = useState(false);
   const [undoingId, setUndoingId] = useState<string | null>(null);
-  const [msgType, setMsgType] = useState<string | null>(null);
-  const [msgText, setMsgText] = useState('');
   const [isEditing, setIsEditing] = useState(initialEditing);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<Worker>(worker);
@@ -658,12 +657,6 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
     { id: 'handyman' as RecordsTab, label: 'Manitas', icon: <Wrench size={13} />, count: handymanRecords.length },
   ];
 
-  const msgTemplates = [
-    { id: 'invoice', icon: <FileText size={14} />, label: 'Enviar factura', placeholder: 'Adjuntar detalles de la factura...' },
-    { id: 'summary', icon: <BarChart3 size={14} />, label: 'Resumen mensual', placeholder: 'Resumen del mes de trabajo...' },
-    { id: 'custom', icon: <MessageSquare size={14} />, label: 'Mensaje personalizado', placeholder: 'Escribe tu mensaje...' },
-  ];
-
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
 
@@ -718,19 +711,9 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {!isEditing && msgTemplates.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setMsgType(msgType === t.id ? null : t.id)}
-                className={`flex items-center gap-1.5 text-xs font-normal px-3 py-2 rounded-xl transition-all ${
-                  msgType === t.id
-                    ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800/50'
-                    : 'bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 border border-transparent'
-                }`}
-              >
-                {t.icon}{t.label}
-              </button>
-            ))}
+            {!isEditing && (
+              <CobrosBulkBar workerId={worker.id} />
+            )}
             {isEditing ? (
               <>
                 <button
@@ -768,25 +751,6 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
             )}
           </div>
         </div>
-
-        {/* Message composer */}
-        {msgType && (
-          <div className="px-5 py-3 border-b border-stone-50 dark:border-stone-800 space-y-2 animate-in fade-in duration-200">
-            <textarea
-              rows={3}
-              value={msgText}
-              onChange={e => setMsgText(e.target.value)}
-              placeholder={msgTemplates.find(t => t.id === msgType)?.placeholder}
-              className="w-full px-3 py-2.5 text-xs bg-stone-50 dark:bg-stone-800/50 rounded-xl text-slate-700 dark:text-stone-300 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-900/50 resize-none border border-stone-100 dark:border-stone-800"
-            />
-            <button
-              className="flex items-center justify-center gap-2 py-2.5 px-4 bg-orange-600 text-white text-xs font-normal rounded-xl hover:bg-orange-700 transition-all active:scale-95"
-              onClick={() => { setMsgText(''); setMsgType(null); }}
-            >
-              <Send size={13} />Enviar
-            </button>
-          </div>
-        )}
 
         {/* Stats strip */}
         <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-stone-50 dark:divide-stone-800">
@@ -901,15 +865,20 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
           </div>
 
           <div className="px-5 py-4 flex items-center justify-center sm:block">
-            <button
-              onClick={() => { setPayMode('debt'); setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
-              className="w-full h-full sm:h-auto flex flex-col items-center justify-center gap-1.5 group"
-            >
-              <div className="w-10 h-10 rounded-full bg-orange-500 group-hover:bg-orange-600 transition-colors flex items-center justify-center text-white shadow-sm active:scale-95 transition-transform">
-                <Euro size={18} />
+            <div className="w-full h-full sm:h-auto flex flex-col items-center justify-center gap-2">
+              <button
+                onClick={() => { setPayMode('debt'); setPayAmount(remainingDue.toFixed(2)); setShowPayModal(true); }}
+                className="w-full flex flex-col items-center justify-center gap-1.5 group"
+              >
+                <div className="w-10 h-10 rounded-full bg-orange-500 group-hover:bg-orange-600 transition-colors flex items-center justify-center text-white shadow-sm active:scale-95 transition-transform">
+                  <Euro size={18} />
+                </div>
+                <span className="text-[11px] font-normal text-orange-600 dark:text-orange-400">Registrar pago</span>
+              </button>
+              <div className="w-full flex justify-center">
+                
               </div>
-              <span className="text-[11px] font-normal text-orange-600 dark:text-orange-400">Registrar pago</span>
-            </button>
+            </div>
           </div>
         </div>
 

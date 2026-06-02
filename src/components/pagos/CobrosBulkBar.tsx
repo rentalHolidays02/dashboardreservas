@@ -25,9 +25,10 @@ interface CobrosBulkBarProps {
   user?: AppUser;
   disabled?: boolean;
   onAfterApply?: () => void;
+  workerId?: string;
 }
 
-const CobrosBulkBar: React.FC<CobrosBulkBarProps> = ({ user, disabled, onAfterApply }) => {
+const CobrosBulkBar: React.FC<CobrosBulkBarProps> = ({ user, disabled, onAfterApply, workerId }) => {
   const [data, setData] = useState<DataBundle | null>(null);
   const [openDetailed, setOpenDetailed] = useState(false);
   const [openQuick, setOpenQuick] = useState<null | 'this' | 'last'>(null);
@@ -72,11 +73,17 @@ const CobrosBulkBar: React.FC<CobrosBulkBarProps> = ({ user, disabled, onAfterAp
 
   const allItems = useMemo<PayableItem[]>(() => {
     if (!data) return [];
-    return buildPayableItems(
+    const items = buildPayableItems(
       data.workers, data.normalCleans, data.initialCleans,
       data.handymanRecords, data.entregaLlaves, data.incidencias
     );
-  }, [data]);
+    return workerId ? items.filter((it) => it.workerId === workerId) : items;
+  }, [data, workerId]);
+
+  const selectableWorkers = useMemo<Worker[]>(
+    () => (data ? (workerId ? data.workers.filter((w) => w.id === workerId) : data.workers) : []),
+    [data, workerId]
+  );
 
   const quickRows = useMemo<QuickBulkRow[]>(() => {
     if (!data || !openQuick) return [];
@@ -185,7 +192,7 @@ const CobrosBulkBar: React.FC<CobrosBulkBarProps> = ({ user, disabled, onAfterAp
             isOpen={openDetailed}
             mode="bulk"
             items={allItems}
-            workers={data.workers}
+            workers={selectableWorkers}
             initialPeriod="this"
             preselectAll={true}
             onClose={() => setOpenDetailed(false)}
