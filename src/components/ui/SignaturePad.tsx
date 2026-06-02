@@ -16,6 +16,7 @@ const isDisplayableSignature = (v?: string) => {
 
 const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, readOnly }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const loadedExternalIntoCanvas = useRef(false);
   const [drawing, setDrawing] = useState(false);
   const [hasContent, setHasContent] = useState(() => isDisplayableSignature(value));
   const [imgError, setImgError] = useState(false);
@@ -32,19 +33,27 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
 
   useEffect(() => {
     if (!value || readOnly || !canvasRef.current) return;
+    if (!value.startsWith('data:image/')) {
+      // Evita CORS con imágenes externas (Drive) al dibujar sobre canvas.
+      loadedExternalIntoCanvas.current = true;
+      return;
+    }
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       setHasContent(true);
+      loadedExternalIntoCanvas.current = false;
     };
-    img.onerror = () => setHasContent(false);
+    img.onerror = () => {
+      setHasContent(false);
+      loadedExternalIntoCanvas.current = false;
+    };
     img.src = value;
   }, [value, readOnly]);
 
@@ -68,6 +77,12 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (loadedExternalIntoCanvas.current) {
+      // Resetea canvas para evitar "tainted canvas" en toDataURL().
+      canvas.width = canvas.width;
+      loadedExternalIntoCanvas.current = false;
+      setHasContent(false);
+    }
     setDrawing(true);
     lastPos.current = getPos(e, canvas);
   };
@@ -100,7 +115,11 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     lastPos.current = null;
     const canvas = canvasRef.current;
     if (canvas && hasContent) {
-      onChange(canvas.toDataURL('image/png'));
+      try {
+        onChange(canvas.toDataURL('image/png'));
+      } catch {
+        // Si el canvas fue contaminado por una imagen externa, no rompemos la UI.
+      }
     }
   };
 

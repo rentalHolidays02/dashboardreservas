@@ -860,7 +860,8 @@ export const appsScriptApi = {
       role: p.role as any,
       name: p.full_name || p.name,
       telefono: p.phone || p.telefono || undefined,
-      last_seen: p.last_seen // Campo para el estado de conexión
+      last_seen: p.last_seen, // Campo para el estado de conexión
+      avatar_url: p.avatar_url || null,
     }));
 
     return finalProfiles;
@@ -973,7 +974,8 @@ export const appsScriptApi = {
             id,
             email,
             full_name,
-            phone
+            phone,
+            avatar_url
           )
         `)
         .order('full_name', { ascending: true });
@@ -1067,7 +1069,7 @@ export const appsScriptApi = {
           accommodations: (workerAccDetailsMap[w.id] || []).map(d => d.accommodationName),
           tipoTrabajador: w.worker_type,
           telefonoBizum: w.bizum_phone,
-          photo: w.photo_url
+          photo: w.photo_url || w.profile?.avatar_url || ''
         } as any;
       });
 
@@ -2643,6 +2645,11 @@ export interface ActivityLog {
 export const activityLogApi = {
   async log(userId: string | null, userName: string, action: string, actionType: string): Promise<ActivityLog | null> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.warn('No se pudo registrar actividad: sesión no válida.');
+        return null;
+      }
       const { data, error } = await supabase
         .from('activity_log')
         .insert({
@@ -2702,6 +2709,11 @@ export interface ReportHistoryEntry {
 export const reportHistoryApi = {
   async save(entry: Omit<ReportHistoryEntry, 'id' | 'created_at'>): Promise<ReportHistoryEntry | null> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.warn('No se pudo guardar historial: sesión no válida.');
+        return null;
+      }
       const { data, error } = await supabase
         .from('report_history')
         .insert({
@@ -2730,6 +2742,8 @@ export const reportHistoryApi = {
 
   async getLatest(limit = 20): Promise<ReportHistoryEntry[]> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return [];
       const { data, error } = await supabase
         .from('report_history')
         .select('*')
@@ -2743,6 +2757,42 @@ export const reportHistoryApi = {
     } catch (err) {
       console.error('Exception fetching report history:', err);
       return [];
+    }
+  },
+
+  async clearAll(): Promise<boolean> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+      const { error } = await supabase.from('report_history').delete();
+      if (error) {
+        console.error('Error clearing report history:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Exception clearing report history:', err);
+      return false;
+    }
+  },
+
+  async clearByUser(userId: string): Promise<boolean> {
+    try {
+      if (!userId) return false;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return false;
+      const { error } = await supabase
+        .from('report_history')
+        .delete()
+        .eq('user_id', userId);
+      if (error) {
+        console.error('Error clearing user report history:', error);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Exception clearing user report history:', err);
+      return false;
     }
   },
 };

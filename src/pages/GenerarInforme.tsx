@@ -7,10 +7,21 @@ import {
   ZoomIn, ZoomOut, History, Clock,
 } from 'lucide-react';
 import { appsScriptApi, activityLogApi, reportHistoryApi, ReportHistoryEntry } from '../services/api';
-import { PagoRecord, Incidencia, NormalCleanRecord, HandymanRecord, User as AppUser } from '../services/mockData';
+import {
+  PagoRecord,
+  Incidencia,
+  NormalCleanRecord,
+  InitialCleanRecord,
+  HandymanRecord,
+  EntregaLlaves,
+  Worker,
+  User as AppUser,
+} from '../services/mockData';
 import { generatePDF, ReportData } from '../services/pdfExport';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import logoSrc from '../assets/logo/LogoEstandar.png';
+import { buildPayableItems } from '../utils/paymentItems';
+import { supabase } from '../services/supabaseClient';
 
 type ExportStep = 'idle' | 'collecting' | 'building' | 'done';
 
@@ -21,9 +32,11 @@ interface GenerarInformeProps {
 const fmt = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
-const fmtShort = (s: string) =>
-  new Date(s.length === 10 ? s + 'T00:00:00' : s)
-    .toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+const fmtShort = (s: string) => {
+  const d = parseReportDate(s);
+  if (!d) return '—';
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+};
 
 const PERIOD_LABELS: Record<string, string> = {
   'este-mes':      'Este mes',
@@ -31,6 +44,44 @@ const PERIOD_LABELS: Record<string, string> = {
   'trimestre':     'Último trimestre',
   'personalizado': 'Personalizado',
 };
+
+function parseReportDate(value: string | undefined): Date | null {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // YYYY-MM-DD / YYYY-MM-DDTHH:mm
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const d = new Date(raw.length === 10 ? `${raw}T00:00:00` : raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // DD/MM/YYYY [HH:mm]
+  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ ,T]+(\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const [, dd, mm, yyyy, hh = '0', mi = '0'] = m;
+    const d = new Date(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(hh),
+      Number(mi),
+      0
+    );
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Serial de Excel (ej. 46171.7659)
+  const serial = Number(raw.replace(',', '.'));
+  if (!Number.isNaN(serial) && serial > 20000 && serial < 1000000) {
+    const ms = (serial - 25569) * 86400000;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  const fallback = new Date(raw);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
 
 // ── Calcula el rango de fechas [desde, hasta] para cada periodo ───────────────
 function getDateRange(periodo: string): { from: Date; to: Date } | null {
@@ -75,8 +126,8 @@ function getPeriodoLabel(periodo: string): string {
 // ── Comprueba si una cadena de fecha cae dentro de [from, to] ─────────────────
 function isInRange(dateStr: string | undefined, range: { from: Date; to: Date } | null): boolean {
   if (!range || !dateStr) return true; // sin rango → incluir siempre
-  const d = new Date(dateStr.length === 10 ? dateStr + 'T00:00:00' : dateStr);
-  return !isNaN(d.getTime()) && d >= range.from && d <= range.to;
+  const d = parseReportDate(dateStr);
+  return !!d && d >= range.from && d <= range.to;
 }
 
 // ── Datos de muestra para la vista previa ─────────────────────────────────────
@@ -105,12 +156,14 @@ const SAMPLE = {
 };
 
 const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
-  const [workers, setWorkers]               = useState<{ id: string; fullName: string }[]>([]);
+  const [workers, setWorkers]               = useState<Worker[]>([]);
   const [accommodations, setAccommodations] = useState<{ id: string; name: string }[]>([]);
   const [pagos, setPagos]                   = useState<PagoRecord[]>([]);
   const [incidencias, setIncidencias]       = useState<Incidencia[]>([]);
   const [cleans, setCleans]                 = useState<NormalCleanRecord[]>([]);
+  const [initialCleans, setInitialCleans]   = useState<InitialCleanRecord[]>([]);
   const [handyman, setHandyman]             = useState<HandymanRecord[]>([]);
+  const [entregas, setEntregas]             = useState<EntregaLlaves[]>([]);
   const [loading, setLoading]               = useState(true);
   const [exportStep, setExportStep]         = useState<ExportStep>('idle');
   const [zoom, setZoom]                     = useState(1);
@@ -126,6 +179,7 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
   // Historial de informes
   const [reportHistory, setReportHistory] = useState<ReportHistoryEntry[]>([]);
   const [showHistory, setShowHistory]     = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
 
   const handleZoomChange = useCallback((delta: number) => {
     setZoom(z => {
@@ -183,11 +237,16 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
       appsScriptApi.getAllPagos(),
       appsScriptApi.getRecentIncidencias(50),
       appsScriptApi.getNormalCleans(),
+      appsScriptApi.getInitialCleans(),
       appsScriptApi.getHandymanRecords(),
-    ]).then(([w, a, p, i, c, h]) => {
+      appsScriptApi.getEntregaLlaves(),
+    ]).then(([w, a, p, i, c, ic, h, el]) => {
       setWorkers(w); setAccommodations(a);
       setPagos(p); setIncidencias(i as Incidencia[]);
-      setCleans(c); setHandyman(h);
+      setCleans(c);
+      setInitialCleans(ic);
+      setHandyman(h);
+      setEntregas(el);
     }).finally(() => setLoading(false));
 
     // Cargar historial de informes
@@ -200,11 +259,36 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
   // Rango de fechas activo para el periodo seleccionado
   const dateRange = useMemo(() => getDateRange(selectedPeriod), [selectedPeriod]);
 
+  const derivedPagos = useMemo<PagoRecord[]>(() => {
+    const items = buildPayableItems(workers, cleans, initialCleans, handyman, entregas, incidencias);
+    return items.map((it) => ({
+      id: `derived_${it.key}`,
+      workerId: it.workerId,
+      workerName: it.workerName,
+      telefono: '',
+      dni: '',
+      email: '',
+      fecha: it.date,
+      concepto: `${it.type === 'incidencia' ? 'Incidencia' : it.type === 'entrega' ? 'Entrega' : 'Liquidación'} · ${it.apartamento}`,
+      importe: it.monto,
+      limpiezas: it.type === 'reserva' ? 1 : 0,
+      km: 0,
+      estado: 'pendiente',
+    }));
+  }, [workers, cleans, initialCleans, handyman, entregas, incidencias]);
+
+  // Para que "mes pasado" cuadre con la lógica de Nóminas/Pagos,
+  // priorizamos siempre el cálculo derivado desde actividad real.
+  const pagosSource = useMemo(
+    () => (derivedPagos.length > 0 ? derivedPagos : pagos),
+    [derivedPagos, pagos]
+  );
+
   // Filtros: periodo + trabajador + alojamiento
-  const fPagos  = useMemo(() => pagos.filter(p =>
+  const fPagos  = useMemo(() => pagosSource.filter(p =>
     isInRange(p.fecha, dateRange) &&
     (!workerName || p.workerName === workerName)
-  ), [pagos, workerName, dateRange]);
+  ), [pagosSource, workerName, dateRange]);
 
   const fCleans = useMemo(() => cleans.filter(c =>
     isInRange(c.checkoutFecha || c.checkinFecha, dateRange) &&
@@ -286,30 +370,52 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
         .filter(([, v]) => v)
         .map(([k]) => k);
 
-      // Guardar en historial
-      const saved = await reportHistoryApi.save({
-        user_id:      user.id || null,
-        user_name:    user.name || 'Usuario',
-        file_name:    fileName,
-        periodo:      selectedPeriod,
-        periodo_label: getPeriodoLabel(selectedPeriod),
-        worker_name:  workerName,
-        acc_name:     accName,
-        sections:     activeSections,
-        summary_text: summaryText,
-      });
-      if (saved) setReportHistory(prev => [saved, ...prev].slice(0, 15));
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert('El informe se generó, pero tu sesión ha caducado. Inicia sesión de nuevo para guardar historial y actividad.');
+      } else {
+        // Guardar en historial
+        const saved = await reportHistoryApi.save({
+          user_id:      user.id || null,
+          user_name:    user.name || 'Usuario',
+          file_name:    fileName,
+          periodo:      selectedPeriod,
+          periodo_label: getPeriodoLabel(selectedPeriod),
+          worker_name:  workerName,
+          acc_name:     accName,
+          sections:     activeSections,
+          summary_text: summaryText,
+        });
+        if (saved) setReportHistory(prev => [saved, ...prev].slice(0, 15));
 
-      // Log actividad
-      await activityLogApi.log(
-        user.id || null,
-        user.name || 'Usuario',
-        `Generó informe PDF: "${fileName}"`,
-        'generar_informe'
-      );
+        // Log actividad
+        await activityLogApi.log(
+          user.id || null,
+          user.name || 'Usuario',
+          `Generó informe PDF: "${fileName}"`,
+          'generar_informe'
+        );
+      }
     }
     setExportStep('done');
     setTimeout(() => setExportStep('idle'), 3000);
+  };
+
+  const handleClearHistory = async () => {
+    if (clearingHistory) return;
+    const ok = window.confirm('Esto borrará el historial de informes. ¿Continuar?');
+    if (!ok) return;
+
+    setClearingHistory(true);
+    try {
+      const cleared = user.role === 'admin'
+        ? await reportHistoryApi.clearAll()
+        : (user.id ? await reportHistoryApi.clearByUser(user.id) : false);
+      if (cleared) setReportHistory([]);
+      else alert('No se pudo borrar el historial de informes');
+    } finally {
+      setClearingHistory(false);
+    }
   };
 
   if (loading) return <LoadingSpinner />;
@@ -513,6 +619,15 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
                 />
               </span>
             </button>
+            <div className="px-5 py-2 border-b border-stone-100 dark:border-stone-800 bg-stone-50/20 dark:bg-stone-800/10 flex items-center justify-end">
+              <button
+                onClick={handleClearHistory}
+                disabled={clearingHistory || reportHistory.length === 0}
+                className="text-[11px] text-red-500 disabled:text-slate-300 dark:disabled:text-stone-600 hover:text-red-600 disabled:cursor-not-allowed transition-colors"
+              >
+                {clearingHistory ? 'Borrando historial...' : 'Borrar historial'}
+              </button>
+            </div>
 
             {showHistory && (
               <div className="divide-y divide-stone-100 dark:divide-stone-800 max-h-64 overflow-y-auto">

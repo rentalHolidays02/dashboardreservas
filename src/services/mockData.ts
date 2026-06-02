@@ -5,6 +5,7 @@ export interface User {
   name: string;
   telefono?: string;
   last_seen?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface WorkerAccommodationDetails {
