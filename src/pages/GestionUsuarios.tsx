@@ -35,6 +35,7 @@ interface AppUser {
   lastLogin: string | null;
   createdAt: string;
   avatar: string;
+  avatarUrl?: string | null;
   onlineStatus: OnlineStatus;
   currentActivity?: string;
   sessionStart?: string;
@@ -475,7 +476,13 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ user, onClose }) => {
         </div>
 
         <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-stone-800">
-          <div className="w-9 h-9 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 font-semibold text-sm">{user.avatar}</div>
+          <div className="w-9 h-9 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 font-semibold text-sm overflow-hidden">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+            ) : (
+              user.avatar
+            )}
+          </div>
           <div>
             <p className="text-sm font-medium text-slate-800 dark:text-stone-200">{user.name}</p>
             <p className="text-xs text-slate-400">{user.email}</p>
@@ -603,8 +610,12 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
       {/* Nombre */}
       <div className="flex items-center gap-3 min-w-0">
         <div className="relative shrink-0">
-          <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 soft-shadow flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
-            {user.avatar}
+          <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 soft-shadow flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400 overflow-hidden">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+            ) : (
+              user.avatar
+            )}
           </div>
           <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-stone-900 ${onlineDot}`} />
         </div>
@@ -686,6 +697,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         createdAt: new Date().toISOString(),
         lastLogin: u.last_seen ?? null,
         avatar: u.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
+        avatarUrl: u.avatar_url || null,
         onlineStatus: 'offline' as OnlineStatus,
       }));
       setUsers(mapped as AppUser[]);
@@ -831,7 +843,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
           'editar_usuario'
         );
 
-        setUsers(prev => prev.map(p => p.id === targetId ? u : p));
+        setUsers(prev => prev.map(p => p.id === targetId ? { ...p, ...u, avatarUrl: p.avatarUrl } : p));
         showToast('Usuario actualizado correctamente');
       }
     } catch (error: any) {
@@ -953,8 +965,12 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
               return (
                 <li key={u.id} className="flex items-center gap-3 px-6 py-3">
                   <div className="relative shrink-0">
-                    <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 soft-shadow flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
-                      {u.avatar}
+                    <div className="w-7 h-7 rounded-full bg-white dark:bg-stone-800 soft-shadow flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400 overflow-hidden">
+                      {u.avatarUrl ? (
+                        <img src={u.avatarUrl} alt={u.name} className="w-full h-full object-cover" />
+                      ) : (
+                        u.avatar
+                      )}
                     </div>
                     <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-stone-900 ${dot}`} />
                   </div>

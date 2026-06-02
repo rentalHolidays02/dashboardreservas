@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HelpCircle, TrendingUp, CalendarRange, X, Pencil } from 'lucide-react';
-import { CheckInOut, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord } from '../../services/mockData';
+import { CheckInOut, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, User } from '../../services/mockData';
 import { useTheme } from '../../context/ThemeContext';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -26,6 +26,7 @@ interface AnalyticsCardsProps {
   activeInitialCheckins?: InitialCleanRecord[];
   activeHandymanCheckins?: HandymanRecord[];
   onCheckoutRequested?: (type: 'normal' | 'initial' | 'handyman', record: NormalCleanRecord | InitialCleanRecord | HandymanRecord) => void;
+  userRole?: User['role'];
 }
 
 export type Period = 'semanal' | 'mensual' | 'trimestral' | 'personalizado';
@@ -102,7 +103,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
   checkIns, selectedWorker, onWorkerSelect, workers = [], period, customDesde, customHasta,
   normalCleans = [], initialCleans = [], handymanRecords = [],
   activeNormalCheckins = [], activeInitialCheckins = [], activeHandymanCheckins = [],
-  onCheckoutRequested
+  onCheckoutRequested,
+  userRole
 }) => {
   const navigate = useNavigate();
   const photoMap = useMemo(() => {
@@ -261,8 +263,10 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
     ? `${customDesde} — ${customHasta}`
     : PERIOD_OPTIONS.find(p => p.id === period)?.label.toLowerCase() ?? '';
 
+  const showRecentActivity = userRole === 'admin';
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[7fr_3fr] gap-6 items-stretch">
+    <div className={`grid grid-cols-1 gap-6 items-stretch ${showRecentActivity ? 'md:grid-cols-[7fr_3fr]' : ''}`}>
 
       {/* Módulo 1: Gráfica dinero × días */}
       <div className="flex flex-col">
@@ -337,7 +341,8 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
         </div>
       </div>
 
-      {/* Módulo 2: Actividad (Limpieza normal, inicial y manitas) */}
+      {/* Módulo 2: Actividad (solo administradores) */}
+      {showRecentActivity && (
       <div className="flex flex-col gap-2 min-h-0">
         <div className="px-1 mb-1 flex items-center justify-between">
           <span className="text-[10px] font-semibold text-slate-400 dark:text-stone-500 uppercase tracking-wider">Actividad Reciente</span>
@@ -424,6 +429,7 @@ const AnalyticsCards: React.FC<AnalyticsCardsProps> = ({
           Mostrar más
         </button>
       </div>
+      )}
 
     </div>
   );

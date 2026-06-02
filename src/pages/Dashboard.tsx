@@ -327,6 +327,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
         activeInitialCheckins={activeInitialCheckins}
         activeHandymanCheckins={activeHandymanCheckins}
         onCheckoutRequested={handleCheckoutRequested}
+        userRole={userRole}
       />
 
       {/* Bloque B: Tabla de Trabajadores */}

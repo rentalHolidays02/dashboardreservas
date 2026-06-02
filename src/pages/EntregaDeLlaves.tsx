@@ -15,7 +15,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { appsScriptApi } from '../services/api';
-import { EntregaLlaves, Accommodation } from '../services/mockData';
+import { EntregaLlaves, Accommodation, Worker } from '../services/mockData';
+import { cleanPhone } from '../utils/payments';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import SignaturePad from '../components/ui/SignaturePad';
 
@@ -49,6 +50,30 @@ const fmtPhone = (t: string) => {
   if (digits.length > 7) res += ' ' + digits.slice(7, 9);
   return res;
 };
+
+// Cuantía a pagar al trabajador por una entrega de llaves:
+//   km × precioPorKm del worker (match por teléfono limpio) + 5 € fijo si entregó sábanas y toallas.
+// Devuelve null si no hay match de trabajador.
+const computeEntregaPay = (
+  entrega: Pick<EntregaLlaves, 'telefono' | 'km' | 'sabanasToallas'>,
+  workers: Worker[],
+): { total: number | null; kmPay: number; sabanasExtra: number; precio: number } => {
+  const tel = cleanPhone(entrega.telefono);
+  const worker = tel ? workers.find(w => cleanPhone(w.telefono) === tel) : undefined;
+  if (!worker) return { total: null, kmPay: 0, sabanasExtra: 0, precio: 0 };
+  const precio = worker.precioPorKm ?? 0;
+  const km = Number(entrega.km) || 0;
+  const kmPay = km * precio;
+  const sabanasExtra = String(entrega.sabanasToallas || '').toLowerCase().includes('entregad') ? 5 : 0;
+  return {
+    total: Math.round((kmPay + sabanasExtra) * 100) / 100,
+    kmPay: Math.round(kmPay * 100) / 100,
+    sabanasExtra,
+    precio,
+  };
+};
+
+const fmtEuro = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 
 const emptyEntrega = (): Omit<EntregaLlaves, 'id'> => ({
   telefono: '',
@@ -93,10 +118,11 @@ interface ModalProps {
   onClose: () => void;
   onDelete?: () => void;
   accommodations: Accommodation[];
+  workers: Worker[];
   isReadOnly?: boolean;
 }
 
-const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete, accommodations, isReadOnly }) => {
+const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete, accommodations, workers, isReadOnly }) => {
   const isEdit = !!initial?.id;
   const [form, setForm] = useState<Omit<EntregaLlaves, 'id'>>(() => {
     const base = { ...emptyEntrega(), ...initial };
@@ -115,6 +141,15 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
 
   const set = (field: keyof Omit<EntregaLlaves, 'id'>, value: any) =>
     setForm(f => ({ ...f, [field]: value }));
+
+  const kmEquivalente = useMemo(() => {
+    const { total, kmPay, sabanasExtra, precio } = computeEntregaPay(form, workers);
+    if (total === null) return { value: null as number | null, desglose: '' };
+    const km = Number(form.km) || 0;
+    const parts = [`${km} km × ${fmtEuro(precio)} = ${fmtEuro(kmPay)}`];
+    if (sabanasExtra) parts.push('+ 5 € sábanas');
+    return { value: total, desglose: parts.join(' ') };
+  }, [form.telefono, form.km, form.sabanasToallas, workers]);
 
   const inputCls = 'w-full rounded-lg border border-white/60 dark:border-stone-700/50 bg-white/80 dark:bg-stone-900 text-slate-700 dark:text-stone-300 px-3 py-1.5 text-xs focus:outline-none focus:border-stone-300 dark:focus:border-stone-600 placeholder:text-slate-300 dark:placeholder:text-stone-600 transition-all';
   const labelCls = 'block text-[11px] text-slate-400 dark:text-stone-500 mb-1';
@@ -299,7 +334,15 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
               <BoolToggle label="Sábanas y Toallas" field="sabanasToallas" customTrue="Sí, entregadas" customFalse="No" />
               <div>
                 <label className={labelCls}>Km</label>
-                <input type="number" min="0" value={form.km} onChange={e => set('km', e.target.value)} readOnly={isReadOnly} placeholder="0" className={`${inputCls} ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
+                <div className="flex items-center gap-2">
+                  <input type="number" min="0" value={form.km} onChange={e => set('km', e.target.value)} readOnly={isReadOnly} placeholder="0" className={`${inputCls} flex-1 ${isReadOnly ? 'cursor-default focus:border-white/60 dark:focus:border-stone-700/50' : ''}`} />
+                  <span
+                    title={kmEquivalente.desglose || undefined}
+                    className="shrink-0 text-xs font-medium text-orange-600 dark:text-orange-400 tabular-nums min-w-[58px] text-right"
+                  >
+                    {kmEquivalente.value === null ? '— €' : fmtEuro(kmEquivalente.value)}
+                  </span>
+                </div>
               </div>
               <div>
                 <label className={labelCls}>Observaciones</label>
@@ -423,10 +466,13 @@ const EntregaModal: React.FC<ModalProps> = ({ initial, onSave, onClose, onDelete
 
 // ─── Expanded detail panel ────────────────────────────────────────────────────
 
-const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
+const DetailPanel: React.FC<{ entrega: EntregaLlaves; workers: Worker[] }> = ({ entrega: e, workers }) => {
   const sectionLabel = 'text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-stone-500 mb-2.5';
   const fieldLabel = 'text-[11px] text-slate-400 dark:text-stone-500';
   const fieldValue = 'text-xs text-slate-700 dark:text-stone-300 mt-0.5';
+  const euroAside = 'text-xs font-medium text-orange-600 dark:text-orange-400 tabular-nums';
+
+  const { kmPay, sabanasExtra, precio, total } = computeEntregaPay(e, workers);
 
   return (
     <div className="px-8 py-5 bg-stone-50/80 dark:bg-stone-800/40 border-t border-stone-100 dark:border-stone-800">
@@ -441,7 +487,14 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
           </div>
           <div>
             <p className={fieldLabel}>Km recorridos</p>
-            <p className={fieldValue}>{e.km ? `${e.km} km` : '—'}</p>
+            <div className="flex items-baseline gap-2">
+              <p className={fieldValue}>{e.km ? `${e.km} km` : '—'}</p>
+              {total !== null && e.km > 0 && (
+                <span className={euroAside} title={`${e.km} km × ${fmtEuro(precio)}`}>
+                  {fmtEuro(kmPay)}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div>
@@ -450,7 +503,10 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
             </div>
             <div>
               <p className={fieldLabel}>Sábanas y Toallas</p>
-              <p className={fieldValue}>{e.sabanasToallas}</p>
+              <div className="flex items-baseline gap-2">
+                <p className={fieldValue}>{e.sabanasToallas}</p>
+                {sabanasExtra > 0 && <span className={euroAside}>+ {fmtEuro(sabanasExtra)}</span>}
+              </div>
             </div>
           </div>
           {e.observaciones && (
@@ -525,7 +581,7 @@ const DetailPanel: React.FC<{ entrega: EntregaLlaves }> = ({ entrega: e }) => {
 
 // ─── COL layout ───────────────────────────────────────────────────────────────
 
-const COLS = 'grid-cols-[2fr_1.1fr_1.2fr_0.9fr_0.9fr_100px]';
+const COLS = 'grid-cols-[2.2fr_0.8fr_1.4fr_1fr_1fr_100px]';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -537,6 +593,7 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
   const isReadOnly = userRole === 'viewer';
   const [entregas, setEntregas] = useState<EntregaLlaves[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -546,12 +603,14 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
   const fetchData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const [entries, accs] = await Promise.all([
+      const [entries, accs, ws] = await Promise.all([
         appsScriptApi.getEntregaLlaves(),
-        appsScriptApi.getAccommodations()
+        appsScriptApi.getAccommodations(),
+        appsScriptApi.getWorkers(),
       ]);
       setEntregas(entries);
       setAccommodations(accs);
+      setWorkers(ws);
     } catch (error) {
       console.error('Error fetching delivery data:', error);
     } finally {
@@ -682,7 +741,7 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
         {/* Column headers */}
         <div className={`grid ${COLS} gap-4 px-8 py-4 border-b border-stone-100 dark:border-stone-800`}>
           <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
-          <span className="text-xs text-slate-400 dark:text-stone-500">Teléfono</span>
+          <span className="text-xs text-slate-400 dark:text-stone-500">Total a pagar</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Apartamento</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Entrada</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Salida</span>
@@ -728,8 +787,25 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
                     </div>
                   </div>
 
-                  {/* Teléfono */}
-                  <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums">{fmtPhone(e.telefono) || '—'}</p>
+                  {/* Cuantía total a pagar al trabajador (km × precio/km + 5 € sábanas) */}
+                  {(() => {
+                    const { total, kmPay, sabanasExtra, precio } = computeEntregaPay(e, workers);
+                    if (total === null) {
+                      return <p className="text-xs text-slate-400 dark:text-stone-500 tabular-nums">— €</p>;
+                    }
+                    const desglose = [
+                      `${e.km || 0} km × ${fmtEuro(precio)} = ${fmtEuro(kmPay)}`,
+                      sabanasExtra ? '+ 5 € sábanas' : '',
+                    ].filter(Boolean).join(' ');
+                    return (
+                      <p
+                        title={desglose}
+                        className="text-xs font-medium text-orange-600 dark:text-orange-400 tabular-nums"
+                      >
+                        {fmtEuro(total)}
+                      </p>
+                    );
+                  })()}
 
                   {/* Apartamento */}
                   <span className="inline-block bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 text-[11px] px-2.5 py-1 rounded-md max-w-[140px] truncate soft-shadow">
@@ -756,7 +832,7 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
                 </li>
 
                 {/* Panel expandido */}
-                {isSelected && <DetailPanel entrega={e} />}
+                {isSelected && <DetailPanel entrega={e} workers={workers} />}
               </React.Fragment>
             );
           })}
@@ -778,6 +854,7 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
           onClose={() => setIsModalOpen(false)}
           onDelete={modalData?.id ? handleDelete : undefined}
           accommodations={accommodations}
+          workers={workers}
           isReadOnly={isReadOnly}
         />
       )}
