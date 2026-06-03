@@ -1,145 +1,254 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Accommodation, Incidencia, EntregaLlaves } from '../services/mockData';
+import React, { useEffect, useState, useMemo } from 'react';
+import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Incidencia, EntregaLlaves } from '../services/mockData';
 import { appsScriptApi } from '../services/api';
-import { 
-  Banknote,
-  TrendingUp,
-  User as UserIcon,
-  CalendarRange,
-  X,
+import { computeCleanPay, computeHoursPay, computeHoursWorked, cleanPhone } from '../utils/payments';
+import {
+  Search,
+  Calendar,
   Clock,
-  MapPin,
-  Filter,
-  Home,
-  Wrench,
-  Sparkles,
-  Building2,
   ChevronRight,
-  Route
+  Info,
+  Wrench,
+  Home,
+  Sparkles,
+  Banknote,
+  Filter,
+  CheckCircle2,
+  AlertTriangle,
+  Key,
 } from 'lucide-react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
-} from 'recharts';
-import { aggregateDailyData } from '../utils/analytics';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatName } from '../utils/formatters';
+import WorkerRecordsFilterModal, { WorkerRecordsFilters } from '../components/workers/WorkerRecordsFilterModal';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
-import { useTheme } from '../context/ThemeContext';
-import DashboardFilterModal, { Period, Metric } from '../components/dashboard/DashboardFilterModal';
-import { filterRecordsByPeriod, matchesWorkerByPhone, cleanPhone, computeCleanPay, computeHoursPay } from '../utils/payments';
 
 interface WorkerAnalyticsProps {
   user: User;
 }
 
-const fmtEur = (v: number) =>
-  v.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+type RecordType = 'Normal' | 'Inicial' | 'Manitas' | 'Incidencia' | 'Llaves';
 
-const PulseDot: React.FC<{
-  cx?: number; cy?: number;
-  value?: number; index?: number;
-}> = ({ cx, cy }) => {
-  if (cx == null || cy == null) return null;
-  return (
-    <g>
-      <circle cx={cx} cy={cy} r={4} fill="none" stroke="#f97316" strokeWidth={1}>
-        <animate attributeName="r"       from="4"   to="12"  dur="0.55s" fill="freeze" />
-        <animate attributeName="opacity" from="0.5" to="0"   dur="0.55s" fill="freeze" />
-      </circle>
-      <circle cx={cx} cy={cy} r={3.5} fill="#f97316" stroke="#fff" strokeWidth={2} />
-    </g>
-  );
-};
+interface UnifiedRecord {
+  id: string;
+  type: RecordType;
+  date: string;
+  accommodation: string;
+  kms: number;
+  minutes?: number;
+  hoursWorked: number;
+  earnings: number;
+  observations: string;
+  horaEntrada?: string;
+  horaSalida?: string;
+  checked?: boolean;
+  // Campos extra para Incidencias
+  description?: string;
+  coste?: number;
+  pagadoPor?: string;
+  // Campos extra para Entrega de Llaves
+  nombreCliente?: string;
+  fechaEntrada?: string;
+  fechaSalida?: string;
+  sabanasEntregadas?: boolean;
+}
 
-const CustomTooltip: React.FC<{
-  active?: boolean;
-  payload?: { value: number; name: string }[];
-  label?: string;
-  activeTab: Metric;
-}> = ({ active, payload, label, activeTab }) => {
-  if (!active || !payload?.length) return null;
-  const value = payload[0].value;
-  const formatted =
-    activeTab === 'dinero'
-      ? fmtEur(value)
-      : activeTab === 'km'
-        ? `${value.toFixed(1)} km`
-        : `${value} ${value === 1 ? 'servicio' : 'servicios'}`;
-  return (
-    <div className="bg-white dark:bg-stone-800 border border-slate-100 dark:border-stone-700 rounded-xl px-3 py-2 text-xs soft-shadow">
-      <p className="text-slate-400 dark:text-stone-500 mb-0.5">{label}</p>
-      <p className="font-medium text-slate-800 dark:text-stone-200">{formatted}</p>
-    </div>
-  );
+const normName = (s: string) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+const matchRecord = (
+  recordPhone: string,
+  recordNombre: string,
+  recordApellidos: string,
+  userPhone: string | undefined,
+  userName: string
+): boolean => {
+  const recPhone = cleanPhone(recordPhone);
+  const usrPhone = cleanPhone(userPhone);
+
+  if (recPhone && usrPhone) return recPhone === usrPhone;
+
+  const full = normName(`${recordNombre} ${recordApellidos}`);
+  return normName(userName).split(/\s+/).every(part => full.includes(part));
 };
 
 const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<UnifiedRecord[]>([]);
   const [workerData, setWorkerData] = useState<Worker | null>(null);
-  const [allWorkers, setAllWorkers] = useState<Worker[]>([]);
-  const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
-  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
-  const { theme } = useTheme();
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [metric, setMetric] = useState<Metric>('dinero');
-  
-  const [globalRecords, setGlobalRecords] = useState<{
-    normal: NormalCleanRecord[];
-    initial: InitialCleanRecord[];
-    handyman: HandymanRecord[];
-    incidencias: Incidencia[];
-    llaves: EntregaLlaves[];
-  }>({
-    normal: [],
-    initial: [],
-    handyman: [],
-    incidencias: [],
-    llaves: [],
-  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Period state
-  const [period, setPeriod] = useState<Period>('mensual');
-  const [customDesde, setCustomDesde] = useState('');
-  const [customHasta, setCustomHasta] = useState('');
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [chartKey, setChartKey] = useState(0);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const [filters, setFilters] = useState<WorkerRecordsFilters>({
+    startDate: '',
+    endDate: '',
+    type: 'all'
+  });
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [workers, normal, initial, handyman, accs, incidencias, llaves] = await Promise.all([
+        const [workers, normal, initial, handyman, incidencias, llaves] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getNormalCleans(),
           appsScriptApi.getInitialCleans(),
           appsScriptApi.getHandymanRecords(),
-          appsScriptApi.getAccommodations(),
           appsScriptApi.getRecentIncidencias(200).catch(() => [] as Incidencia[]),
           appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
         ]);
 
-        setAllWorkers(workers);
-        setAccommodations(accs);
-        setGlobalRecords({ normal, initial, handyman, incidencias, llaves });
+        const worker: Worker | undefined = workers.find(w => {
+          const wPhone = cleanPhone(w.telefono);
+          const uPhone = cleanPhone(user.telefono);
+          if (wPhone && uPhone) return wPhone === uPhone;
+          return normName(w.fullName).includes(normName(user.name).split(/\s+/)[0]);
+        });
+        
+        if (worker) setWorkerData(worker);
 
-        const foundWorker = workers.find(w => 
-          (user.telefono && cleanPhone(w.telefono) === cleanPhone(user.telefono)) ||
-          w.fullName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(user.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')) || 
-          (w.email && w.email.toLowerCase() === user.email.toLowerCase())
-        );
+        const pagoPorReserva = worker?.pagoPorReserva ?? 0;
+        const precioPorKm = worker?.precioPorKm ?? 0;
 
-        if (foundWorker) {
-          setWorkerData(foundWorker);
-          setSelectedWorkerId(foundWorker.id);
-        }
+        const unified: UnifiedRecord[] = [
+          ...normal
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: NormalCleanRecord) => {
+              const pay = computeCleanPay(r.apartamento, r.horaEntrada, r.horaSalida, pagoPorReserva);
+              const kmPay = (r.km || 0) * precioPorKm;
+              return {
+                id: r.id,
+                type: 'Normal' as RecordType,
+                date: r.checkoutFecha || r.checkinFecha,
+                accommodation: r.apartamento,
+                kms: r.km || 0,
+                hoursWorked: pay.hoursWorked,
+                earnings: pay.base + pay.extraPay + kmPay,
+                observations: r.observaciones || '',
+                horaEntrada: r.horaEntrada,
+                horaSalida: r.horaSalida,
+                checked: r.checked,
+              };
+            }),
+          ...initial
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: InitialCleanRecord) => {
+              const hp = computeHoursPay(r.horaEntrada, r.horaSalida);
+              const kmPay = (r.km || 0) * precioPorKm;
+              return {
+                id: r.id,
+                type: 'Inicial' as RecordType,
+                date: r.checkoutFecha || r.checkinFecha,
+                accommodation: r.apartamento,
+                kms: r.km || 0,
+                hoursWorked: hp.hours,
+                earnings: hp.pay + kmPay,
+                observations: r.observaciones || '',
+                horaEntrada: r.horaEntrada,
+                horaSalida: r.horaSalida,
+                checked: r.checked,
+              };
+            }),
+          ...handyman
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: HandymanRecord) => {
+              const hp = computeHoursPay(r.horaInicioTarea, r.horaFinTarea);
+              const kms = r.cantidadMinutos || 0;
+              return {
+                id: r.id,
+                type: 'Manitas' as RecordType,
+                date: r.fechaFin || r.fechaLlegada,
+                accommodation: r.alojamiento,
+                kms,
+                minutes: r.cantidadMinutos || 0,
+                hoursWorked: hp.hours,
+                earnings: hp.pay + kms * precioPorKm,
+                observations: r.observacionesTarea || '',
+                horaEntrada: r.horaInicioTarea,
+                horaSalida: r.horaFinTarea,
+              };
+            }),
+          ...incidencias
+            .filter(r => matchRecord(
+              r.telefono || '',
+              r.nombre || '',
+              r.apellidos || '',
+              user.telefono,
+              user.name
+            ))
+            .map((r: Incidencia) => {
+              // Calcular horas si hay paradaInicial y paradaFinal o paradas con hora
+              let calculatedHours = 0;
+              const extractTime = (stopStr?: string): string | null => {
+                if (!stopStr) return null;
+                const m = stopStr.match(/\((\d{1,2}:\d{2})\)/);
+                return m ? m[1] : null;
+              };
+              const tIni = extractTime(r.paradaInicial);
+              const tFin = extractTime(r.paradaFinal);
+              if (tIni && tFin) {
+                calculatedHours = computeHoursWorked(tIni, tFin);
+              }
+
+              const pagoPorIncidencia = worker?.pagoPorIncidencia ?? 0;
+              const kmPay = (r.kms || 0) * precioPorKm;
+              return {
+                id: r.id,
+                type: 'Incidencia' as RecordType,
+                date: r.timestamp || new Date().toISOString(),
+                accommodation: r.accommodationName,
+                kms: r.kms || 0,
+                hoursWorked: calculatedHours,
+                earnings: pagoPorIncidencia + kmPay,
+                observations: r.observaciones || '',
+                checked: r.checked,
+                description: r.description,
+                coste: r.coste,
+                pagadoPor: r.pagadoPor,
+                horaEntrada: tIni || undefined,
+                horaSalida: tFin || undefined,
+              };
+            }),
+          ...llaves
+            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
+            .map((r: EntregaLlaves) => {
+              const sab = String(r.sabanasToallas || '').toLowerCase();
+              const sabPaga = sab.includes('entregad') || sab.includes('sí') || sab.includes('si') || sab === 'true';
+              const pagoSab = sabPaga ? (worker?.pagoPorServicioSabanas ?? 0) : 0;
+              const kmPay = (r.km || 0) * precioPorKm;
+              return {
+                id: r.id,
+                type: 'Llaves' as RecordType,
+                date: r.fechaUbicacionEntrega || r.fechaEntradaReserva || new Date().toISOString(),
+                accommodation: r.apartamento,
+                kms: r.km || 0,
+                hoursWorked: 0,
+                earnings: pagoSab + kmPay,
+                observations: r.observaciones || '',
+                checked: r.checked,
+                nombreCliente: r.nombreCliente,
+                fechaEntrada: r.fechaEntradaReserva,
+                fechaSalida: r.fechaSalidaReserva,
+                sabanasEntregadas: sabPaga,
+              };
+            }),
+        ].sort((a, b) => {
+          // Ordena por fecha desc. parseYMD evita Invalid Date con locale "D/M/YYYY | coords".
+          const parseSort = (raw: string): number => {
+            if (!raw) return -Infinity;
+            const head = String(raw).split('|')[0].trim();
+            const iso = head.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (iso) return new Date(+iso[1], +iso[2] - 1, +iso[3]).getTime();
+            const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (loc) return new Date(+loc[3], +loc[2] - 1, +loc[1]).getTime();
+            return -Infinity;
+          };
+          return parseSort(b.date) - parseSort(a.date);
+        });
+
+        setRecords(unified);
       } catch (error) {
-        console.error('Error fetching worker analytics data:', error);
+        console.error('Error fetching records:', error);
       } finally {
         setLoading(false);
       }
@@ -147,306 +256,535 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
     fetchData();
   }, [user]);
 
-  useEffect(() => {
-    if (!selectedWorkerId || allWorkers.length === 0) return;
-    const worker = allWorkers.find(w => w.id === selectedWorkerId);
-    if (worker) setWorkerData(worker);
-    setChartKey(k => k + 1);
-  }, [selectedWorkerId, allWorkers]);
+  // Devuelve {year, month0-indexed, day} desde ISO "YYYY-MM-DD..." o locale "D/M/YYYY".
+  // new Date("2/6/2026") parsea como M/D en Chrome → bug; este helper evita eso.
+  const parseYMD = (raw: string): { y: number; m: number; d: number } | null => {
+    if (!raw) return null;
+    const head = String(raw).split('|')[0].trim();
+    const iso = head.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return { y: +iso[1], m: +iso[2] - 1, d: +iso[3] };
+    const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (loc) return { y: +loc[3], m: +loc[2] - 1, d: +loc[1] };
+    return null;
+  };
 
-  useEffect(() => {
-    setChartKey(k => k + 1);
-  }, [period, customDesde, customHasta, metric]);
+  // Devuelve Date válido o null usando parseYMD (evita NaN al renderizar getDate()).
+  const safeDate = (raw: string): Date | null => {
+    const ymd = parseYMD(raw);
+    if (!ymd) return null;
+    return new Date(ymd.y, ymd.m, ymd.d);
+  };
 
-  const chartData = useMemo(() => {
-    const dailyData = aggregateDailyData(
-      allWorkers,
-      globalRecords.normal,
-      globalRecords.initial,
-      globalRecords.handyman,
-      period,
-      customDesde,
-      customHasta,
-      selectedWorkerId || undefined,
-      globalRecords.incidencias,
-      globalRecords.llaves,
-    );
-    return dailyData.map(d => ({
-      label: d.label,
-      valor: metric === 'dinero' ? d.dinero : metric === 'km' ? d.km : d.limpiezas
-    }));
-  }, [period, customDesde, customHasta, selectedWorkerId, allWorkers, globalRecords, metric]);
+  const filteredRecords = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
 
-  const total = useMemo(() => chartData.reduce((acc, d) => acc + d.valor, 0), [chartData]);
-  const animatedTotal = useAnimatedNumber(total);
+    return records.filter(r => {
+      const matchesType = filters.type === 'all' || r.type === filters.type;
+      const matchesSearch =
+        r.accommodation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.observations?.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const periodLabel = useMemo(() => {
-    if (period === 'semanal') return 'esta semana';
-    if (period === 'mensual') return 'este mes';
-    if (period === 'trimestral') return 'este trimestre';
-    if (period === 'personalizado') {
-      const formatDate = (s: string) => {
-        if (!s) return '';
-        const [y, m, d] = s.split('-');
-        return `${d}/${m}`;
-      };
-      if (customDesde && customHasta) return `${formatDate(customDesde)} al ${formatDate(customHasta)}`;
-      if (customDesde) return `desde ${formatDate(customDesde)}`;
-      if (customHasta) return `hasta ${formatDate(customHasta)}`;
-      return 'periodo personalizado';
-    }
-    return '';
-  }, [period, customDesde, customHasta]);
-
-  const topAccommodations = useMemo(() => {
-    const stats: Record<string, { count: number; dinero: number; km: number }> = {};
-    const filterByWorker = (r: any) => !workerData || matchesWorkerByPhone(r.telefono, workerData.telefono);
-
-    const normal = globalRecords.normal.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha, _type: 'normal' }));
-    const initial = globalRecords.initial.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.checkoutFecha || r.checkinFecha, _type: 'initial' }));
-    const handyman = globalRecords.handyman.filter(filterByWorker).map(r => ({ ...r, accommodation: r.alojamiento, date: r.fechaFin || r.fechaLlegada, _type: 'handyman' }));
-    const inc = globalRecords.incidencias.filter(filterByWorker).map(r => ({ ...r, accommodation: r.accommodationName, date: r.timestamp || '', _type: 'incidencia' }));
-    const ll = globalRecords.llaves.filter(filterByWorker).map(r => ({ ...r, accommodation: r.apartamento, date: r.fechaUbicacionEntrega || '', _type: 'llaves' }));
-
-    const combined = [...normal, ...initial, ...handyman, ...inc, ...ll];
-    const filtered = filterRecordsByPeriod(combined, period, customDesde, customHasta);
-
-    filtered.forEach(r => {
-      const name = r.accommodation;
-      if (!name) return;
-      if (!stats[name]) stats[name] = { count: 0, dinero: 0, km: 0 };
-      
-      const pagoPorReserva = workerData?.pagoPorReserva ?? 20;
-      const precioPorKm = workerData?.precioPorKm ?? 0.19;
-
-      stats[name].count += 1;
-
-      if (r._type === 'handyman') {
-        const qty = (r as any).cantidadMinutos || 0;
-        stats[name].km += qty;
-        const hp = computeHoursPay((r as any).horaInicioTarea, (r as any).horaFinTarea);
-        stats[name].dinero += hp.pay + qty * precioPorKm;
-      } else if (r._type === 'initial') {
-        const qty = (r as any).km || 0;
-        stats[name].km += qty;
-        const hp = computeHoursPay((r as any).horaEntrada, (r as any).horaSalida);
-        stats[name].dinero += hp.pay + qty * precioPorKm;
-      } else if (r._type === 'incidencia') {
-        const qty = Number((r as any).kms) || 0;
-        stats[name].km += qty;
-        const pagoInc = workerData?.pagoPorIncidencia ?? 0;
-        stats[name].dinero += pagoInc + qty * precioPorKm;
-      } else if (r._type === 'llaves') {
-        // Entrega de llaves: paga sábanas/toallas (si entregadas) + km × precioPorKm.
-        const qty = Number((r as any).km) || 0;
-        stats[name].km += qty;
-        const sab = String((r as any).sabanasToallas || '').toLowerCase();
-        const sabPaga = sab.includes('entregad') || sab.includes('sí') || sab.includes('si') || sab === 'true';
-        const pagoSab = sabPaga ? (workerData?.pagoPorServicioSabanas ?? 0) : 0;
-        stats[name].dinero += pagoSab + qty * precioPorKm;
+      let matchesDate = true;
+      const ymd = parseYMD(r.date || '');
+      if (filters.startDate || filters.endDate) {
+        const iso = ymd ? `${ymd.y}-${String(ymd.m + 1).padStart(2, '0')}-${String(ymd.d).padStart(2, '0')}` : '';
+        if (filters.startDate && iso < filters.startDate) matchesDate = false;
+        if (filters.endDate && iso > filters.endDate) matchesDate = false;
       } else {
-        const qty = (r as any).km || 0;
-        stats[name].km += qty;
-        const pay = computeCleanPay(name, (r as any).horaEntrada, (r as any).horaSalida, pagoPorReserva);
-        stats[name].dinero += pay.base + pay.extraPay + qty * precioPorKm;
+        if (!ymd || ymd.m !== currentMonth || ymd.y !== currentYear) matchesDate = false;
       }
+
+      return matchesType && matchesSearch && matchesDate;
+    });
+  }, [records, filters, searchTerm]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.type !== 'all') count++;
+    if (filters.startDate || filters.endDate) count++;
+    return count;
+  }, [filters]);
+
+  const totals = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const recordsThisMonth = records.filter(r => {
+      const ymd = parseYMD(r.date || '');
+      return !!ymd && ymd.m === currentMonth && ymd.y === currentYear;
     });
 
-    return Object.entries(stats)
-      .map(([name, data]) => {
-        const accInfo = accommodations.find(a => a.name.toLowerCase() === name.toLowerCase());
-        return { 
-          name, 
-          count: data.count,
-          dinero: data.dinero,
-          km: data.km,
-          location: accInfo?.city || 'Varios',
-          image: accInfo?.image || `https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&q=80&w=200&h=200` 
-        };
-      })
-      .sort((a, b) => metric === 'dinero' ? b.dinero - a.dinero : metric === 'km' ? b.km - a.km : b.count - a.count)
-      .slice(0, 5);
-  }, [globalRecords, workerData, period, customDesde, customHasta, accommodations, metric]);
+    const totalHours = recordsThisMonth.reduce((acc, curr) => acc + (curr.hoursWorked || 0), 0);
+    // Servicios del mes: limpiezas + manitas + incidencias + entregas de llaves (todo trabajo realizado).
+    const cleansThisMonth = recordsThisMonth.filter(
+      r => r.type === 'Normal' || r.type === 'Inicial' || r.type === 'Manitas' || r.type === 'Incidencia' || r.type === 'Llaves'
+    ).length;
+
+    return {
+        owed: workerData?.owedMoney || 0,
+        cleans: cleansThisMonth,
+        hours: totalHours
+    };
+  }, [workerData, records]);
 
   if (loading) {
-    return <LoadingSpinner message="Preparando tu resumen..." />;
+    return <LoadingSpinner message="Preparando tu historial..." />;
   }
 
-  const activeFiltersCount = (period !== 'mensual' ? 1 : 0) + (customDesde || customHasta ? 1 : 0) + (metric !== 'dinero' ? 1 : 0);
+  const typeConfig: Record<RecordType, { label: string; badge: string; icon: React.ComponentType<any> }> = {
+    Normal:     { label: 'Normal',     badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',       icon: Home },
+    Inicial:    { label: 'Inicial',    badge: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400', icon: Sparkles },
+    Manitas:    { label: 'Manitas',    badge: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',    icon: Wrench },
+    Incidencia: { label: 'Incidencia', badge: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400',            icon: AlertTriangle },
+    Llaves:     { label: 'Llaves',     badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',        icon: Key },
+  };
 
   return (
     <div className="space-y-0 md:pb-20">
+      
       {/* ── BLOQUE STICKY MÓVIL ── */}
-      <div className="relative sticky top-0 z-30 pt-0 lg:pt-0 pb-0 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col justify-center lg:justify-start gap-0 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in duration-700 min-h-[140px] lg:min-h-0">
-        <header className="flex flex-col items-center lg:items-start justify-center lg:justify-start text-center lg:text-left gap-1.5 py-4 lg:py-0">
-          <h1 className="text-xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
-            Resumen de limpiezas
+      <div className="relative sticky top-0 z-30 pt-0 lg:pt-0 pb-4 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col gap-6 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
+        
+        {/* Centered Greeting con mas espaciado */}
+        <header className="flex flex-col items-center lg:items-start justify-center lg:justify-start text-center lg:text-left gap-2 pt-8 pb-6 lg:pt-4 lg:pb-2">
+          <h1 className="text-2xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
+            Hola, {(workerData?.fullName || user.name).split(' ')[0]} 👋
           </h1>
           <p className="text-sm text-slate-400 dark:text-stone-500 font-light">
-            Consulta tus métricas y rendimiento
+            Resumen de tu actividad y pagos recientes
           </p>
         </header>
 
+        {/* Stats Boxes (Saldo, Limpiezas, Horas) */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+          {[
+            { label: 'Dinero Debido', value: totals.owed.toFixed(2), suffix: '€', highlight: true },
+            { label: 'Servicios este Mes', value: totals.cleans, suffix: '' },
+            { label: 'Horas Totales este Mes', value: totals.hours.toFixed(1), suffix: 'h' },
+          ].map(stat => (
+            <div
+              key={stat.label}
+              className="bg-white/60 dark:bg-stone-900/40 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/60 dark:border-stone-800/50 p-3 sm:p-5 flex-col justify-center items-center sm:items-start flex shadow-sm"
+            >
+              <div className="flex flex-col items-start justify-center text-left w-fit gap-0.5 sm:gap-1">
+                <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-stone-500">
+                  <span className="hidden sm:inline">{stat.label}</span>
+                  <span className="sm:hidden leading-tight flex flex-col">
+                    {stat.label.split(' ').map((word, idx) => (
+                      <span key={idx} className="block">{word}</span>
+                    ))}
+                  </span>
+                </p>
+                <p className={`text-lg sm:text-2xl font-normal font-display tabular-nums tracking-tight ${stat.highlight ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-stone-100'}`}>
+                  {stat.value}<span className="text-[10px] sm:text-sm font-normal ml-0.5 text-slate-400 dark:text-stone-500">{stat.suffix}</span>
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
 
-        
-        <DashboardFilterModal 
-          isOpen={isFilterModalOpen}
-          onClose={() => setIsFilterModalOpen(false)}
-          period={period}
-          metric={metric}
-          customDesde={customDesde}
-          customHasta={customHasta}
-          onApply={(updates) => {
-            if (updates.period) setPeriod(updates.period);
-            if (updates.metric) setMetric(updates.metric);
-            if (updates.customDesde !== undefined) setCustomDesde(updates.customDesde);
-            if (updates.customHasta !== undefined) setCustomHasta(updates.customHasta);
-          }}
-        />
+        {/* Search bar - sticky alongside stats */}
+        <div className="flex items-center gap-3 pb-3 lg:hidden">
+          <div className="relative group flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4 group-focus-within:text-orange-500 transition-colors" />
+            <input
+              type="text"
+              placeholder="Buscar alojamiento..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-3 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-sm text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-full shadow-sm"
+            />
+          </div>
+        </div>
 
         {/* Gradient fade border */}
         <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-b from-transparent to-[#F5F4F2] dark:to-[#1c1a18] pointer-events-none lg:hidden" />
       </div>
 
-      <div className="flex-1 w-full lg:overflow-visible pb-24 space-y-6 animate-in fade-in duration-500">
 
-      <div className="w-full">
-        {/* Chart Section */}
-        <div className="bg-white/60 dark:bg-stone-900/40 backdrop-blur-md p-6 md:p-8 rounded-[28px] md:rounded-[32px] border border-white/60 dark:border-stone-800/50 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between mb-6 md:mb-8">
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl md:text-2xl font-normal text-slate-800 dark:text-stone-100 tracking-tight font-display tabular-nums">
-                {metric === 'dinero'
-                  ? fmtEur(animatedTotal)
-                  : metric === 'km'
-                    ? `${animatedTotal.toFixed(1)} km`
-                    : `${Math.floor(animatedTotal)}`}
-              </span>
-              <span className="text-[10px] md:text-xs font-light text-slate-400 dark:text-stone-500 lowercase">
-                {periodLabel}
-              </span>
+      {/* ── CONTENIDO SCROLLABLE ── */}
+      <div className="flex-1 w-full lg:overflow-visible pb-24 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
+        <section className="space-y-4">
+          
+
+          
+          <WorkerRecordsFilterModal 
+            isOpen={isFilterModalOpen}
+            onClose={() => setIsFilterModalOpen(false)}
+            filters={filters}
+            onApply={(newFilters) => {
+              setFilters(newFilters);
+            }}
+          />
+
+          {/* Desktop Table */}
+          <div className="hidden lg:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
+            <div className="grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_1.2fr_0.5fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
+               {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Detalle / Observaciones', 'Estado', ''].map(col => (
+                 <span key={col} className="text-xs text-slate-400 dark:text-stone-500">
+                   {col}
+                 </span>
+               ))}
             </div>
-            <div className="p-2 rounded-xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
-              {metric === 'dinero' ? <TrendingUp size={18} /> : metric === 'km' ? <Route size={18} /> : <Sparkles size={18} />}
-            </div>
+            
+            <ul className="divide-y divide-stone-100 dark:divide-stone-800 flex-1 overflow-y-auto">
+              {filteredRecords.length === 0 ? (
+                <li className="flex items-center justify-center py-16">
+                  <span className="text-slate-400 dark:text-stone-500 text-sm">
+                    No se encontraron registros
+                  </span>
+                </li>
+              ) : (
+                filteredRecords.map(record => {
+                  const cfg = typeConfig[record.type];
+                  const isExpanded = expandedId === record.id;
+                  return (
+                    <li
+                      key={record.id}
+                      className={`transition-all duration-300 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 cursor-pointer ${
+                        isExpanded ? 'bg-stone-50/80 dark:bg-stone-850/50' : ''
+                      }`}
+                      onClick={() => setExpandedId(isExpanded ? null : record.id)}
+                    >
+                      <div className="group module-item grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_1.2fr_0.5fr] gap-4 px-8 py-4 items-center">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
+                            {(() => {
+                              const d = safeDate(record.date);
+                              return d ? d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+                            })()}
+                          </span>
+                          {record.horaEntrada && record.horaSalida && (
+                            <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
+                          )}
+                        </div>
+                        
+                        <div className="min-w-0">
+                          <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-medium truncate max-w-full ${cfg.badge}`}>
+                            {cfg.label}
+                          </span>
+                        </div>
+                        
+                        <p className="text-sm text-slate-800 dark:text-stone-200 truncate font-medium">
+                          {record.accommodation ? formatName(record.accommodation) : '—'}
+                        </p>
+                        
+                        <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                          {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
+                        </p>
+                        
+                        <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
+                          {record.kms > 0 ? `${record.kms} km` : '—'}
+                        </p>
+                        
+                        <p className={`text-sm tabular-nums truncate ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-slate-500 dark:text-stone-400'}`}>
+                          {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                        </p>
+                        
+                        {/* Detalle/Observaciones */}
+                        <div className="min-w-0 pr-4">
+                          {record.type === 'Incidencia' ? (
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[11px] text-slate-600 dark:text-stone-300 truncate w-full" title={record.description}>
+                                {record.description || '—'}
+                              </span>
+                              {record.coste != null && record.coste > 0 && (
+                                <span className="text-[10px] text-red-500">{record.coste.toFixed(2)}€ · {record.pagadoPor === 'empresa' ? 'Empresa' : 'Limpiador'}</span>
+                              )}
+                            </div>
+                          ) : record.type === 'Llaves' ? (
+                            <div className="flex flex-col min-w-0">
+                              <span className={`text-[11px] truncate w-full ${record.sabanasEntregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-stone-400'}`} title={`Sábanas y toallas: ${record.sabanasEntregadas ? 'Entregadas' : 'No entregadas'}`}>
+                                Sábanas: {record.sabanasEntregadas ? 'Entregadas' : 'No'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 dark:text-stone-400 truncate w-full block" title={record.observations}>
+                              {record.observations || <span className="opacity-40 italic">—</span>}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Estado */}
+                        <div className="flex items-center min-w-0">
+                          {record.type === 'Normal' || record.type === 'Inicial' ? (
+                            <span className={`text-[10px] font-medium truncate ${record.checked ? 'text-green-600' : 'text-amber-600'}`}>
+                              {record.checked ? 'Pagado' : 'Pendiente'}
+                            </span>
+                          ) : record.type === 'Incidencia' || record.type === 'Llaves' ? (
+                            <span className={`text-[10px] font-medium truncate ${record.checked ? 'text-green-600' : 'text-amber-600'}`}>
+                              {record.checked ? 'Revisado' : 'Pendiente'}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">—</span>
+                          )}
+                        </div>
+
+                        {/* Chevron icon */}
+                        <div className="flex justify-end pr-2 text-slate-400">
+                          <ChevronRight size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-90 text-orange-500' : ''}`} />
+                        </div>
+                      </div>
+
+                      {/* Panel de detalles en escritorio del Dashboard */}
+                      <div className={`overflow-hidden transition-all duration-300 ease-in-out px-8 ${
+                        isExpanded ? 'max-h-96 pb-6 pt-2 border-t border-stone-100 dark:border-stone-800/40 bg-white/40 dark:bg-stone-900/40' : 'max-h-0'
+                      }`}
+                      onClick={(e) => e.stopPropagation()} // Evitar colapsar al hacer clic en detalles
+                      >
+                        <div className="grid grid-cols-4 gap-4 bg-stone-50/50 dark:bg-stone-850/40 p-4 rounded-2xl border border-stone-100 dark:border-stone-800/60">
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Fecha Completa</span>
+                            <p className="text-xs text-slate-700 dark:text-stone-200">
+                              {(() => {
+                                const d = safeDate(record.date);
+                                return d ? d.toLocaleDateString('es-ES', { dateStyle: 'long' } as any) : '—';
+                              })()}
+                            </p>
+                          </div>
+
+                          <div className="col-span-3 space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Alojamiento Completo</span>
+                            <p className="text-xs text-slate-700 dark:text-stone-200 font-medium break-words leading-relaxed">
+                              {record.accommodation ? record.accommodation : '—'}
+                            </p>
+                          </div>
+
+                          {record.type === 'Incidencia' && (
+                            <>
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hora</span>
+                                <p className="text-xs text-slate-700 dark:text-stone-200 font-mono">
+                                  {record.horaEntrada && record.horaSalida
+                                    ? `${record.horaEntrada} – ${record.horaSalida}`
+                                    : record.horaEntrada || '—'}
+                                </p>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kilometraje</span>
+                                <p className="text-xs text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.kms > 0 ? `${record.kms} km` : '—'}
+                                </p>
+                              </div>
+                            </>
+                          )}
+
+                          {record.type === 'Llaves' && (
+                            <>
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Sábanas y Toallas</span>
+                                <p className={`text-xs font-medium ${record.sabanasEntregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-stone-200'}`}>
+                                  {record.sabanasEntregadas ? 'Entregadas' : 'No entregadas'}
+                                </p>
+                              </div>
+                              {record.fechaEntrada && (
+                                <div className="space-y-1">
+                                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Entrada de Reserva</span>
+                                  <p className="text-xs text-slate-700 dark:text-stone-200">
+                                    {(() => {
+                                      const d = safeDate(record.fechaEntrada || '');
+                                      return d ? d.toLocaleDateString('es-ES', { dateStyle: 'short' } as any) : '—';
+                                    })()}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {(record.type === 'Normal' || record.type === 'Inicial' || record.type === 'Manitas') && (
+                            <>
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horario del Registro</span>
+                                <p className="text-xs text-slate-700 dark:text-stone-200 font-mono">
+                                  {record.horaEntrada && record.horaSalida ? `${record.horaEntrada} – ${record.horaSalida}` : '—'}
+                                </p>
+                              </div>
+                              <div className="space-y-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                  {record.type === 'Manitas' ? 'Minutos Trabajados' : 'Kilómetros totales'}
+                                </span>
+                                <p className="text-xs text-slate-700 dark:text-stone-200">
+                                  {record.type === 'Manitas' ? `${record.minutes || 0} min` : `${record.kms || 0} km`}
+                                </p>
+                              </div>
+                            </>
+                          )}
+
+                          <div className="col-span-2 space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Detalles / Observaciones</span>
+                            <p className="text-xs text-slate-600 dark:text-stone-400 italic font-light">
+                              "{record.description || record.observations || 'Sin anotaciones adicionales'}"
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
           </div>
 
-          {/* Selector de métrica visible */}
-          <div className="grid grid-cols-3 gap-2 mb-4 md:mb-6">
-            {([
-              { id: 'dinero',    label: 'Dinero' },
-              { id: 'limpiezas', label: 'Servicios' },
-              { id: 'km',        label: 'Km' },
-            ] as { id: Metric; label: string }[]).map(m => {
-              const active = metric === m.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setMetric(m.id)}
-                  className={`flex items-center justify-center px-3 py-2 rounded-xl text-xs transition-all border active:scale-[0.98] ${
-                    active
-                      ? 'bg-orange-100 dark:bg-orange-400/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-medium'
-                      : 'bg-white/60 dark:bg-stone-800/40 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
+          {/* Mobile Cards (Misma UI que Registros pero con el "Estado" de WorkerPanel) */}
+          <div className="lg:hidden space-y-3">
+            {filteredRecords.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 bg-white/30 dark:bg-stone-900/30 rounded-3xl border-2 border-dashed border-slate-200 dark:border-stone-800 mt-4">
+                <Search size={40} className="text-slate-300 dark:text-stone-700 mb-3" />
+                <p className="text-slate-500 dark:text-stone-400 font-medium">No se encontraron registros</p>
+                <p className="text-xs text-slate-400 dark:text-stone-500">Prueba con otra búsqueda o filtros.</p>
+              </div>
+            ) : (
+              filteredRecords.map(record => {
+                const cfg = typeConfig[record.type];
+                const isExpanded = expandedId === record.id;
+                return (
+                  <div
+                    key={record.id}
+                    onClick={() => setExpandedId(isExpanded ? null : record.id)}
+                    className={`bg-white/80 dark:bg-stone-900/60 backdrop-blur-md rounded-3xl border border-white/60 dark:border-stone-800/50 overflow-hidden transition-all duration-300 ${
+                      isExpanded ? 'pb-1 shadow-sm bg-white dark:bg-stone-900/80' : 'active:scale-[0.98]'
+                    }`}
+                  >
+                    <div className="p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl bg-stone-50 dark:bg-stone-800 shrink-0 border border-stone-100 dark:border-stone-800">
+                          <span className="text-[10px] font-normal text-slate-500 capitalize leading-none mb-1">
+                            {(() => {
+                              const d = safeDate(record.date);
+                              return d ? d.toLocaleDateString('es-ES', { month: 'short' }) : '—';
+                            })()}
+                          </span>
+                          <span className="text-base font-bold text-slate-800 dark:text-stone-200 leading-none">
+                            {(() => {
+                              const d = safeDate(record.date);
+                              return d ? d.getDate() : '—';
+                            })()}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-[13px] font-medium text-slate-800 dark:text-stone-100 truncate">
+                            {record.accommodation ? formatName(record.accommodation) : '—'}
+                          </h3>
 
-          <div className="h-[220px] md:h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.03)" vertical={false} />
-                <XAxis 
-                  dataKey="label" 
-                  tick={{ fontSize: 9, fill: '#94a3b8' }} 
-                  axisLine={false} 
-                  tickLine={false}
-                  interval={isMobile ? (period === 'mensual' ? 6 : 1) : (period === 'mensual' ? 4 : 0)}
-                  dy={10}
-                />
-                <YAxis 
-                  tick={{ fontSize: 9, fill: '#94a3b8' }} 
-                  axisLine={false} 
-                  tickLine={false}
-                  tickFormatter={(v) => metric === 'dinero' ? (v >= 1000 ? `${(v/1000).toFixed(1)}k` : `${v}`) : metric === 'km' ? `${v}` : `${v}`}
-                  width={30}
-                />
-                <Tooltip content={<CustomTooltip activeTab={metric} />} cursor={{ stroke: '#e2e8f0', strokeWidth: 1 }} />
-                <Line 
-                  type="monotone" 
-                  dataKey="valor" 
-                  stroke="#f97316" 
-                  strokeWidth={isMobile ? 1.5 : 2.5} 
-                  dot={false}
-                  activeDot={<PulseDot />}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
+                        </div>
+                      </div>
 
-      {/* NEW SECTION: Top Accommodations */}
-      <section className="space-y-6">
-        <div className="px-1">
-          <span className="text-sm font-semibold text-slate-800 dark:text-stone-200 tracking-tight">Estadística por alojamiento</span>
-        </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[13px] tabular-nums font-medium ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>
+                          {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
+                        </span>
+                        <ChevronRight size={18} className={`text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-90 text-slate-700 dark:text-stone-300' : ''}`} />
+                      </div>
+                    </div>
 
-        {topAccommodations.length === 0 ? (
-          <div className="bg-white/40 dark:bg-stone-900/20 rounded-3xl p-12 text-center border border-dashed border-slate-200 dark:border-stone-800">
-            <p className="text-sm text-slate-400">No hay datos suficientes para mostrar estadísticas</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {topAccommodations.map((acc, idx) => (
-              <div 
-                key={acc.name}
-                className="group bg-white/80 dark:bg-stone-900/60 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-3xl p-4 flex items-center justify-between transition-all duration-300 hover:shadow-xl hover:shadow-orange-500/5 hover:-translate-y-1"
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 shrink-0 border border-white/50 dark:border-stone-700 shadow-inner">
-                    <img 
-                      src={acc.image} 
-                      alt={acc.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-slate-800 dark:text-stone-100 truncate">{formatName(acc.name)}</p>
-                    <div className="mt-1">
-                      <span className="text-[10px] font-normal text-slate-400 dark:text-stone-500 truncate block capitalize">
-                        {acc.location.toLowerCase()}
-                      </span>
+                    <div className={`px-4 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 pb-4 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                            <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tipo</p>
+                            <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{cfg.label}</p>
+                          </div>
+
+                          {(record.type === 'Normal' || record.type === 'Inicial' || record.type === 'Manitas') && (
+                            <>
+                              <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horario</p>
+                                <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.horaEntrada && record.horaSalida ? `${record.horaEntrada}-${record.horaSalida}` : '—'}
+                                </p>
+                              </div>
+                              <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">
+                                  {record.type === 'Manitas' ? 'Min' : 'KM'}
+                                </p>
+                                <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.type === 'Manitas' ? (record.minutes || 0) : (record.kms || 0)}
+                                </p>
+                              </div>
+                            </>
+                          )}
+
+                          {record.type === 'Incidencia' && (
+                            <>
+                              <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Hora</p>
+                                <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.horaEntrada && record.horaSalida
+                                    ? `${record.horaEntrada}-${record.horaSalida}`
+                                    : record.horaEntrada || '—'}
+                                </p>
+                              </div>
+                              <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">KM</p>
+                                <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {record.kms || 0}
+                                </p>
+                              </div>
+                            </>
+                          )}
+
+                          {record.type === 'Llaves' && (
+                            <>
+                              <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Sábanas</p>
+                                <p className={`text-[11px] font-semibold truncate w-full ${record.sabanasEntregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-stone-200'}`}>
+                                  {record.sabanasEntregadas ? 'Sí' : 'No'}
+                                </p>
+                              </div>
+                              <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
+                                <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">KM</p>
+                                <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{record.kms || 0}</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                      {record.type === 'Incidencia' && record.description && (
+                        <div className="bg-red-50/50 dark:bg-red-900/10 p-3.5 rounded-2xl border border-red-100/50 dark:border-red-800/30 mb-2">
+                          <div className="flex items-center gap-1.5 mb-1.5 text-red-500">
+                            <AlertTriangle size={12} />
+                            <span className="text-[9px] uppercase font-bold tracking-wider">Descripción</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
+                            "{record.description}"
+                          </p>
+                        </div>
+                      )}
+
+                      {record.observations && (
+                        <div className="bg-stone-50 dark:bg-stone-900/40 p-3.5 rounded-2xl border border-stone-100/50 dark:border-stone-800/50">
+                          <div className="flex items-center gap-1.5 mb-1.5 text-slate-500 dark:text-stone-400">
+                            <Info size={12} />
+                            <span className="text-[9px] uppercase font-bold tracking-wider">Observaciones</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
+                            "{record.observations}"
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-                <div className="text-right shrink-0 ml-4">
-                  <div className="flex flex-col items-end bg-stone-50/50 dark:bg-stone-800/50 px-3 py-2 rounded-2xl border border-white/40 dark:border-stone-700/30">
-                    <span className="text-base font-normal text-slate-800 dark:text-stone-100 tabular-nums leading-none">
-                      {metric === 'dinero' ? fmtEur(acc.dinero) : metric === 'km' ? `${acc.km.toFixed(1)} km` : acc.count}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
-        )}
-      </section>
 
-      {/* Floating filter button - mobile only */}
+        </section>
+      </div>
+      
+      {/* BOTON FILTRO FLOTANTE MÓVIL (Solo se muestra en movil como en Registros) */}
       <div className="fixed bottom-16 right-4 z-50 sm:hidden animate-in fade-in zoom-in duration-300">
         <button
           onClick={() => setIsFilterModalOpen(true)}
-          className={`relative flex items-center justify-center w-[52px] h-[52px] rounded-full shadow-2xl transition-all active:scale-[0.92] border ${
-            activeFiltersCount > 0
-              ? 'bg-orange-500 border-orange-400'
-              : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700'
+          className={`flex items-center justify-center w-[52px] h-[52px] rounded-full shadow-2xl transition-all active:scale-[0.92] border ${
+            activeFiltersCount > 0 
+              ? 'bg-orange-500 border-orange-400 text-white' 
+              : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-slate-600 dark:text-stone-300'
           }`}
         >
-          <Filter size={20} className={activeFiltersCount > 0 ? 'text-white' : 'text-orange-500'} />
+          <Filter size={20} className={activeFiltersCount > 0 ? "text-white" : "text-orange-500"} />
           {activeFiltersCount > 0 && (
             <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-stone-900">
               {activeFiltersCount}
@@ -454,7 +792,7 @@ const WorkerAnalytics: React.FC<WorkerAnalyticsProps> = ({ user }) => {
           )}
         </button>
       </div>
-      </div>
+
     </div>
   );
 };
