@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { User } from '../services/mockData';
 import { Sparkles, Key, AlertTriangle, MessageCircle, ChevronRight, type LucideIcon } from 'lucide-react';
 import ServiceFormModal from '../components/workers/ServiceFormModal';
 import EntregaLlavesFormModal from '../components/workers/EntregaLlavesFormModal';
 import IncidenciaFormModal from '../components/workers/IncidenciaFormModal';
+import SugerenciaFormModal from '../components/sugerencias/SugerenciaFormModal';
 
 interface WorkerPanelProps {
   user: User;
@@ -19,11 +19,11 @@ interface ActionConfig {
 }
 
 const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
-  const navigate = useNavigate();
   const firstName = (user.name || 'trabajador').split(' ')[0];
   const [isServiceFormOpen, setIsServiceFormOpen] = useState(false);
   const [isLlavesFormOpen, setIsLlavesFormOpen] = useState(false);
   const [isIncidenciaFormOpen, setIsIncidenciaFormOpen] = useState(false);
+  const [isSugerenciaFormOpen, setIsSugerenciaFormOpen] = useState(false);
 
   const actions: ActionConfig[] = [
     {
@@ -80,7 +80,7 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
 
       <div className="pt-2 max-w-xl mx-auto lg:mx-0">
         <button
-          onClick={() => navigate('/sugerencias')}
+          onClick={() => setIsSugerenciaFormOpen(true)}
           className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-stone-100 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700/40 active:scale-[0.98] transition-all"
         >
           <MessageCircle size={18} />
@@ -99,6 +99,11 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
       <IncidenciaFormModal
         isOpen={isIncidenciaFormOpen}
         onClose={() => setIsIncidenciaFormOpen(false)}
+      />
+      <SugerenciaFormModal
+        isOpen={isSugerenciaFormOpen}
+        onClose={() => setIsSugerenciaFormOpen(false)}
+        user={user}
       />
     </div>
   );

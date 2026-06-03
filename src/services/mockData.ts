@@ -416,4 +416,13 @@ export interface Suggestion {
   category?: 'fallo' | 'sugerencia' | 'otro' | string;
 }
 
+export interface AppFeedbackPayload {
+  nombre: string;
+  apellidos: string;
+  email: string;
+  telefono: string;
+  tipo: 'fallo' | 'sugerencia' | 'otro';
+  descripcion: string;
+}
+
 export const MOCK_PAGOS: PagoRecord[] = [];

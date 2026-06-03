@@ -18,7 +18,8 @@ import {
   Accommodation,
   MOCK_ACCOMMODATIONS,
   Suggestion,
-  WorkerAccommodationDetails
+  WorkerAccommodationDetails,
+  AppFeedbackPayload
 } from './mockData';
 import { supabase } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
@@ -41,6 +42,7 @@ const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:U";
 const FIRMAS_ENTREGA_BUCKET = 'firmas-entrega';
 const ENTREGA_LLAVES_APPS_SCRIPT_URL = import.meta.env.VITE_ENTREGA_LLAVES_APPS_SCRIPT_URL || '';
 const SUGERENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || '';
+const FEEDBACK_APPS_SCRIPT_URL = import.meta.env.VITE_FEEDBACK_APPS_SCRIPT_URL || '';
 const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL || '';
 const PDF_FOLDER_ID = import.meta.env.VITE_PDF_FOLDER_ID || '';
 
@@ -1724,6 +1726,25 @@ export const appsScriptApi = {
       return true;
     } catch (error) {
       console.error('Error replying to suggestion:', error);
+      return false;
+    }
+  },
+
+  sendAppFeedback: async (payload: AppFeedbackPayload): Promise<boolean> => {
+    try {
+      if (!FEEDBACK_APPS_SCRIPT_URL) {
+        console.error('[API Feedback] VITE_FEEDBACK_APPS_SCRIPT_URL no configurada');
+        return false;
+      }
+      await fetch(FEEDBACK_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'submitFeedback', ...payload }),
+      });
+      return true;
+    } catch (error) {
+      console.error('[API Feedback] Error enviando sugerencia:', error);
       return false;
     }
   },
