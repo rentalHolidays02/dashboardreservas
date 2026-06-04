@@ -3,10 +3,19 @@ import { X, Home, Wrench, Sparkles, Search, Key, AlertTriangle, type LucideIcon 
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
+import { resolveAccommodationId, SubmitFooter } from './serviceFormHelpers';
+import {
+  saveDraft,
+  submitServiceReport,
+  submitKeyDelivery,
+  submitIncidentReport,
+} from '../../services/reportsApi';
 
 interface ServiceFormModalProps {
   isOpen: boolean;
   onClose: () => void;
+  draftId?: string | null;
+  draftPayload?: (Partial<FormState> & { tipo?: ServiceType }) | null;
 }
 
 type ServiceType = 'reserva' | 'manitas';
@@ -228,7 +237,12 @@ const parseHHMM = (s: string): number => {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 };
 
-const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) => {
+const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
+  isOpen,
+  onClose,
+  draftId,
+  draftPayload,
+}) => {
   const [tipo, setTipo] = useState<ServiceType | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
@@ -242,11 +256,21 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) 
     if (!isOpen) {
       setTipo(null);
       setForm(emptyForm);
+      setStatus(null);
+    } else if (draftPayload) {
+      const { tipo: draftTipo, ...rest } = draftPayload;
+      if (draftTipo) setTipo(draftTipo);
+      setForm((prev) => ({ ...prev, ...(rest as Partial<FormState>) }));
     }
-  }, [isOpen]);
+  }, [isOpen, draftPayload]);
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ type: 'ok' | 'error'; message: string } | null>(null);
+
+  const hasAnyData = useMemo(() => tipo !== null, [tipo]);
 
   const horasExtraMin = parseHHMM(form.horasExtra);
   const requiresJustificacion = horasExtraMin > 0;
@@ -279,6 +303,95 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) 
     }
     return true;
   }, [tipo, form, requiresJustificacion]);
+
+  const handleSubmit = async () => {
+    if (!tipo) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      // 1) Servicio principal
+      const accId = resolveAccommodationId(form.apartamento, accommodations);
+      const parentId = await submitServiceReport({
+        kind: tipo,
+        accommodationId: accId,
+        accommodationName: form.apartamento,
+        horaEntrada: form.horaEntrada,
+        horaSalida: form.horaSalida,
+        km: form.km ? Number(form.km) : 0,
+        observaciones: tipo === 'reserva' ? form.observaciones : '',
+        descripcion: tipo === 'manitas' ? form.descripcion : '',
+        recogeLlaves: tipo === 'reserva' ? form.recogeLlaves === 'Si' : false,
+        sigueHuesped: tipo === 'reserva' ? form.sigueHuesped === 'Si' : false,
+        horaSalidaHuesped:
+          tipo === 'reserva' && form.sigueHuesped === 'Si' ? form.horaSalidaReserva : '',
+        horasExtra: tipo === 'reserva' ? form.horasExtra : '',
+        justificacionExtra:
+          tipo === 'reserva' && requiresJustificacion ? form.justificacionExtra : '',
+      });
+
+      // 2) Llaves anidadas (opcional)
+      if (form.incluyeEntregaLlaves) {
+        await submitKeyDelivery({
+          parentServiceId: parentId,
+          accommodationId: accId,
+          accommodationName: form.apartamento,
+          nombreCliente: form.el_nombreCliente,
+          fechaEntradaReserva: form.el_fechaEntradaReserva,
+          fechaSalidaReserva: form.el_fechaSalidaReserva,
+          sabanasEntregadas: form.el_sabanasEntregadas === 'Si',
+          sabanasPersonas: form.el_sabanasPersonas ? Number(form.el_sabanasPersonas) : null,
+          fianzaMontoMetodo: form.el_fianzaMonto as MetodoPago,
+          bizumMonto: form.el_bizumMonto,
+          cantidadPagadaMonto: form.el_cantidadPagadaMonto ? Number(form.el_cantidadPagadaMonto) : 0,
+          fianzaGarantiaMetodo: form.el_fianzaGarantia as MetodoPago,
+          bizumGarantia: form.el_bizumGarantia,
+          cantidadPagadaGarantia: form.el_cantidadPagadaGarantia
+            ? Number(form.el_cantidadPagadaGarantia)
+            : 0,
+          firmaTrabajadorBase64: form.el_firmaTrabajador,
+          firmaHuespedBase64: form.el_firmaHuesped,
+        });
+      }
+
+      // 3) Incidencia anidada (opcional)
+      if (form.incluyeIncidencia) {
+        await submitIncidentReport({
+          parentServiceId: parentId,
+          accommodationId: accId,
+          accommodationName: form.apartamento,
+          duracion: form.inc_duracion,
+          detalles: form.inc_detalles,
+        });
+      }
+
+      if (draftId) {
+        const { deleteDraft } = await import('../../services/reportsApi');
+        await deleteDraft(draftId).catch(() => {});
+      }
+      setStatus({ type: 'ok', message: 'Informe enviado correctamente.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al enviar el informe.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      // No metemos firmas en el borrador (payloads enormes).
+      const { el_firmaTrabajador, el_firmaHuesped, ...rest } = form;
+      await saveDraft('service', { tipo, ...rest }, draftId ?? undefined);
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al guardar el borrador.' });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -692,40 +805,15 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) 
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm rounded-b-3xl">
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-3 rounded-2xl bg-stone-100 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 text-sm font-medium hover:bg-stone-50 dark:hover:bg-stone-700/40 transition-all active:scale-[0.98]"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Pendiente: persistencia en Supabase"
-              className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 cursor-not-allowed ${
-                isValid
-                  ? 'bg-orange-500/40 text-white'
-                  : tipo
-                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50'
-                    : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500'
-              }`}
-            >
-              <Sparkles size={14} />
-              {isValid ? 'Enviar informe' : tipo ? 'Guardar en borrador' : 'Enviar informe'}
-            </button>
-          </div>
-          <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
-            {isValid
-              ? 'Listo para enviar. (Persistencia Supabase pendiente)'
-              : tipo
-                ? 'Faltan campos obligatorios. Se guardará como borrador.'
-                : 'Elige tipo de servicio para empezar.'}
-          </p>
-        </div>
+        <SubmitFooter
+          isValid={isValid}
+          hasData={hasAnyData}
+          busy={busy}
+          status={status}
+          onCancel={onClose}
+          onSubmit={handleSubmit}
+          onSaveDraft={handleSaveDraft}
+        />
       </div>
     </div>
   );

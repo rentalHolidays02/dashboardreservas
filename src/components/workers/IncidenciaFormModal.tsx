@@ -5,12 +5,16 @@ import {
   SubmitFooter,
   inputCls,
   labelCls,
+  resolveAccommodationId,
   useAccommodations,
 } from './serviceFormHelpers';
+import { saveDraft, submitIncidentReport } from '../../services/reportsApi';
 
 interface IncidenciaFormModalProps {
   isOpen: boolean;
   onClose: () => void;
+  draftId?: string | null;
+  draftPayload?: Partial<FormState> | null;
 }
 
 interface FormState {
@@ -25,13 +29,25 @@ const emptyForm: FormState = {
   detalles: '',
 };
 
-const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClose }) => {
+const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
+  isOpen,
+  onClose,
+  draftId,
+  draftPayload,
+}) => {
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ type: 'ok' | 'error'; message: string } | null>(null);
   const accommodations = useAccommodations(isOpen);
 
   useEffect(() => {
-    if (!isOpen) setForm(emptyForm);
-  }, [isOpen]);
+    if (!isOpen) {
+      setForm(emptyForm);
+      setStatus(null);
+    } else if (draftPayload) {
+      setForm({ ...emptyForm, ...draftPayload });
+    }
+  }, [isOpen, draftPayload]);
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -43,6 +59,43 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClo
     form.apartamento.trim().length > 0 ||
     form.duracion.length > 0 ||
     form.detalles.trim().length > 0;
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await submitIncidentReport({
+        accommodationId: resolveAccommodationId(form.apartamento, accommodations),
+        accommodationName: form.apartamento,
+        duracion: form.duracion,
+        detalles: form.detalles,
+      });
+      if (draftId) {
+        const { deleteDraft } = await import('../../services/reportsApi');
+        await deleteDraft(draftId).catch(() => {});
+      }
+      setStatus({ type: 'ok', message: 'Incidencia enviada correctamente.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al enviar la incidencia.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      await saveDraft('incident', form, draftId ?? undefined);
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al guardar el borrador.' });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -113,7 +166,15 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClo
           </div>
         </div>
 
-        <SubmitFooter isValid={isValid} hasData={hasData} onCancel={onClose} />
+        <SubmitFooter
+          isValid={isValid}
+          hasData={hasData}
+          busy={busy}
+          status={status}
+          onCancel={onClose}
+          onSubmit={handleSubmit}
+          onSaveDraft={handleSaveDraft}
+        />
       </div>
     </div>
   );

@@ -661,11 +661,9 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
 
       {/* Acciones */}
       <div className="flex items-center justify-end gap-1">
-        {user.status === 'pending' && (
-          <button onClick={() => onResend(user)} title="Reenviar invitación y recuperar contraseña" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
-            <RotateCcw size={14} />
-          </button>
-        )}
+        <button onClick={() => onResend(user)} title="Reenviar correo de recuperación" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-amber-500 dark:hover:text-amber-400 transition-colors">
+          <RotateCcw size={14} />
+        </button>
         <button onClick={() => onEdit(user)} title="Editar" className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-stone-500 hover:text-orange-500 dark:hover:text-orange-400 transition-colors">
           <Edit2 size={14} />
         </button>

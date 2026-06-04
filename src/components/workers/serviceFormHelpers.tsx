@@ -18,6 +18,17 @@ export const parseHHMM = (s: string): number => {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 };
 
+// Devuelve el id del alojamiento cuyo nombre coincide exactamente (insensible a mayúsculas).
+export const resolveAccommodationId = (
+  name: string,
+  options: Accommodation[]
+): string | null => {
+  const q = name.trim().toLowerCase();
+  if (!q) return null;
+  const exact = options.find((o) => o.name.trim().toLowerCase() === q);
+  return exact?.id ?? null;
+};
+
 export const SiNoToggle: React.FC<{
   value: SiNo;
   onChange: (v: SiNo) => void;
@@ -130,38 +141,67 @@ export const ApartamentoAutocomplete: React.FC<{
 export const SubmitFooter: React.FC<{
   isValid: boolean;
   hasData: boolean;
+  busy?: boolean;
+  status?: { type: 'ok' | 'error'; message: string } | null;
   onCancel: () => void;
-}> = ({ isValid, hasData, onCancel }) => (
-  <div className="px-6 py-4 border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm rounded-b-3xl">
-    <div className="grid grid-cols-2 gap-3">
-      <button
-        type="button"
-        onClick={onCancel}
-        className="px-5 py-3 rounded-2xl bg-stone-100 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 text-sm font-medium hover:bg-stone-50 dark:hover:bg-stone-700/40 transition-all active:scale-[0.98]"
-      >
-        Cancelar
-      </button>
-      <button
-        type="button"
-        disabled
-        title="Pendiente: persistencia en Supabase"
-        className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 cursor-not-allowed ${
-          isValid
-            ? 'bg-orange-500/40 text-white'
-            : hasData
-              ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50'
-              : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500'
-        }`}
-      >
-        {isValid ? 'Enviar informe' : hasData ? 'Guardar en borrador' : 'Enviar informe'}
-      </button>
+  onSubmit: () => void;
+  onSaveDraft: () => void;
+}> = ({ isValid, hasData, busy, status, onCancel, onSubmit, onSaveDraft }) => {
+  const action = isValid ? 'send' : hasData ? 'draft' : 'idle';
+  const handleClick = () => {
+    if (busy) return;
+    if (action === 'send') onSubmit();
+    else if (action === 'draft') onSaveDraft();
+  };
+
+  return (
+    <div className="px-6 py-4 border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm rounded-b-3xl">
+      {status && (
+        <div className={`mb-2 px-3 py-2 rounded-xl text-[11px] font-medium text-center ${
+          status.type === 'ok'
+            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50'
+            : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/50'
+        }`}>
+          {status.message}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="px-5 py-3 rounded-2xl bg-stone-100 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 text-sm font-medium hover:bg-stone-50 dark:hover:bg-stone-700/40 transition-all active:scale-[0.98] disabled:opacity-50"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={busy || action === 'idle'}
+          className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 ${
+            action === 'send'
+              ? 'bg-orange-500 hover:bg-orange-600 active:scale-[0.98] text-white'
+              : action === 'draft'
+                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 hover:bg-amber-200 dark:hover:bg-amber-900/40 active:scale-[0.98]'
+                : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500 cursor-not-allowed'
+          } ${busy ? 'opacity-60 cursor-wait' : ''}`}
+        >
+          {busy
+            ? 'Guardando…'
+            : action === 'send'
+              ? 'Enviar informe'
+              : action === 'draft'
+                ? 'Guardar en borrador'
+                : 'Enviar informe'}
+        </button>
+      </div>
+      <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
+        {action === 'send'
+          ? 'Todo listo. Pulsa para enviar el informe.'
+          : action === 'draft'
+            ? 'Faltan campos obligatorios. Se guardará como borrador.'
+            : 'Rellena los campos para empezar.'}
+      </p>
     </div>
-    <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
-      {isValid
-        ? 'Listo para enviar. (Persistencia Supabase pendiente)'
-        : hasData
-          ? 'Faltan campos obligatorios. Se guardará como borrador.'
-          : 'Rellena los campos para empezar.'}
-    </p>
-  </div>
-);
+  );
+};
