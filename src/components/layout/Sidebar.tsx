@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   KeyRound,
   TrendingUp,
+  Sparkles,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -48,15 +49,16 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
   {
     label: 'OPERACIONES',
     items: [
-      { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
-      { Icon: Users, label: 'Trabajadores', path: '/workers' },
-      { Icon: Home, label: 'Alojamientos', path: '/alojamientos' },
-      { Icon: KeyRound, label: 'Entrega de Llaves', path: '/entrega-de-llaves' },
+      { Icon: Sparkles, label: 'Servicios Realizados', path: '/servicios-db' },
+      { Icon: KeyRound, label: 'Entregas de Llaves', path: '/entrega-llaves-db' },
+      { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias-db' },
     ],
   },
   {
-    label: 'SISTEMA',
+    label: 'GESTIÓN',
     items: [
+      { Icon: Users, label: 'Trabajadores', path: '/workers' },
+      { Icon: Home, label: 'Alojamientos', path: '/alojamientos' },
       { Icon: ShieldCheck, label: 'Usuarios', path: '/usuarios' },
     ],
   },
@@ -64,9 +66,16 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     label: 'FINANZAS',
     items: [
       { Icon: Banknote, label: 'Pagos', path: '/pagos' },
-      { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
       { Icon: Mail, label: 'Sugerencias', path: '/sugerencias' },
       { Icon: FileText, label: 'Generar Informe', path: '/generar-informe', prominent: true },
+    ],
+  },
+  {
+    label: 'OPERACIONES (EXCEL)',
+    items: [
+      { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
+      { Icon: KeyRound, label: 'Entrega de Llaves', path: '/entrega-de-llaves' },
+      { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
     ],
   },
 ];
@@ -148,7 +157,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {categories
             .filter(cat => {
               if (userRole === 'trabajador') {
-                return cat.label === 'PRINCIPAL' || cat.label === 'OPERACIONES';
+                return cat.label === 'PRINCIPAL';
               }
               return true;
             })

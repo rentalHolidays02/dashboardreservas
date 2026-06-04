@@ -22,6 +22,19 @@ import WorkerPanel from './pages/WorkerPanel';
 import WorkerAnalytics from './pages/WorkerAnalytics';
 import WorkerRecords from './pages/WorkerRecords';
 import { User } from './services/mockData';
+import { Sparkles } from 'lucide-react';
+
+const PlaceholderPage = ({ title }: { title: string }) => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 space-y-4 animate-in fade-in duration-500">
+    <div className="w-16 h-16 rounded-3xl bg-orange-50 dark:bg-orange-400/10 flex items-center justify-center text-orange-500">
+      <Sparkles size={32} className="animate-pulse" />
+    </div>
+    <h2 className="text-xl font-medium text-slate-800 dark:text-stone-100 font-display">{title}</h2>
+    <p className="text-sm text-slate-400 dark:text-stone-500 max-w-sm font-light">
+      Esta sección se conectará próximamente a la base de datos de Supabase.
+    </p>
+  </div>
+);
 
 
 function App() {
@@ -270,6 +283,45 @@ function App() {
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                       <EntregaDeLlaves userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+
+              <Route
+                path="/servicios-db"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <PlaceholderPage title="Servicios Realizados (Supabase)" />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+
+              <Route
+                path="/entrega-llaves-db"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <PlaceholderPage title="Entregas de Llaves (Supabase)" />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+
+              <Route
+                path="/incidencias-db"
+                element={
+                  user ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <PlaceholderPage title="Incidencias (Supabase)" />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
