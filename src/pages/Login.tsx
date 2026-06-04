@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+
 import { appsScriptApi } from '../services/api';
 import { Eye, EyeOff, Loader2, AlertCircle, Users, BarChart3, FileText } from 'lucide-react';
 import type { User } from '../services/mockData';
@@ -23,34 +23,58 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isInviteFlow, setIsInviteFlow] = useState(false);
+  const [authFlow, setAuthFlow] = useState<'login' | 'invite' | 'recovery'>('login');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
-  const location = useLocation();
 
-  // Detectar si el usuario viene de un enlace de invitación
+
+
+  // Detectar el tipo de flujo escuchando los eventos de autenticación de Supabase.
+  // Usamos onAuthStateChange en lugar de leer window.location.hash directamente porque
+  // el SDK de Supabase procesa y limpia el hash de la URL de forma síncrona al importarse,
+  // antes de que nuestro useEffect pueda leerlo.
   React.useEffect(() => {
-    const checkInvite = async () => {
-      // 1. Chequear la URL directamente
-      const hash = window.location.hash || location.hash;
-      if (hash && (hash.includes('access_token') || hash.includes('type=invite') || hash.includes('type=recovery'))) {
-        setIsInviteFlow(true);
-        return;
-      }
-      
-      // 2. Si Supabase ya ha limpiado la URL pero ha iniciado sesión temporalmente
+    let isMounted = true;
+    let authSubscription: { unsubscribe: () => void } | null = null;
+
+    const setup = async () => {
       const { supabase } = await import('../services/supabaseClient');
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Si hay sesión en Supabase pero estamos en la pantalla de Login (sin usuario en la App),
-      // significa que acabamos de entrar por un link de invitación.
-      if (session && session.user) {
-        setIsInviteFlow(true);
-      }
+
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+
+        if (event === 'PASSWORD_RECOVERY') {
+          // El usuario viene de un enlace de "Cambiar contraseña" → mostrar formulario de restablecimiento
+          setAuthFlow('recovery');
+
+        } else if (event === 'SIGNED_IN' && session?.user) {
+          // El usuario viene de un magic link o invitación
+          // Si ya existe perfil válido en la BD, hacemos auto-login silencioso
+          try {
+            const { appsScriptApi } = await import('../services/api');
+            const appUser = await appsScriptApi.getProfileByEmail(session.user.email || '');
+            if (appUser && isMounted) {
+              onLoginSuccess(appUser);
+            } else if (isMounted) {
+              setAuthFlow('invite');
+            }
+          } catch {
+            if (isMounted) setAuthFlow('invite');
+          }
+        }
+      });
+
+      authSubscription = data.subscription;
     };
-    
-    checkInvite();
-  }, [location.hash]);
+
+    setup();
+
+    return () => {
+      isMounted = false;
+      authSubscription?.unsubscribe();
+    };
+  }, []);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,15 +88,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      if (isInviteFlow) {
-        // Flujo de invitación: establecer contraseña
+      if (authFlow !== 'login') {
+        // Flujo de invitación o recuperación: establecer contraseña
         if (password !== confirmPassword) {
           setError('Las contraseñas no coinciden.');
           setLoading(false);
           return;
         }
 
-        if (!acceptedTerms) {
+        if (authFlow === 'invite' && !acceptedTerms) {
           setError('Debes aceptar los Términos y Condiciones para crear tu cuenta.');
           setLoading(false);
           return;
@@ -85,14 +109,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           if (user && user.email) {
             const appUser = await appsScriptApi.login(user.email, password);
             if (appUser) {
-              // Registrar la aceptación de T&C (no bloqueante)
-              if (appUser.id) await appsScriptApi.acceptTerms(appUser.id);
+              // Registrar la aceptación de T&C si es flujo de invitación (no bloqueante)
+              if (authFlow === 'invite' && appUser.id) {
+                await appsScriptApi.acceptTerms(appUser.id);
+              }
               onLoginSuccess(appUser);
             }
           } else {
             // Si algo falla, recargar para login normal
             window.location.hash = '';
-            setIsInviteFlow(false);
+            setAuthFlow('login');
             setError('Contraseña establecida. Por favor, inicia sesión normalmente.');
           }
         } else {
@@ -197,19 +223,21 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
             <div className="mb-8 text-center">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-stone-100">
-                {isInviteFlow ? 'Configura tu cuenta' : 'Bienvenido'}
+                {authFlow === 'invite' && 'Configura tu cuenta'}
+                {authFlow === 'recovery' && 'Restablecer contraseña'}
+                {authFlow === 'login' && 'Bienvenido'}
               </h1>
               <p className="text-slate-500 dark:text-stone-400 mt-1 text-sm">
-                {isInviteFlow 
-                  ? 'Establece tu contraseña para activar tu acceso' 
-                  : 'Introduce tus credenciales para acceder'}
+                {authFlow === 'invite' && 'Establece tu contraseña para activar tu acceso'}
+                {authFlow === 'recovery' && 'Introduce tu nueva contraseña para acceder'}
+                {authFlow === 'login' && 'Introduce tus credenciales para acceder'}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
 
               {/* Email (solo se muestra en login normal) */}
-              {!isInviteFlow && (
+              {authFlow === 'login' && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
                     Correo electrónico
@@ -228,7 +256,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               {/* Password */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
-                  {isInviteFlow ? 'Nueva Contraseña' : 'Contraseña'}
+                  {authFlow !== 'login' ? 'Nueva Contraseña' : 'Contraseña'}
                 </label>
                 <div className="relative">
                   <input
@@ -250,8 +278,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 </div>
               </div>
 
-              {/* Confirm Password (solo en flujo de invitación) */}
-              {isInviteFlow && (
+              {/* Confirm Password (en invitación y recuperación) */}
+              {authFlow !== 'login' && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
                     Confirmar Contraseña
@@ -269,7 +297,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               )}
 
               {/* Aceptación T&C (solo en flujo de invitación) */}
-              {isInviteFlow && (
+              {authFlow === 'invite' && (
                 <label className="flex items-start gap-2.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -308,15 +336,23 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 {loading ? (
                   <>
                     <Loader2 className="animate-spin" size={17} />
-                    <span>{isInviteFlow ? 'Creando cuenta…' : 'Verificando…'}</span>
+                    <span>
+                      {authFlow === 'invite' && 'Creando cuenta…'}
+                      {authFlow === 'recovery' && 'Guardando contraseña…'}
+                      {authFlow === 'login' && 'Verificando…'}
+                    </span>
                   </>
                 ) : (
-                  <span>{isInviteFlow ? 'Crear cuenta' : 'Iniciar sesión'}</span>
+                  <span>
+                    {authFlow === 'invite' && 'Crear cuenta'}
+                    {authFlow === 'recovery' && 'Restablecer contraseña'}
+                    {authFlow === 'login' && 'Iniciar sesión'}
+                  </span>
                 )}
               </button>
             </form>
 
-            {!isInviteFlow && (
+            {authFlow === 'login' && (
               <p className="mt-6 text-[11px] text-center text-slate-500 dark:text-stone-500 leading-relaxed">
                 Al iniciar sesión confirmas que aceptas los{' '}
                 <button

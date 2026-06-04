@@ -932,15 +932,16 @@ export const appsScriptApi = {
   // de recuperación en el hash. Login.tsx detecta `type=recovery` y abre el flujo de nueva contraseña.
   // Esta URL DEBE estar en la whitelist de Dashboard → Authentication → URL Configuration → Redirect URLs.
   resendInvitation: async (email: string): Promise<{ ok: boolean; error?: string }> => {
-    const redirectTo = import.meta.env.VITE_AUTH_REDIRECT_URL || 'https://base-datos-pagos-rh.vercel.app/';
-    const [otpRes, resetRes] = await Promise.all([
-      supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } }),
-      supabase.auth.resetPasswordForEmail(email, { redirectTo }),
-    ]);
-    const errors = [otpRes.error?.message, resetRes.error?.message].filter(Boolean) as string[];
-    // Si al menos uno se envió, lo damos por bueno.
-    if (errors.length === 2) return { ok: false, error: errors.join(' | ') };
-    return { ok: true, error: errors[0] };
+    // redirectTo debe apuntar a /login para que el hash con el token llegue al componente correcto
+    const baseUrl = import.meta.env.VITE_AUTH_REDIRECT_URL
+      ? import.meta.env.VITE_AUTH_REDIRECT_URL.replace(/\/$/, '') + '/login'
+      : 'https://base-datos-pagos-rh.vercel.app/login';
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: baseUrl });
+    if (error) {
+      console.error('Error al enviar correo de recuperación:', error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
   },
 
   // Desvincula cualquier trabajador apuntando a este perfil (evita violar la FK al borrar el perfil).
