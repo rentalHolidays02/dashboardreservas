@@ -3,10 +3,14 @@ import { X, Home, Wrench, Sparkles, Search, Key, AlertTriangle, type LucideIcon 
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
+import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
+import { isServiceDraftEmpty } from '../../utils/workerDraftValidators';
+import { DraftRestoredBanner } from './serviceFormHelpers';
 
 interface ServiceFormModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId: string;
 }
 
 type ServiceType = 'reserva' | 'manitas';
@@ -79,6 +83,13 @@ const emptyForm: FormState = {
   inc_duracion: '',
   inc_detalles: '',
 };
+
+interface ServiceDraftBundle {
+  tipo: ServiceType | null;
+  form: FormState;
+}
+
+const emptyDraft: ServiceDraftBundle = { tipo: null, form: emptyForm };
 
 const inputCls =
   'w-full rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 px-4 py-3 text-sm text-slate-800 dark:text-stone-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300 transition-all';
@@ -228,9 +239,24 @@ const parseHHMM = (s: string): number => {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 };
 
-const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) => {
-  const [tipo, setTipo] = useState<ServiceType | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
+const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose, userId }) => {
+  const {
+    data: draft,
+    setData: setDraft,
+    clearDraft,
+    restoredFromDraft,
+    dismissRestoredHint,
+    hasDraft,
+  } = useWorkerFormDraft<ServiceDraftBundle>({
+    userId,
+    kind: 'servicio',
+    empty: emptyDraft,
+    isEmpty: (d) => isServiceDraftEmpty({ tipo: d.tipo, form: d.form }),
+    isOpen,
+  });
+
+  const tipo = draft.tipo;
+  const form = draft.form;
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
 
   useEffect(() => {
@@ -238,15 +264,11 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) 
     appsScriptApi.getAccommodations().then(setAccommodations).catch(() => setAccommodations([]));
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setTipo(null);
-      setForm(emptyForm);
-    }
-  }, [isOpen]);
+  const setTipo = (value: ServiceType | null) =>
+    setDraft((prev) => ({ ...prev, tipo: value }));
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => ({ ...prev, form: { ...prev.form, [key]: value } }));
 
   const horasExtraMin = parseHHMM(form.horasExtra);
   const requiresJustificacion = horasExtraMin > 0;
@@ -310,6 +332,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) 
             <X size={18} />
           </button>
         </div>
+
+
 
         {/* Scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -715,16 +739,25 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose }) 
               }`}
             >
               <Sparkles size={14} />
-              {isValid ? 'Enviar informe' : tipo ? 'Guardar en borrador' : 'Enviar informe'}
+              Enviar informe
             </button>
           </div>
           <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
             {isValid
               ? 'Listo para enviar. (Persistencia Supabase pendiente)'
               : tipo
-                ? 'Faltan campos obligatorios. Se guardará como borrador.'
+                ? 'Faltan campos obligatorios.'
                 : 'Elige tipo de servicio para empezar.'}
           </p>
+          {hasDraft && (
+            <button
+              type="button"
+              onClick={clearDraft}
+              className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+            >
+              Descartar borrador
+            </button>
+          )}
         </div>
       </div>
     </div>

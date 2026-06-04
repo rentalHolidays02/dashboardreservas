@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { X, Key } from 'lucide-react';
 import SignaturePad from '../ui/SignaturePad';
 import {
@@ -6,16 +6,20 @@ import {
   PagoSelector,
   SiNoToggle,
   SubmitFooter,
+  DraftRestoredBanner,
   inputCls,
   labelCls,
   useAccommodations,
   type MetodoPago,
   type SiNo,
 } from './serviceFormHelpers';
+import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
+import { isEntregaLlavesDraftEmpty } from '../../utils/workerDraftValidators';
 
 interface EntregaLlavesFormModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId: string;
 }
 
 interface FormState {
@@ -59,13 +63,23 @@ const emptyForm: FormState = {
 const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
   isOpen,
   onClose,
+  userId,
 }) => {
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const {
+    data: form,
+    setData: setForm,
+    clearDraft,
+    restoredFromDraft,
+    dismissRestoredHint,
+    hasDraft,
+  } = useWorkerFormDraft<FormState>({
+    userId,
+    kind: 'entrega-llaves',
+    empty: emptyForm,
+    isEmpty: isEntregaLlavesDraftEmpty,
+    isOpen,
+  });
   const accommodations = useAccommodations(isOpen);
-
-  useEffect(() => {
-    if (!isOpen) setForm(emptyForm);
-  }, [isOpen]);
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -129,6 +143,8 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
             <X size={18} />
           </button>
         </div>
+
+
 
         {/* Scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -327,7 +343,13 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
           />
         </div>
 
-        <SubmitFooter isValid={isValid} hasData={hasData} onCancel={onClose} />
+        <SubmitFooter
+          isValid={isValid}
+          hasData={hasData}
+          onCancel={onClose}
+          onDiscardDraft={clearDraft}
+          hasDraft={hasDraft}
+        />
       </div>
     </div>
   );

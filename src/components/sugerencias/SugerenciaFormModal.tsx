@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, MessageCircle, Loader2, Send, AlertCircle, Sparkles, HelpCircle } from 'lucide-react';
 import type { User } from '../../services/mockData';
 import { appsScriptApi } from '../../services/api';
-import { inputCls, labelCls } from '../workers/serviceFormHelpers';
+import { inputCls, labelCls, DraftRestoredBanner } from '../workers/serviceFormHelpers';
+import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
+import { isSugerenciaDraftEmpty } from '../../utils/workerDraftValidators';
 
 export type FeedbackTipo = 'fallo' | 'sugerencia' | 'otro';
 
@@ -32,7 +34,25 @@ function splitName(full: string): { nombre: string; apellidos: string } {
 }
 
 const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClose, user }) => {
-  const [form, setForm] = useState<FormState>({ tipo: 'sugerencia', descripcion: '', telefono: user.telefono ?? '' });
+  const defaultTelefono = user.telefono ?? '';
+  const emptyForm: FormState = { tipo: 'sugerencia', descripcion: '', telefono: defaultTelefono };
+  const userId = user.id ?? user.email;
+
+  const {
+    data: form,
+    setData: setForm,
+    clearDraft,
+    restoredFromDraft,
+    dismissRestoredHint,
+    hasDraft,
+  } = useWorkerFormDraft<FormState>({
+    userId,
+    kind: 'sugerencia',
+    empty: emptyForm,
+    isEmpty: (d) => isSugerenciaDraftEmpty(d, defaultTelefono),
+    isOpen,
+  });
+
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +60,12 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
   const { nombre, apellidos } = useMemo(() => splitName(user.name || ''), [user.name]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setForm({ tipo: 'sugerencia', descripcion: '', telefono: user.telefono ?? '' });
-    setSending(false);
-    setSent(false);
-    setError(null);
-  }, [isOpen, user.telefono]);
+    if (isOpen) {
+      setSent(false);
+      setError(null);
+      setSending(false);
+    }
+  }, [isOpen]);
 
   const isValid = form.descripcion.trim().length >= 10 && !!user.email;
 
@@ -65,6 +85,7 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
 
     setSending(false);
     if (ok) {
+      clearDraft();
       setSent(true);
       return;
     }
@@ -98,6 +119,8 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
             <X size={18} />
           </button>
         </div>
+
+
 
         {sent ? (
           <div className="px-6 py-10 flex flex-col items-center text-center gap-4">
@@ -216,6 +239,15 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
                   Enviar
                 </button>
               </div>
+              {hasDraft && (
+                <button
+                  type="button"
+                  onClick={clearDraft}
+                  className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                >
+                  Descartar borrador
+                </button>
+              )}
             </div>
           </>
         )}

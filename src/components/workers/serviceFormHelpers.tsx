@@ -127,11 +127,21 @@ export const ApartamentoAutocomplete: React.FC<{
 };
 
 // Footer botón estándar: 3 estados (sin datos / borrador / enviar).
+export const DraftRestoredBanner: React.FC<{
+  visible: boolean;
+  onDismiss: () => void;
+  onDiscard?: () => void;
+}> = () => {
+  return null;
+};
+
 export const SubmitFooter: React.FC<{
   isValid: boolean;
   hasData: boolean;
   onCancel: () => void;
-}> = ({ isValid, hasData, onCancel }) => (
+  onDiscardDraft?: () => void;
+  hasDraft?: boolean;
+}> = ({ isValid, hasData, onCancel, onDiscardDraft, hasDraft }) => (
   <div className="px-6 py-4 border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm rounded-b-3xl">
     <div className="grid grid-cols-2 gap-3">
       <button
@@ -153,15 +163,24 @@ export const SubmitFooter: React.FC<{
               : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500'
         }`}
       >
-        {isValid ? 'Enviar informe' : hasData ? 'Guardar en borrador' : 'Enviar informe'}
+        Enviar informe
       </button>
     </div>
     <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
       {isValid
         ? 'Listo para enviar. (Persistencia Supabase pendiente)'
         : hasData
-          ? 'Faltan campos obligatorios. Se guardará como borrador.'
+          ? 'Faltan campos obligatorios.'
           : 'Rellena los campos para empezar.'}
     </p>
+    {hasDraft && onDiscardDraft && (
+      <button
+        type="button"
+        onClick={onDiscardDraft}
+        className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+      >
+        Descartar borrador
+      </button>
+    )}
   </div>
 );

@@ -1,16 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import {
   ApartamentoAutocomplete,
   SubmitFooter,
+  DraftRestoredBanner,
   inputCls,
   labelCls,
   useAccommodations,
 } from './serviceFormHelpers';
+import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
+import { isIncidenciaDraftEmpty } from '../../utils/workerDraftValidators';
 
 interface IncidenciaFormModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId: string;
 }
 
 interface FormState {
@@ -25,13 +29,22 @@ const emptyForm: FormState = {
   detalles: '',
 };
 
-const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClose }) => {
-  const [form, setForm] = useState<FormState>(emptyForm);
+const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClose, userId }) => {
+  const {
+    data: form,
+    setData: setForm,
+    clearDraft,
+    restoredFromDraft,
+    dismissRestoredHint,
+    hasDraft,
+  } = useWorkerFormDraft<FormState>({
+    userId,
+    kind: 'incidencia',
+    empty: emptyForm,
+    isEmpty: isIncidenciaDraftEmpty,
+    isOpen,
+  });
   const accommodations = useAccommodations(isOpen);
-
-  useEffect(() => {
-    if (!isOpen) setForm(emptyForm);
-  }, [isOpen]);
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -73,6 +86,8 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClo
           </button>
         </div>
 
+
+
         {/* Scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           <div>
@@ -113,7 +128,13 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({ isOpen, onClo
           </div>
         </div>
 
-        <SubmitFooter isValid={isValid} hasData={hasData} onCancel={onClose} />
+        <SubmitFooter
+          isValid={isValid}
+          hasData={hasData}
+          onCancel={onClose}
+          onDiscardDraft={clearDraft}
+          hasDraft={hasDraft}
+        />
       </div>
     </div>
   );
