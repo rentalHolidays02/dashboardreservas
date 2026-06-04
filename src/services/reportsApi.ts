@@ -13,8 +13,7 @@ export interface ServiceReportInput {
   horaEntrada?: string;       // HH:MM
   horaSalida?: string;        // HH:MM
   km?: number;
-  observaciones?: string;     // sólo reserva
-  descripcion?: string;       // sólo manitas
+  notas?: string;             // texto libre (observaciones reserva / descripción manitas)
   recogeLlaves?: boolean;
   sigueHuesped?: boolean;
   horaSalidaHuesped?: string; // HH:MM, sólo si sigueHuesped
@@ -55,6 +54,10 @@ export interface IncidentReportInput {
 
 const emptyToNull = <T>(v: T | undefined | ''): T | null =>
   v === undefined || v === '' ? null : (v as T);
+
+// Quita espacios (y otros no-dígitos por seguridad) → "612 34 56 78" → "612345678".
+const stripBizum = (v: string | undefined): string =>
+  (v ?? '').replace(/\D/g, '');
 
 // Devuelve el worker_id del trabajador conectado (vía profile_id = auth.uid()).
 export const getCurrentWorkerId = async (): Promise<string | null> => {
@@ -109,6 +112,7 @@ export const submitServiceReport = async (input: ServiceReportInput): Promise<st
   const workerId = await getCurrentWorkerId();
   if (!workerId) throw new Error('No hay trabajador asociado a esta cuenta');
 
+  const isManitas = input.kind === 'manitas';
   const row = {
     worker_id: workerId,
     kind: input.kind,
@@ -117,13 +121,14 @@ export const submitServiceReport = async (input: ServiceReportInput): Promise<st
     hora_entrada: emptyToNull(input.horaEntrada),
     hora_salida: emptyToNull(input.horaSalida),
     km: input.km ?? 0,
-    observaciones: input.observaciones ?? '',
-    descripcion: input.descripcion ?? '',
-    recoge_llaves: input.recogeLlaves ?? false,
-    sigue_huesped: input.sigueHuesped ?? false,
-    hora_salida_huesped: emptyToNull(input.horaSalidaHuesped),
-    horas_extra: input.horasExtra || '0',
-    justificacion_extra: input.justificacionExtra ?? '',
+    notas: input.notas ?? '',
+    // Campos exclusivos de reserva → si es manitas, forzamos los valores neutros
+    // que el CHECK constraint exige.
+    recoge_llaves: isManitas ? false : (input.recogeLlaves ?? false),
+    sigue_huesped: isManitas ? false : (input.sigueHuesped ?? false),
+    hora_salida_huesped: isManitas ? null : emptyToNull(input.horaSalidaHuesped),
+    horas_extra: isManitas ? '00:00' : (input.horasExtra || '00:00'),
+    justificacion_extra: isManitas ? '' : (input.justificacionExtra ?? ''),
   };
 
   const { data, error } = await supabase
@@ -160,10 +165,10 @@ export const submitKeyDelivery = async (input: KeyDeliveryInput): Promise<string
     sabanas_entregadas: input.sabanasEntregadas,
     sabanas_personas: input.sabanasEntregadas ? input.sabanasPersonas ?? null : null,
     fianza_monto_metodo: input.fianzaMontoMetodo,
-    bizum_monto: input.fianzaMontoMetodo === 'Bizum' ? input.bizumMonto ?? '' : '',
+    bizum_monto: input.fianzaMontoMetodo === 'Bizum' ? stripBizum(input.bizumMonto) : '',
     cantidad_pagada_monto: input.cantidadPagadaMonto ?? 0,
     fianza_garantia_metodo: input.fianzaGarantiaMetodo,
-    bizum_garantia: input.fianzaGarantiaMetodo === 'Bizum' ? input.bizumGarantia ?? '' : '',
+    bizum_garantia: input.fianzaGarantiaMetodo === 'Bizum' ? stripBizum(input.bizumGarantia) : '',
     cantidad_pagada_garantia: input.cantidadPagadaGarantia ?? 0,
     km: input.km ?? 0,
     observaciones: input.observaciones ?? '',
@@ -186,12 +191,14 @@ export const submitIncidentReport = async (input: IncidentReportInput): Promise<
   const workerId = await getCurrentWorkerId();
   if (!workerId) throw new Error('No hay trabajador asociado a esta cuenta');
 
+  // duracion ahora es text con CHECK ^HH:MM$ → si no es válido, '00:00'.
+  const validHHMM = /^([0-9]{1,2}):[0-5][0-9]$/.test(input.duracion);
   const row = {
     worker_id: workerId,
     parent_service_id: input.parentServiceId ?? null,
     accommodation_id: input.accommodationId ?? null,
     accommodation_name: input.accommodationName,
-    duracion: input.duracion || '0',
+    duracion: validHHMM ? input.duracion : '00:00',
     detalles: input.detalles,
   };
 
