@@ -129,7 +129,7 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
                   <td className="px-5 py-3.5 text-slate-700 dark:text-stone-300">
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <CalendarDays size={13} className="text-slate-400" />
-                      {fmtDate(inc.submitted_at)}
+                      {fmtDate(inc.created_at)}
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-slate-700 dark:text-stone-300">

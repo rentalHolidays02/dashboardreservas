@@ -17,7 +17,7 @@ export interface ServiceReportDB {
   horas_extra: string;
   justificacion_extra: string;
   notas: string;
-  submitted_at: string;
+  created_at: string;
 }
 
 export interface KeyDeliveryDB {
@@ -42,7 +42,7 @@ export interface KeyDeliveryDB {
   observaciones: string;
   firma_trabajador_url: string | null;
   firma_huesped_url: string | null;
-  submitted_at: string;
+  created_at: string;
 }
 
 export interface IncidentReportDB {
@@ -55,7 +55,7 @@ export interface IncidentReportDB {
   accommodation_name: string;
   duracion: string;
   detalles: string;
-  submitted_at: string;
+  created_at: string;
 }
 
 // Helpers
@@ -67,7 +67,7 @@ export const supabaseOperationsApi = {
     const { data, error } = await supabase
       .from('service_reports')
       .select('*, workers(full_name, phone)')
-      .order('submitted_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching service reports:', error);
@@ -85,7 +85,7 @@ export const supabaseOperationsApi = {
     const { data, error } = await supabase
       .from('key_deliveries')
       .select('*, workers(full_name, phone)')
-      .order('submitted_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching key deliveries:', error);
@@ -103,7 +103,7 @@ export const supabaseOperationsApi = {
     const { data, error } = await supabase
       .from('incident_reports')
       .select('*, workers(full_name, phone)')
-      .order('submitted_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching incident reports:', error);

@@ -171,7 +171,7 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
                       <td className="px-4 py-3 text-slate-700 dark:text-stone-300 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 font-medium">
                           <CalendarDays size={12} className="text-slate-400" />
-                          {fmtDateTime(rep.submitted_at)}
+                          {fmtDateTime(rep.created_at)}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
