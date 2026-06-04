@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Home, Wrench, Sparkles, Search, Key, AlertTriangle, type LucideIcon } from 'lucide-react';
+import { X, Home, Wrench, Sparkles, Key, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { DuracionInput, formatBizumNumber, resolveAccommodationId, SubmitFooter } from './serviceFormHelpers';
+import { ApartamentoAutocomplete, DuracionInput, formatBizumNumber, resolveAccommodationId, SubmitFooter } from './serviceFormHelpers';
 import {
   saveDraft,
   submitServiceReport,
@@ -183,54 +183,6 @@ const SectionToggle: React.FC<{
     )}
   </div>
 );
-
-const ApartamentoAutocomplete: React.FC<{
-  value: string;
-  onChange: (v: string) => void;
-  options: Accommodation[];
-}> = ({ value, onChange, options }) => {
-  const [focused, setFocused] = useState(false);
-  const matches = useMemo(() => {
-    const q = value.trim().toLowerCase();
-    if (!q) return options.slice(0, 8);
-    return options
-      .filter((o) => o.name.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [value, options]);
-
-  return (
-    <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4" />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
-        placeholder="Buscar alojamiento..."
-        className={`${inputCls} pl-10`}
-        autoComplete="off"
-      />
-      {focused && matches.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-2xl bg-white dark:bg-stone-900 border border-slate-100 dark:border-stone-700/50 shadow-lg">
-          {matches.map((m) => (
-            <li
-              key={m.id}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(m.name);
-                setFocused(false);
-              }}
-              className="px-4 py-2.5 text-sm text-slate-700 dark:text-stone-200 hover:bg-orange-50 dark:hover:bg-orange-400/10 cursor-pointer truncate"
-            >
-              {m.name}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-};
 
 const parseHHMM = (s: string): number => {
   const m = s.trim().match(/^(\d{1,2}):(\d{2})$/);
@@ -670,6 +622,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       type="datetime-local"
                       value={form.el_fechaEntradaReserva}
                       onChange={(e) => setF('el_fechaEntradaReserva', e.target.value)}
+                      min="1900-01-01T00:00"
+                      max="9999-12-31T23:59"
                       className={inputCls}
                     />
                   </div>
@@ -681,6 +635,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       type="datetime-local"
                       value={form.el_fechaSalidaReserva}
                       onChange={(e) => setF('el_fechaSalidaReserva', e.target.value)}
+                      min="1900-01-01T00:00"
+                      max="9999-12-31T23:59"
                       className={inputCls}
                     />
                   </div>

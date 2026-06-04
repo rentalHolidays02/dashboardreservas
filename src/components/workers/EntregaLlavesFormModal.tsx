@@ -267,6 +267,8 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
                 type="datetime-local"
                 value={form.fechaEntradaReserva}
                 onChange={(e) => setF('fechaEntradaReserva', e.target.value)}
+                min="1900-01-01T00:00"
+                max="9999-12-31T23:59"
                 className={inputCls}
               />
             </div>
@@ -278,6 +280,8 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
                 type="datetime-local"
                 value={form.fechaSalidaReserva}
                 onChange={(e) => setF('fechaSalidaReserva', e.target.value)}
+                min="1900-01-01T00:00"
+                max="9999-12-31T23:59"
                 className={inputCls}
               />
             </div>

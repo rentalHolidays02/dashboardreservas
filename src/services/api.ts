@@ -889,17 +889,23 @@ export const appsScriptApi = {
   },
 
   updateProfile: async (userId: string, profileData: Partial<User>) => {
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({
+    // Invocamos la edge function `update-user-profile`. Esta sincroniza el email
+    // en `auth.users` (que requiere service_role) además de actualizar `profiles`.
+    // Hacer sólo la upsert de profile rompía el login al cambiar email desde el panel.
+    const { data, error } = await supabase.functions.invoke('update-user-profile', {
+      body: {
         id: userId,
         email: profileData.email,
-        full_name: profileData.name,
+        name: profileData.name,
         role: profileData.role,
         phone: profileData.telefono,
-      });
-
-    if (error) throw error;
+      },
+    });
+    if (error) {
+      // El cuerpo de error de funciones suele venir en `data.error`
+      const msg = (data as any)?.error || error.message || 'Error al actualizar el perfil';
+      throw new Error(msg);
+    }
   },
 
   deleteProfile: async (userId: string) => {
