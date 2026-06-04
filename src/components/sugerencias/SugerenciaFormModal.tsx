@@ -32,7 +32,10 @@ function splitName(full: string): { nombre: string; apellidos: string } {
 }
 
 const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClose, user }) => {
-  const [form, setForm] = useState<FormState>({ tipo: 'sugerencia', descripcion: '', telefono: user.telefono ?? '' });
+  const defaultTelefono = user.telefono ?? '';
+  const emptyForm: FormState = { tipo: 'sugerencia', descripcion: '', telefono: defaultTelefono };
+
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +43,14 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
   const { nombre, apellidos } = useMemo(() => splitName(user.name || ''), [user.name]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setForm({ tipo: 'sugerencia', descripcion: '', telefono: user.telefono ?? '' });
-    setSending(false);
-    setSent(false);
-    setError(null);
-  }, [isOpen, user.telefono]);
+    if (isOpen) {
+      setForm(emptyForm);
+      setSent(false);
+      setError(null);
+      setSending(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const isValid = form.descripcion.trim().length >= 10 && !!user.email;
 
@@ -98,6 +103,8 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
             <X size={18} />
           </button>
         </div>
+
+
 
         {sent ? (
           <div className="px-6 py-10 flex flex-col items-center text-center gap-4">
