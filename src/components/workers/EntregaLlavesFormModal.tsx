@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Key } from 'lucide-react';
 import SignaturePad from '../ui/SignaturePad';
 import {
@@ -6,20 +6,20 @@ import {
   PagoSelector,
   SiNoToggle,
   SubmitFooter,
-  DraftRestoredBanner,
   inputCls,
   labelCls,
+  resolveAccommodationId,
   useAccommodations,
   type MetodoPago,
   type SiNo,
 } from './serviceFormHelpers';
-import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
-import { isEntregaLlavesDraftEmpty } from '../../utils/workerDraftValidators';
+import { saveDraft, submitKeyDelivery } from '../../services/reportsApi';
 
 interface EntregaLlavesFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userId: string;
+  draftId?: string | null;
+  draftPayload?: Partial<FormState> | null;
 }
 
 interface FormState {
@@ -63,26 +63,78 @@ const emptyForm: FormState = {
 const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
   isOpen,
   onClose,
-  userId,
+  draftId,
+  draftPayload,
 }) => {
-  const {
-    data: form,
-    setData: setForm,
-    clearDraft,
-    restoredFromDraft,
-    dismissRestoredHint,
-    hasDraft,
-  } = useWorkerFormDraft<FormState>({
-    userId,
-    kind: 'entrega-llaves',
-    empty: emptyForm,
-    isEmpty: isEntregaLlavesDraftEmpty,
-    isOpen,
-  });
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ type: 'ok' | 'error'; message: string } | null>(null);
   const accommodations = useAccommodations(isOpen);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setForm(emptyForm);
+      setStatus(null);
+    } else if (draftPayload) {
+      setForm({ ...emptyForm, ...draftPayload });
+    }
+  }, [isOpen, draftPayload]);
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const handleSubmit = async () => {
+    if (!form.fianzaMonto || !form.fianzaGarantia) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      await submitKeyDelivery({
+        accommodationId: resolveAccommodationId(form.apartamento, accommodations),
+        accommodationName: form.apartamento,
+        nombreCliente: form.nombreCliente,
+        fechaEntradaReserva: form.fechaEntradaReserva,
+        fechaSalidaReserva: form.fechaSalidaReserva,
+        sabanasEntregadas: form.sabanasEntregadas === 'Si',
+        sabanasPersonas: form.sabanasPersonas ? Number(form.sabanasPersonas) : null,
+        fianzaMontoMetodo: form.fianzaMonto as MetodoPago,
+        bizumMonto: form.bizumMonto,
+        cantidadPagadaMonto: form.cantidadPagadaMonto ? Number(form.cantidadPagadaMonto) : 0,
+        fianzaGarantiaMetodo: form.fianzaGarantia as MetodoPago,
+        bizumGarantia: form.bizumGarantia,
+        cantidadPagadaGarantia: form.cantidadPagadaGarantia ? Number(form.cantidadPagadaGarantia) : 0,
+        km: form.km ? Number(form.km) : 0,
+        observaciones: form.observaciones,
+        firmaTrabajadorBase64: form.firmaTrabajador,
+        firmaHuespedBase64: form.firmaHuesped,
+      });
+      if (draftId) {
+        const { deleteDraft } = await import('../../services/reportsApi');
+        await deleteDraft(draftId).catch(() => {});
+      }
+      setStatus({ type: 'ok', message: 'Entrega de llaves enviada correctamente.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al enviar la entrega.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      // No metemos las firmas en el borrador para evitar payloads enormes.
+      const { firmaTrabajador, firmaHuesped, ...rest } = form;
+      await saveDraft('key_delivery', rest, draftId ?? undefined);
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al guardar el borrador.' });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const isValid =
     !!form.apartamento.trim() &&
@@ -143,8 +195,6 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
             <X size={18} />
           </button>
         </div>
-
-
 
         {/* Scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -346,9 +396,11 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
         <SubmitFooter
           isValid={isValid}
           hasData={hasData}
+          busy={busy}
+          status={status}
           onCancel={onClose}
-          onDiscardDraft={clearDraft}
-          hasDraft={hasDraft}
+          onSubmit={handleSubmit}
+          onSaveDraft={handleSaveDraft}
         />
       </div>
     </div>

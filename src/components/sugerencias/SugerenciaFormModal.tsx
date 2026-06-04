@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { X, MessageCircle, Loader2, Send, AlertCircle, Sparkles, HelpCircle } from 'lucide-react';
 import type { User } from '../../services/mockData';
 import { appsScriptApi } from '../../services/api';
-import { inputCls, labelCls, DraftRestoredBanner } from '../workers/serviceFormHelpers';
-import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
-import { isSugerenciaDraftEmpty } from '../../utils/workerDraftValidators';
+import { inputCls, labelCls } from '../workers/serviceFormHelpers';
 
 export type FeedbackTipo = 'fallo' | 'sugerencia' | 'otro';
 
@@ -36,23 +34,8 @@ function splitName(full: string): { nombre: string; apellidos: string } {
 const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClose, user }) => {
   const defaultTelefono = user.telefono ?? '';
   const emptyForm: FormState = { tipo: 'sugerencia', descripcion: '', telefono: defaultTelefono };
-  const userId = user.id ?? user.email;
 
-  const {
-    data: form,
-    setData: setForm,
-    clearDraft,
-    restoredFromDraft,
-    dismissRestoredHint,
-    hasDraft,
-  } = useWorkerFormDraft<FormState>({
-    userId,
-    kind: 'sugerencia',
-    empty: emptyForm,
-    isEmpty: (d) => isSugerenciaDraftEmpty(d, defaultTelefono),
-    isOpen,
-  });
-
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +44,12 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
 
   useEffect(() => {
     if (isOpen) {
+      setForm(emptyForm);
       setSent(false);
       setError(null);
       setSending(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const isValid = form.descripcion.trim().length >= 10 && !!user.email;
@@ -85,7 +70,6 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
 
     setSending(false);
     if (ok) {
-      clearDraft();
       setSent(true);
       return;
     }
@@ -239,15 +223,6 @@ const SugerenciaFormModal: React.FC<SugerenciaFormModalProps> = ({ isOpen, onClo
                   Enviar
                 </button>
               </div>
-              {hasDraft && (
-                <button
-                  type="button"
-                  onClick={clearDraft}
-                  className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                >
-                  Descartar borrador
-                </button>
-              )}
             </div>
           </>
         )}

@@ -3,14 +3,19 @@ import { X, Home, Wrench, Sparkles, Search, Key, AlertTriangle, type LucideIcon 
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { useWorkerFormDraft } from '../../hooks/useWorkerFormDraft';
-import { isServiceDraftEmpty } from '../../utils/workerDraftValidators';
-import { DraftRestoredBanner } from './serviceFormHelpers';
+import { resolveAccommodationId, SubmitFooter } from './serviceFormHelpers';
+import {
+  saveDraft,
+  submitServiceReport,
+  submitKeyDelivery,
+  submitIncidentReport,
+} from '../../services/reportsApi';
 
 interface ServiceFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userId: string;
+  draftId?: string | null;
+  draftPayload?: (Partial<FormState> & { tipo?: ServiceType }) | null;
 }
 
 type ServiceType = 'reserva' | 'manitas';
@@ -83,13 +88,6 @@ const emptyForm: FormState = {
   inc_duracion: '',
   inc_detalles: '',
 };
-
-interface ServiceDraftBundle {
-  tipo: ServiceType | null;
-  form: FormState;
-}
-
-const emptyDraft: ServiceDraftBundle = { tipo: null, form: emptyForm };
 
 const inputCls =
   'w-full rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 px-4 py-3 text-sm text-slate-800 dark:text-stone-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300 transition-all';
@@ -239,24 +237,14 @@ const parseHHMM = (s: string): number => {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 };
 
-const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose, userId }) => {
-  const {
-    data: draft,
-    setData: setDraft,
-    clearDraft,
-    restoredFromDraft,
-    dismissRestoredHint,
-    hasDraft,
-  } = useWorkerFormDraft<ServiceDraftBundle>({
-    userId,
-    kind: 'servicio',
-    empty: emptyDraft,
-    isEmpty: (d) => isServiceDraftEmpty({ tipo: d.tipo, form: d.form }),
-    isOpen,
-  });
-
-  const tipo = draft.tipo;
-  const form = draft.form;
+const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
+  isOpen,
+  onClose,
+  draftId,
+  draftPayload,
+}) => {
+  const [tipo, setTipo] = useState<ServiceType | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
 
   useEffect(() => {
@@ -264,11 +252,25 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose, us
     appsScriptApi.getAccommodations().then(setAccommodations).catch(() => setAccommodations([]));
   }, [isOpen]);
 
-  const setTipo = (value: ServiceType | null) =>
-    setDraft((prev) => ({ ...prev, tipo: value }));
+  useEffect(() => {
+    if (!isOpen) {
+      setTipo(null);
+      setForm(emptyForm);
+      setStatus(null);
+    } else if (draftPayload) {
+      const { tipo: draftTipo, ...rest } = draftPayload;
+      if (draftTipo) setTipo(draftTipo);
+      setForm((prev) => ({ ...prev, ...(rest as Partial<FormState>) }));
+    }
+  }, [isOpen, draftPayload]);
 
   const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setDraft((prev) => ({ ...prev, form: { ...prev.form, [key]: value } }));
+    setForm((prev) => ({ ...prev, [key]: value }));
+
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ type: 'ok' | 'error'; message: string } | null>(null);
+
+  const hasAnyData = useMemo(() => tipo !== null, [tipo]);
 
   const horasExtraMin = parseHHMM(form.horasExtra);
   const requiresJustificacion = horasExtraMin > 0;
@@ -302,6 +304,95 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose, us
     return true;
   }, [tipo, form, requiresJustificacion]);
 
+  const handleSubmit = async () => {
+    if (!tipo) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      // 1) Servicio principal
+      const accId = resolveAccommodationId(form.apartamento, accommodations);
+      const parentId = await submitServiceReport({
+        kind: tipo,
+        accommodationId: accId,
+        accommodationName: form.apartamento,
+        horaEntrada: form.horaEntrada,
+        horaSalida: form.horaSalida,
+        km: form.km ? Number(form.km) : 0,
+        observaciones: tipo === 'reserva' ? form.observaciones : '',
+        descripcion: tipo === 'manitas' ? form.descripcion : '',
+        recogeLlaves: tipo === 'reserva' ? form.recogeLlaves === 'Si' : false,
+        sigueHuesped: tipo === 'reserva' ? form.sigueHuesped === 'Si' : false,
+        horaSalidaHuesped:
+          tipo === 'reserva' && form.sigueHuesped === 'Si' ? form.horaSalidaReserva : '',
+        horasExtra: tipo === 'reserva' ? form.horasExtra : '',
+        justificacionExtra:
+          tipo === 'reserva' && requiresJustificacion ? form.justificacionExtra : '',
+      });
+
+      // 2) Llaves anidadas (opcional)
+      if (form.incluyeEntregaLlaves) {
+        await submitKeyDelivery({
+          parentServiceId: parentId,
+          accommodationId: accId,
+          accommodationName: form.apartamento,
+          nombreCliente: form.el_nombreCliente,
+          fechaEntradaReserva: form.el_fechaEntradaReserva,
+          fechaSalidaReserva: form.el_fechaSalidaReserva,
+          sabanasEntregadas: form.el_sabanasEntregadas === 'Si',
+          sabanasPersonas: form.el_sabanasPersonas ? Number(form.el_sabanasPersonas) : null,
+          fianzaMontoMetodo: form.el_fianzaMonto as MetodoPago,
+          bizumMonto: form.el_bizumMonto,
+          cantidadPagadaMonto: form.el_cantidadPagadaMonto ? Number(form.el_cantidadPagadaMonto) : 0,
+          fianzaGarantiaMetodo: form.el_fianzaGarantia as MetodoPago,
+          bizumGarantia: form.el_bizumGarantia,
+          cantidadPagadaGarantia: form.el_cantidadPagadaGarantia
+            ? Number(form.el_cantidadPagadaGarantia)
+            : 0,
+          firmaTrabajadorBase64: form.el_firmaTrabajador,
+          firmaHuespedBase64: form.el_firmaHuesped,
+        });
+      }
+
+      // 3) Incidencia anidada (opcional)
+      if (form.incluyeIncidencia) {
+        await submitIncidentReport({
+          parentServiceId: parentId,
+          accommodationId: accId,
+          accommodationName: form.apartamento,
+          duracion: form.inc_duracion,
+          detalles: form.inc_detalles,
+        });
+      }
+
+      if (draftId) {
+        const { deleteDraft } = await import('../../services/reportsApi');
+        await deleteDraft(draftId).catch(() => {});
+      }
+      setStatus({ type: 'ok', message: 'Informe enviado correctamente.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al enviar el informe.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      // No metemos firmas en el borrador (payloads enormes).
+      const { el_firmaTrabajador, el_firmaHuesped, ...rest } = form;
+      await saveDraft('service', { tipo, ...rest }, draftId ?? undefined);
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al guardar el borrador.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -332,8 +423,6 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose, us
             <X size={18} />
           </button>
         </div>
-
-
 
         {/* Scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
@@ -716,49 +805,15 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({ isOpen, onClose, us
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm rounded-b-3xl">
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-3 rounded-2xl bg-stone-100 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 text-sm font-medium hover:bg-stone-50 dark:hover:bg-stone-700/40 transition-all active:scale-[0.98]"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              disabled
-              title="Pendiente: persistencia en Supabase"
-              className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 cursor-not-allowed ${
-                isValid
-                  ? 'bg-orange-500/40 text-white'
-                  : tipo
-                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50'
-                    : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500'
-              }`}
-            >
-              <Sparkles size={14} />
-              Enviar informe
-            </button>
-          </div>
-          <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
-            {isValid
-              ? 'Listo para enviar. (Persistencia Supabase pendiente)'
-              : tipo
-                ? 'Faltan campos obligatorios.'
-                : 'Elige tipo de servicio para empezar.'}
-          </p>
-          {hasDraft && (
-            <button
-              type="button"
-              onClick={clearDraft}
-              className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-            >
-              Descartar borrador
-            </button>
-          )}
-        </div>
+        <SubmitFooter
+          isValid={isValid}
+          hasData={hasAnyData}
+          busy={busy}
+          status={status}
+          onCancel={onClose}
+          onSubmit={handleSubmit}
+          onSaveDraft={handleSaveDraft}
+        />
       </div>
     </div>
   );
