@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import {
   ApartamentoAutocomplete,
+  DuracionInput,
   SubmitFooter,
   inputCls,
   labelCls,
@@ -9,6 +10,7 @@ import {
   useAccommodations,
 } from './serviceFormHelpers';
 import { saveDraft, submitIncidentReport } from '../../services/reportsApi';
+import { localDrafts } from '../../utils/localDrafts';
 
 interface IncidenciaFormModalProps {
   isOpen: boolean;
@@ -45,7 +47,12 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
       setForm(emptyForm);
       setStatus(null);
     } else if (draftPayload) {
+      // Borrador de Supabase tiene prioridad sobre el local.
       setForm({ ...emptyForm, ...draftPayload });
+    } else {
+      // Sin draft Supabase → restaura lo último guardado en local (si existe).
+      const local = localDrafts.load<Partial<FormState>>('incident');
+      if (local) setForm({ ...emptyForm, ...local });
     }
   }, [isOpen, draftPayload]);
 
@@ -74,6 +81,7 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
         const { deleteDraft } = await import('../../services/reportsApi');
         await deleteDraft(draftId).catch(() => {});
       }
+      localDrafts.clear('incident');
       setStatus({ type: 'ok', message: 'Incidencia enviada correctamente.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
@@ -88,7 +96,9 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
     setStatus(null);
     try {
       await saveDraft('incident', form, draftId ?? undefined);
-      setStatus({ type: 'ok', message: 'Datos guardados.' });
+      // Al persistir en Supabase ya no necesitamos la copia local.
+      localDrafts.clear('incident');
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
       setStatus({ type: 'error', message: e?.message || 'Error al guardar.' });
@@ -97,9 +107,10 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
     }
   };
 
+  // Al salir sin pulsar "Guardar en borrador": persistimos sólo en localStorage.
   const handleCancelOrClose = () => {
     if (hasData && status?.type !== 'ok') {
-      saveDraft('incident', form, draftId ?? undefined).catch(console.error);
+      localDrafts.save('incident', form);
     }
     onClose();
   };
@@ -112,6 +123,7 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
         const { deleteDraft } = await import('../../services/reportsApi');
         await deleteDraft(draftId);
       }
+      localDrafts.clear('incident');
       setForm(emptyForm);
       setStatus({ type: 'ok', message: 'Datos descartados.' });
       setTimeout(onClose, 900);
@@ -166,14 +178,11 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
 
           <div>
             <label className={labelCls}>
-              Duración de la incidencia (HH:MM) <span className="text-orange-500">*</span>
+              Duración de la incidencia <span className="text-orange-500">*</span>
             </label>
-            <input
-              type="time"
+            <DuracionInput
               value={form.duracion}
-              onChange={(e) => setF('duracion', e.target.value)}
-              className={inputCls}
-              placeholder="00:00"
+              onChange={(v) => setF('duracion', v)}
             />
           </div>
 
@@ -196,10 +205,9 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
           hasData={hasData}
           busy={busy}
           status={status}
-          onCancel={handleCancelOrClose}
+          onCancel={handleDiscardDraft}
           onSubmit={handleSubmit}
           onSaveDraft={handleSaveDraft}
-          onDiscardDraft={handleDiscardDraft}
         />
       </div>
     </div>

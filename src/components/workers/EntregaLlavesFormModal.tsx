@@ -6,6 +6,7 @@ import {
   PagoSelector,
   SiNoToggle,
   SubmitFooter,
+  formatBizumNumber,
   inputCls,
   labelCls,
   resolveAccommodationId,
@@ -14,6 +15,7 @@ import {
   type SiNo,
 } from './serviceFormHelpers';
 import { saveDraft, submitKeyDelivery } from '../../services/reportsApi';
+import { localDrafts } from '../../utils/localDrafts';
 
 interface EntregaLlavesFormModalProps {
   isOpen: boolean;
@@ -77,6 +79,9 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
       setStatus(null);
     } else if (draftPayload) {
       setForm({ ...emptyForm, ...draftPayload });
+    } else {
+      const local = localDrafts.load<Partial<FormState>>('key_delivery');
+      if (local) setForm({ ...emptyForm, ...local });
     }
   }, [isOpen, draftPayload]);
 
@@ -111,6 +116,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
         const { deleteDraft } = await import('../../services/reportsApi');
         await deleteDraft(draftId).catch(() => {});
       }
+      localDrafts.clear('key_delivery');
       setStatus({ type: 'ok', message: 'Entrega de llaves enviada correctamente.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
@@ -125,9 +131,10 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
     setStatus(null);
     try {
       // No metemos las firmas en el borrador para evitar payloads enormes.
-      const { firmaTrabajador, firmaHuesped, ...rest } = form;
+      const { firmaTrabajador: _ft, firmaHuesped: _fh, ...rest } = form;
       await saveDraft('key_delivery', rest, draftId ?? undefined);
-      setStatus({ type: 'ok', message: 'Datos guardados.' });
+      localDrafts.clear('key_delivery');
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
       setStatus({ type: 'error', message: e?.message || 'Error al guardar.' });
@@ -136,10 +143,12 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
     }
   };
 
+  // Al salir sin pulsar "Guardar en borrador": persistimos sólo en localStorage.
   const handleCancelOrClose = () => {
     if (hasData && status?.type !== 'ok') {
-      const { firmaTrabajador, firmaHuesped, ...rest } = form;
-      saveDraft('key_delivery', rest, draftId ?? undefined).catch(console.error);
+      // Las firmas son base64 pesado: las omitimos del local también.
+      const { firmaTrabajador: _ft, firmaHuesped: _fh, ...rest } = form;
+      localDrafts.save('key_delivery', rest);
     }
     onClose();
   };
@@ -152,6 +161,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
         const { deleteDraft } = await import('../../services/reportsApi');
         await deleteDraft(draftId);
       }
+      localDrafts.clear('key_delivery');
       setForm(emptyForm);
       setStatus({ type: 'ok', message: 'Datos descartados.' });
       setTimeout(onClose, 900);
@@ -311,12 +321,13 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
                 Número Bizum (Monto) <span className="text-orange-500">*</span>
               </label>
               <input
-                type="text"
+                type="tel"
                 inputMode="numeric"
                 value={form.bizumMonto}
-                onChange={(e) => setF('bizumMonto', e.target.value)}
+                onChange={(e) => setF('bizumMonto', formatBizumNumber(e.target.value))}
                 className={inputCls}
-                placeholder="Ej: 612345678"
+                placeholder="612 34 56 78"
+                maxLength={12}
               />
             </div>
           )}
@@ -353,12 +364,13 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
                 Número Bizum (Garantía) <span className="text-orange-500">*</span>
               </label>
               <input
-                type="text"
+                type="tel"
                 inputMode="numeric"
                 value={form.bizumGarantia}
-                onChange={(e) => setF('bizumGarantia', e.target.value)}
+                onChange={(e) => setF('bizumGarantia', formatBizumNumber(e.target.value))}
                 className={inputCls}
-                placeholder="Ej: 612345678"
+                placeholder="612 34 56 78"
+                maxLength={12}
               />
             </div>
           )}
@@ -424,10 +436,9 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
           hasData={hasData}
           busy={busy}
           status={status}
-          onCancel={handleCancelOrClose}
+          onCancel={handleDiscardDraft}
           onSubmit={handleSubmit}
           onSaveDraft={handleSaveDraft}
-          onDiscardDraft={handleDiscardDraft}
         />
       </div>
     </div>

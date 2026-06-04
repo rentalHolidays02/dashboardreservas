@@ -18,6 +18,86 @@ export const parseHHMM = (s: string): number => {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 };
 
+// Convierte total de minutos → "HH:MM" (con padding). 0 → "" (vacío, para validación correcta).
+const minutesToHHMM = (totalMin: number): string => {
+  if (totalMin <= 0) return '';
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+// Entrada de duración: dos campos numéricos (Horas + Minutos).
+// Mantiene el estado externo como string "HH:MM" para no romper payloads/parse.
+export const DuracionInput: React.FC<{
+  value: string;             // "HH:MM" o "0" o ""
+  onChange: (v: string) => void;
+  maxHours?: number;         // tope opcional (por defecto 23)
+}> = ({ value, onChange, maxHours = 23 }) => {
+  const total = parseHHMM(value);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+
+  const setHoras = (rawH: string) => {
+    const n = Math.max(0, Math.min(maxHours, parseInt(rawH || '0', 10) || 0));
+    onChange(minutesToHHMM(n * 60 + m));
+  };
+  const setMinutos = (rawM: string) => {
+    const n = Math.max(0, Math.min(59, parseInt(rawM || '0', 10) || 0));
+    onChange(minutesToHHMM(h * 60 + n));
+  };
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={maxHours}
+            step={1}
+            value={h === 0 && m === 0 ? '' : h}
+            onChange={(e) => setHoras(e.target.value)}
+            className={`${inputCls} text-center`}
+            placeholder="0"
+          />
+          <p className="mt-1 text-[10px] text-center text-slate-400 dark:text-stone-500">Horas</p>
+        </div>
+        <div>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={59}
+            step={1}
+            value={h === 0 && m === 0 ? '' : m}
+            onChange={(e) => setMinutos(e.target.value)}
+            className={`${inputCls} text-center`}
+            placeholder="0"
+          />
+          <p className="mt-1 text-[10px] text-center text-slate-400 dark:text-stone-500">Minutos</p>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-center text-slate-500 dark:text-stone-400">
+        Total: <span className="font-medium text-slate-700 dark:text-stone-200">
+          {total === 0 ? '—' : `${h}h ${String(m).padStart(2, '0')}min`}
+        </span>
+      </p>
+    </div>
+  );
+};
+
+// Formato móvil español 3-2-2-2 → "612 34 56 78"
+export const formatBizumNumber = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 9);
+  const parts: string[] = [];
+  if (digits.length > 0) parts.push(digits.slice(0, 3));
+  if (digits.length > 3) parts.push(digits.slice(3, 5));
+  if (digits.length > 5) parts.push(digits.slice(5, 7));
+  if (digits.length > 7) parts.push(digits.slice(7, 9));
+  return parts.join(' ');
+};
+
 // Devuelve el id del alojamiento cuyo nombre coincide exactamente (insensible a mayúsculas).
 export const resolveAccommodationId = (
   name: string,
@@ -138,6 +218,7 @@ export const ApartamentoAutocomplete: React.FC<{
 };
 
 // Footer botón estándar: 3 estados (sin datos / borrador / enviar).
+// `onCancel` es semánticamente "descartar y cerrar" (la X / backdrop guardan en local).
 export const SubmitFooter: React.FC<{
   isValid: boolean;
   hasData: boolean;
@@ -146,13 +227,34 @@ export const SubmitFooter: React.FC<{
   onCancel: () => void;
   onSubmit: () => void;
   onSaveDraft: () => void;
-  onDiscardDraft?: () => void;
-}> = ({ isValid, hasData, busy, status, onCancel, onSubmit, onSaveDraft, onDiscardDraft }) => {
-  const isSendable = isValid;
+}> = ({ isValid, hasData, busy, status, onCancel, onSubmit, onSaveDraft }) => {
+  // 3 estados:
+  //   - !hasData   → botón gris disabled "Enviar informe"
+  //   - hasData && !isValid → botón ámbar pulsable "Guardar en borrador" → onSaveDraft
+  //   - isValid    → botón naranja "Enviar informe" → onSubmit
+  const mode: 'idle' | 'draft' | 'send' = isValid ? 'send' : hasData ? 'draft' : 'idle';
+
   const handleClick = () => {
     if (busy) return;
-    if (isSendable) onSubmit();
+    if (mode === 'send') onSubmit();
+    else if (mode === 'draft') onSaveDraft();
   };
+
+  const label =
+    busy
+      ? mode === 'draft' ? 'Guardando…' : 'Enviando…'
+      : mode === 'send'
+        ? 'Enviar informe'
+        : mode === 'draft'
+          ? 'Guardar en borrador'
+          : 'Enviar informe';
+
+  const btnCls =
+    mode === 'send'
+      ? 'bg-orange-500 hover:bg-orange-600 active:scale-[0.98] text-white'
+      : mode === 'draft'
+        ? 'bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-white'
+        : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500 cursor-not-allowed';
 
   return (
     <div className="px-6 py-4 border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm rounded-b-3xl">
@@ -177,33 +279,19 @@ export const SubmitFooter: React.FC<{
         <button
           type="button"
           onClick={handleClick}
-          disabled={busy || !isSendable}
-          className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 ${
-            isSendable
-              ? 'bg-orange-500 hover:bg-orange-600 active:scale-[0.98] text-white'
-              : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500 cursor-not-allowed'
-          } ${busy ? 'opacity-60 cursor-wait' : ''}`}
+          disabled={busy || mode === 'idle'}
+          className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 ${btnCls} ${busy ? 'opacity-60 cursor-wait' : ''}`}
         >
-          {busy ? 'Enviando…' : 'Enviar informe'}
+          {label}
         </button>
       </div>
       <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
-        {isSendable
+        {mode === 'send'
           ? 'Listo para enviar. Pulsa para enviar el informe.'
-          : hasData
-            ? 'Faltan campos obligatorios.'
+          : mode === 'draft'
+            ? 'Faltan campos obligatorios. Se guardará como borrador.'
             : 'Rellena los campos para empezar.'}
       </p>
-      {hasData && onDiscardDraft && (
-        <button
-          type="button"
-          onClick={onDiscardDraft}
-          disabled={busy}
-          className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
-        >
-          Descartar borrador
-        </button>
-      )}
     </div>
   );
 };

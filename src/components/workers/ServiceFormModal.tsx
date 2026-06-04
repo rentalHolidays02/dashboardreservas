@@ -3,13 +3,14 @@ import { X, Home, Wrench, Sparkles, Search, Key, AlertTriangle, type LucideIcon 
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { resolveAccommodationId, SubmitFooter } from './serviceFormHelpers';
+import { DuracionInput, formatBizumNumber, resolveAccommodationId, SubmitFooter } from './serviceFormHelpers';
 import {
   saveDraft,
   submitServiceReport,
   submitKeyDelivery,
   submitIncidentReport,
 } from '../../services/reportsApi';
+import { localDrafts } from '../../utils/localDrafts';
 
 interface ServiceFormModalProps {
   isOpen: boolean;
@@ -261,6 +262,13 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       const { tipo: draftTipo, ...rest } = draftPayload;
       if (draftTipo) setTipo(draftTipo);
       setForm((prev) => ({ ...prev, ...(rest as Partial<FormState>) }));
+    } else {
+      const local = localDrafts.load<Partial<FormState> & { tipo?: ServiceType }>('service');
+      if (local) {
+        const { tipo: localTipo, ...rest } = local;
+        if (localTipo) setTipo(localTipo);
+        setForm((prev) => ({ ...prev, ...(rest as Partial<FormState>) }));
+      }
     }
   }, [isOpen, draftPayload]);
 
@@ -318,8 +326,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         horaEntrada: form.horaEntrada,
         horaSalida: form.horaSalida,
         km: form.km ? Number(form.km) : 0,
-        observaciones: tipo === 'reserva' ? form.observaciones : '',
-        descripcion: tipo === 'manitas' ? form.descripcion : '',
+        notas: tipo === 'manitas' ? form.descripcion : form.observaciones,
         recogeLlaves: tipo === 'reserva' ? form.recogeLlaves === 'Si' : false,
         sigueHuesped: tipo === 'reserva' ? form.sigueHuesped === 'Si' : false,
         horaSalidaHuesped:
@@ -368,6 +375,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
         const { deleteDraft } = await import('../../services/reportsApi');
         await deleteDraft(draftId).catch(() => {});
       }
+      localDrafts.clear('service');
       setStatus({ type: 'ok', message: 'Informe enviado correctamente.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
@@ -382,9 +390,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     setStatus(null);
     try {
       // No metemos firmas en el borrador (payloads enormes).
-      const { el_firmaTrabajador, el_firmaHuesped, ...rest } = form;
+      const { el_firmaTrabajador: _ft, el_firmaHuesped: _fh, ...rest } = form;
       await saveDraft('service', { tipo, ...rest }, draftId ?? undefined);
-      setStatus({ type: 'ok', message: 'Datos guardados.' });
+      localDrafts.clear('service');
+      setStatus({ type: 'ok', message: 'Borrador guardado.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
       setStatus({ type: 'error', message: e?.message || 'Error al guardar.' });
@@ -393,26 +402,28 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     }
   };
 
+  // X o backdrop: persistimos sólo en localStorage.
   const handleCancelOrClose = () => {
     if (tipo !== null && status?.type !== 'ok') {
-      const { el_firmaTrabajador, el_firmaHuesped, ...rest } = form;
-      saveDraft('service', { tipo, ...rest }, draftId ?? undefined).catch(console.error);
+      const { el_firmaTrabajador: _ft, el_firmaHuesped: _fh, ...rest } = form;
+      localDrafts.save('service', { tipo, ...rest });
     }
     onClose();
   };
 
-  const handleDiscardDraft = async () => {
+  // Botón "Cancelar": descarta local + Supabase draft y cierra.
+  const handleCancel = async () => {
     setBusy(true);
     setStatus(null);
     try {
       if (draftId) {
         const { deleteDraft } = await import('../../services/reportsApi');
-        await deleteDraft(draftId);
+        await deleteDraft(draftId).catch(() => {});
       }
+      localDrafts.clear('service');
       setTipo(null);
       setForm(emptyForm);
-      setStatus({ type: 'ok', message: 'Datos descartados.' });
-      setTimeout(onClose, 900);
+      onClose();
     } catch (e: any) {
       setStatus({ type: 'error', message: e?.message || 'Error al descartar datos.' });
     } finally {
@@ -526,14 +537,11 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 <>
                   <div>
                     <label className={labelCls}>
-                      Horas extra (HH:MM)
+                      Horas extra realizadas
                     </label>
-                    <input
-                      type="time"
+                    <DuracionInput
                       value={form.horasExtra}
-                      onChange={(e) => setF('horasExtra', e.target.value)}
-                      className={inputCls}
-                      placeholder="00:00"
+                      onChange={(v) => setF('horasExtra', v)}
                     />
                   </div>
                   {requiresJustificacion && (
@@ -716,12 +724,13 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       Número Bizum (Monto) <span className="text-orange-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      type="tel"
                       inputMode="numeric"
                       value={form.el_bizumMonto}
-                      onChange={(e) => setF('el_bizumMonto', e.target.value)}
+                      onChange={(e) => setF('el_bizumMonto', formatBizumNumber(e.target.value))}
                       className={inputCls}
-                      placeholder="Ej: 612345678"
+                      placeholder="612 34 56 78"
+                      maxLength={12}
                     />
                   </div>
                 )}
@@ -756,12 +765,13 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       Número Bizum (Garantía) <span className="text-orange-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      type="tel"
                       inputMode="numeric"
                       value={form.el_bizumGarantia}
-                      onChange={(e) => setF('el_bizumGarantia', e.target.value)}
+                      onChange={(e) => setF('el_bizumGarantia', formatBizumNumber(e.target.value))}
                       className={inputCls}
-                      placeholder="Ej: 612345678"
+                      placeholder="612 34 56 78"
+                      maxLength={12}
                     />
                   </div>
                 )}
@@ -805,14 +815,11 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
               >
                 <div>
                   <label className={labelCls}>
-                    Duración (HH:MM) <span className="text-orange-500">*</span>
+                    Duración de la incidencia <span className="text-orange-500">*</span>
                   </label>
-                  <input
-                    type="time"
+                  <DuracionInput
                     value={form.inc_duracion}
-                    onChange={(e) => setF('inc_duracion', e.target.value)}
-                    className={inputCls}
-                    placeholder="00:00"
+                    onChange={(v) => setF('inc_duracion', v)}
                   />
                 </div>
                 <div>
@@ -837,10 +844,9 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           hasData={hasAnyData}
           busy={busy}
           status={status}
-          onCancel={handleCancelOrClose}
+          onCancel={handleCancel}
           onSubmit={handleSubmit}
           onSaveDraft={handleSaveDraft}
-          onDiscardDraft={handleDiscardDraft}
         />
       </div>
     </div>
