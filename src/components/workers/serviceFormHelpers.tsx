@@ -146,12 +146,12 @@ export const SubmitFooter: React.FC<{
   onCancel: () => void;
   onSubmit: () => void;
   onSaveDraft: () => void;
-}> = ({ isValid, hasData, busy, status, onCancel, onSubmit, onSaveDraft }) => {
-  const action = isValid ? 'send' : hasData ? 'draft' : 'idle';
+  onDiscardDraft?: () => void;
+}> = ({ isValid, hasData, busy, status, onCancel, onSubmit, onSaveDraft, onDiscardDraft }) => {
+  const isSendable = isValid;
   const handleClick = () => {
     if (busy) return;
-    if (action === 'send') onSubmit();
-    else if (action === 'draft') onSaveDraft();
+    if (isSendable) onSubmit();
   };
 
   return (
@@ -177,31 +177,33 @@ export const SubmitFooter: React.FC<{
         <button
           type="button"
           onClick={handleClick}
-          disabled={busy || action === 'idle'}
+          disabled={busy || !isSendable}
           className={`px-5 py-3 rounded-2xl text-sm font-medium shadow-sm transition-all flex items-center justify-center gap-2 ${
-            action === 'send'
+            isSendable
               ? 'bg-orange-500 hover:bg-orange-600 active:scale-[0.98] text-white'
-              : action === 'draft'
-                ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 hover:bg-amber-200 dark:hover:bg-amber-900/40 active:scale-[0.98]'
-                : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500 cursor-not-allowed'
+              : 'bg-stone-200 dark:bg-stone-700 text-slate-400 dark:text-stone-500 cursor-not-allowed'
           } ${busy ? 'opacity-60 cursor-wait' : ''}`}
         >
-          {busy
-            ? 'Guardando…'
-            : action === 'send'
-              ? 'Enviar informe'
-              : action === 'draft'
-                ? 'Guardar en borrador'
-                : 'Enviar informe'}
+          {busy ? 'Enviando…' : 'Enviar informe'}
         </button>
       </div>
       <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
-        {action === 'send'
-          ? 'Todo listo. Pulsa para enviar el informe.'
-          : action === 'draft'
-            ? 'Faltan campos obligatorios. Se guardará como borrador.'
+        {isSendable
+          ? 'Listo para enviar. Pulsa para enviar el informe.'
+          : hasData
+            ? 'Faltan campos obligatorios.'
             : 'Rellena los campos para empezar.'}
       </p>
+      {hasData && onDiscardDraft && (
+        <button
+          type="button"
+          onClick={onDiscardDraft}
+          disabled={busy}
+          className="mt-2 w-full text-[10px] text-center text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+        >
+          Descartar borrador
+        </button>
+      )}
     </div>
   );
 };

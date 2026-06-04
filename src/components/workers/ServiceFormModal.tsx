@@ -384,10 +384,37 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       // No metemos firmas en el borrador (payloads enormes).
       const { el_firmaTrabajador, el_firmaHuesped, ...rest } = form;
       await saveDraft('service', { tipo, ...rest }, draftId ?? undefined);
-      setStatus({ type: 'ok', message: 'Borrador guardado.' });
+      setStatus({ type: 'ok', message: 'Datos guardados.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
-      setStatus({ type: 'error', message: e?.message || 'Error al guardar el borrador.' });
+      setStatus({ type: 'error', message: e?.message || 'Error al guardar.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancelOrClose = () => {
+    if (tipo !== null && status?.type !== 'ok') {
+      const { el_firmaTrabajador, el_firmaHuesped, ...rest } = form;
+      saveDraft('service', { tipo, ...rest }, draftId ?? undefined).catch(console.error);
+    }
+    onClose();
+  };
+
+  const handleDiscardDraft = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      if (draftId) {
+        const { deleteDraft } = await import('../../services/reportsApi');
+        await deleteDraft(draftId);
+      }
+      setTipo(null);
+      setForm(emptyForm);
+      setStatus({ type: 'ok', message: 'Datos descartados.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al descartar datos.' });
     } finally {
       setBusy(false);
     }
@@ -399,7 +426,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
       <div
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleCancelOrClose}
       />
       <div className="relative w-full sm:max-w-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-stone-900 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-white/60 dark:border-stone-800/50 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         {/* Header */}
@@ -417,7 +444,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCancelOrClose}
             className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-stone-800/60 transition-colors"
           >
             <X size={18} />
@@ -810,9 +837,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           hasData={hasAnyData}
           busy={busy}
           status={status}
-          onCancel={onClose}
+          onCancel={handleCancelOrClose}
           onSubmit={handleSubmit}
           onSaveDraft={handleSaveDraft}
+          onDiscardDraft={handleDiscardDraft}
         />
       </div>
     </div>

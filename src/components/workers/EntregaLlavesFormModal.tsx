@@ -127,10 +127,36 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
       // No metemos las firmas en el borrador para evitar payloads enormes.
       const { firmaTrabajador, firmaHuesped, ...rest } = form;
       await saveDraft('key_delivery', rest, draftId ?? undefined);
-      setStatus({ type: 'ok', message: 'Borrador guardado.' });
+      setStatus({ type: 'ok', message: 'Datos guardados.' });
       setTimeout(onClose, 900);
     } catch (e: any) {
-      setStatus({ type: 'error', message: e?.message || 'Error al guardar el borrador.' });
+      setStatus({ type: 'error', message: e?.message || 'Error al guardar.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancelOrClose = () => {
+    if (hasData && status?.type !== 'ok') {
+      const { firmaTrabajador, firmaHuesped, ...rest } = form;
+      saveDraft('key_delivery', rest, draftId ?? undefined).catch(console.error);
+    }
+    onClose();
+  };
+
+  const handleDiscardDraft = async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      if (draftId) {
+        const { deleteDraft } = await import('../../services/reportsApi');
+        await deleteDraft(draftId);
+      }
+      setForm(emptyForm);
+      setStatus({ type: 'ok', message: 'Datos descartados.' });
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setStatus({ type: 'error', message: e?.message || 'Error al descartar datos.' });
     } finally {
       setBusy(false);
     }
@@ -171,7 +197,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={handleCancelOrClose} />
       <div className="relative w-full sm:max-w-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col bg-white dark:bg-stone-900 sm:rounded-3xl rounded-t-3xl shadow-2xl border border-white/60 dark:border-stone-800/50 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-stone-800/60 shrink-0">
@@ -189,7 +215,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCancelOrClose}
             className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-stone-800/60 transition-colors"
           >
             <X size={18} />
@@ -398,9 +424,10 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
           hasData={hasData}
           busy={busy}
           status={status}
-          onCancel={onClose}
+          onCancel={handleCancelOrClose}
           onSubmit={handleSubmit}
           onSaveDraft={handleSaveDraft}
+          onDiscardDraft={handleDiscardDraft}
         />
       </div>
     </div>

@@ -133,8 +133,13 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
       iconWrap: 'bg-orange-100 dark:bg-orange-400/10',
       iconColor: 'text-orange-600 dark:text-orange-400',
       onClick: () => {
-        setEditingDraft(null);
-        setIsServiceFormOpen(true);
+        const existing = drafts.find((d) => d.kind === 'service');
+        if (existing) {
+          openDraft(existing);
+        } else {
+          setEditingDraft(null);
+          setIsServiceFormOpen(true);
+        }
       },
     },
     {
@@ -143,8 +148,13 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
       iconWrap: 'bg-blue-100 dark:bg-blue-400/10',
       iconColor: 'text-blue-600 dark:text-blue-400',
       onClick: () => {
-        setEditingDraft(null);
-        setIsLlavesFormOpen(true);
+        const existing = drafts.find((d) => d.kind === 'key_delivery');
+        if (existing) {
+          openDraft(existing);
+        } else {
+          setEditingDraft(null);
+          setIsLlavesFormOpen(true);
+        }
       },
     },
     {
@@ -153,8 +163,13 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
       iconWrap: 'bg-red-100 dark:bg-red-400/10',
       iconColor: 'text-red-600 dark:text-red-400',
       onClick: () => {
-        setEditingDraft(null);
-        setIsIncidenciaFormOpen(true);
+        const existing = drafts.find((d) => d.kind === 'incident');
+        if (existing) {
+          openDraft(existing);
+        } else {
+          setEditingDraft(null);
+          setIsIncidenciaFormOpen(true);
+        }
       },
     },
   ];
