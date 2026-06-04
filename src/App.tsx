@@ -18,6 +18,9 @@ import EntregaDeLlaves from './pages/EntregaDeLlaves';
 import Profile from './pages/Profile';
 import MainLayout from './components/layout/MainLayout';
 import ChatBot from './components/chatbot/ChatBot';
+import EntregaDeLlavesDB from './pages/EntregaDeLlavesDB';
+import ServiciosDB from './pages/ServiciosDB';
+import IncidenciasDB from './pages/IncidenciasDB';
 import WorkerPanel from './pages/WorkerPanel';
 import WorkerAnalytics from './pages/WorkerAnalytics';
 import WorkerRecords from './pages/WorkerRecords';
@@ -295,7 +298,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <PlaceholderPage title="Servicios Realizados (Supabase)" />
+                      <ServiciosDB userRole={user.role} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
@@ -308,7 +311,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <PlaceholderPage title="Entregas de Llaves (Supabase)" />
+                      <EntregaDeLlavesDB userRole={user.role} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
@@ -321,7 +324,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <PlaceholderPage title="Incidencias (Supabase)" />
+                      <IncidenciasDB userRole={user.role} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
