@@ -153,7 +153,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
 
       <div
         style={{ touchAction: 'none' }}
-        className={`relative rounded-xl overflow-hidden border-2 bg-white dark:bg-stone-950 transition-colors
+        className={`relative rounded-xl overflow-hidden border-2 bg-white transition-colors
           ${readOnly
             ? 'border-stone-200/60 dark:border-stone-700/50'
             : drawing
@@ -166,7 +166,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
             src={imgSrc}
             alt={label}
             referrerPolicy="no-referrer"
-            className="w-full block object-contain bg-white dark:bg-stone-950"
+            className="w-full block object-contain bg-white"
             style={{ height: 110 }}
             onLoad={() => setHasContent(true)}
             onError={() => {
