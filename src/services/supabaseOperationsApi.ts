@@ -31,6 +31,7 @@ export interface KeyDeliveryDB {
   worker_id: string;
   worker_name: string;
   worker_phone: string;
+  parent_service_id: string | null;
   accommodation_id: string | null;
   accommodation_name: string;
   nombre_cliente: string;

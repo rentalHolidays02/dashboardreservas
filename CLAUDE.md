@@ -101,7 +101,15 @@ npm run preview  # Previsualizar build
 - **Google Sheets** vía Apps Script: el cliente está en `src/services/api.ts` (`appsScriptApi.*`). Las incidencias se guardan en una hoja con columnas `PARADA INICIAL`, `PARADA OPCIONAL 1..5`, `PARADA FINAL`, `KMS`, `TELÉFONO`, etc.
 - **Formato de parada guardada en sheet**: `"Nombre (HH:MM) [lat, lng]"` (5 decimales).
 - **Overflow de paradas**: si hay más de 4 paradas opcionales, las extras se concatenan en `PARADA OPCIONAL 5` separadas por `\n`.
-- **Supabase**: solo auth (Magic link / email-password) + tabla `profiles` (con `last_seen`, `role`).
+- **Supabase**:
+  - Auth (Magic link / email-password) + tabla `profiles` (con `last_seen`, `role`).
+  - **Edge Function `update-user-profile`** ([src/services/api.ts](src/services/api.ts) → `appsScriptApi.updateProfile`): cambia email en `profiles` **y** sincroniza `auth.users.email` vía service_role. Sin esto, cambiar email en GestionUsuarios desincroniza y crea cuentas duplicadas. Verifica que el caller sea admin.
+  - **Tablas de informes del trabajador** (alimentan `WorkerPanel`/`ServiciosDB`/`EntregaDeLlavesDB`/`IncidenciasDB`):
+    - `service_reports` (limpiezas reserva + manitas, enum `kind`). Columna `notas` unificada (no `observaciones`/`descripcion`). CHECK `manitas_no_reserva_fields` impide que manitas tenga campos de reserva. `hora_entrada`/`hora_salida`/`horas_extra`/`hora_salida_huesped` son **text HH:MM** (no `time`/`interval`) con CHECK regex.
+    - `key_deliveries`. FK `parent_service_id → service_reports.id` (CASCADE) cuando viene anidada del modal de servicio. `created_at`/`updated_at` en **hora de Madrid sin TZ** (`timestamp(0)` con default `date_trunc('second', now() AT TIME ZONE 'Europe/Madrid')`). Trigger `set_updated_at_madrid()`. Bizum: text con CHECK `^[0-9]+$` (solo dígitos, sin espacios).
+    - `incident_reports`. Misma FK opcional. `duracion` es **text HH:MM** (no `interval`). `created_at`/`updated_at` también en hora de Madrid sin TZ.
+    - `report_drafts` (1 borrador por kind por trabajador). Payload JSONB. RLS: admin gestiona todo; worker gestiona los suyos vía `worker_id IN (SELECT id FROM workers WHERE profile_id = auth.uid())`.
+  - **Bucket `signatures`** (Storage): firmas PNG/JPEG hasta 512KB, públicas.
 - **Apps Script files**: `CLEAN_STATUS_APPS_SCRIPT.gs`, `SAVE_PDF_APPS_SCRIPT.gs`, `SUGERENCIAS_APPS_SCRIPT.gs`.
 
 ## Patrones del repo (a respetar)
@@ -111,6 +119,11 @@ npm run preview  # Previsualizar build
 3. **Fechas Apps Script**: formato `D/M/YYYY, HH:mm:ss` (no ISO). Hora suelta `HH:MM` con `padStart(2,'0')`.
 4. **Filtros / sort / vista**: cada listado (Workers, Cleans, Incidencias…) tiene un `*FilterModal.tsx` o `*SortModal.tsx` separado.
 5. **No mocks en producción**: `mockData.ts` exporta tanto tipos como `MOCK_*` para tests/inicialización; los datos reales vienen del Apps Script.
+6. **Helpers compartidos de formularios de trabajador** en [src/components/workers/serviceFormHelpers.tsx](src/components/workers/serviceFormHelpers.tsx): `ApartamentoAutocomplete`, `DuracionInput` (Horas+Minutos → emite `"HH:MM"`), `PagoSelector`, `SiNoToggle`, `formatBizumNumber` (formato visual 3-2-2-2; reportsApi limpia con `\D` antes de insertar), `SubmitFooter` (3 estados: idle/draft/send), `inputCls`/`labelCls`. **No duplicar estos componentes en cada modal** — el bug recurrente fue tener una copia local en `ServiceFormModal` que no recibía los fixes del compartido.
+7. **Borradores en dos capas**:
+   - **Supabase `report_drafts`** ([src/services/reportsApi.ts](src/services/reportsApi.ts)): cuando el trabajador pulsa "Guardar en borrador" → aparece en "Mis borradores" en `WorkerPanel`. Multi-dispositivo.
+   - **localStorage** ([src/utils/localDrafts.ts](src/utils/localDrafts.ts)): cuando cierra con X o backdrop sin pulsar Guardar → solo navegador, restaura al reabrir. Pulsar "Cancelar" del footer descarta ambos. Las firmas (base64 grandes) se omiten de los borradores.
+8. **Horario y precisión en `service_reports`/`key_deliveries`/`incident_reports`**: timestamps **sin milisegundos**. Horas y duraciones se guardan como `text "HH:MM"` (no `time`/`interval`). `key_deliveries` e `incident_reports` están en hora de Madrid (`timestamp(0)` sin TZ).
 
 ## Tareas comunes y dónde tocar
 
@@ -122,6 +135,11 @@ npm run preview  # Previsualizar build
 | Cambiar selector de mapa | [src/components/cleans/CleanCheckoutFormModal.tsx](src/components/cleans/CleanCheckoutFormModal.tsx) (MapPickerModal) |
 | Cambiar payload enviado a Apps Script | [src/services/api.ts](src/services/api.ts) (`appsScriptApi.*`) |
 | Añadir/cambiar campo del tipo Incidencia | [src/services/mockData.ts](src/services/mockData.ts#L83-L105) |
+| Cambiar formularios trabajador (Servicios/Llaves/Incidencia) | [src/components/workers/ServiceFormModal.tsx](src/components/workers/ServiceFormModal.tsx), [EntregaLlavesFormModal.tsx](src/components/workers/EntregaLlavesFormModal.tsx), [IncidenciaFormModal.tsx](src/components/workers/IncidenciaFormModal.tsx) + [serviceFormHelpers.tsx](src/components/workers/serviceFormHelpers.tsx) |
+| Cambiar API de informes (submit/draft/Supabase) | [src/services/reportsApi.ts](src/services/reportsApi.ts) |
+| Cambiar panel admin de servicios + popup de vinculados | [src/pages/ServiciosDB.tsx](src/pages/ServiciosDB.tsx) (`LinkedPopup` muestra detalles del key_delivery/incident_report cuyo `parent_service_id` apunta a la fila) |
+| Cambiar listado admin de llaves/incidencias | [src/pages/EntregaDeLlavesDB.tsx](src/pages/EntregaDeLlavesDB.tsx), [src/pages/IncidenciasDB.tsx](src/pages/IncidenciasDB.tsx) (usan `supabaseOperationsApi`) |
+| Cambiar lista de "Mis borradores" del trabajador | [src/pages/WorkerPanel.tsx](src/pages/WorkerPanel.tsx) |
 
 ## Notas
 
