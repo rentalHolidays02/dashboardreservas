@@ -1,9 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Trash2, Key, Loader2, CalendarDays, Plus, Pencil, X } from 'lucide-react';
+import { Search, Trash2, Key, Loader2, CalendarDays, Plus, Pencil, X, ClipboardList, Wrench } from 'lucide-react';
 import SignaturePad from '../components/ui/SignaturePad';
 import { supabaseOperationsApi, KeyDeliveryDB, WorkerOption, ServiceReportDB } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { formatBizumNumber } from '../components/workers/serviceFormHelpers';
+
+const stripBizum = (v: string) => v.replace(/\D/g, '');
 
 const fmtDate = (iso: string | null) => {
   if (!iso) return '—';
@@ -36,8 +39,8 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
   <div className="space-y-1">
     <span className="text-[10px] font-semibold text-slate-500 dark:text-stone-400 uppercase tracking-wide block">{label}</span>
     {url ? (
-      <div className={`border-2 ${color} rounded-xl overflow-hidden bg-white dark:bg-white p-1`} style={{ minHeight: 80 }}>
-        <img src={url} alt={label} className="w-full max-h-32 object-contain bg-white dark:bg-white" style={{ backgroundColor: '#fff' }}
+      <div className={`border-2 ${color} rounded-xl overflow-hidden p-1`} style={{ minHeight: 80, backgroundColor: '#ffffff' }}>
+        <img src={url} alt={label} className="w-full max-h-32 object-contain" style={{ backgroundColor: '#ffffff' }}
           onError={e => {
             (e.target as HTMLImageElement).style.display = 'none';
             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
@@ -45,7 +48,7 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
         <span className="hidden text-slate-400 italic text-[10px] text-center w-full block py-2">No se puede cargar</span>
       </div>
     ) : (
-      <div className="border-2 border-dashed border-stone-200 rounded-xl bg-white flex items-center justify-center" style={{ minHeight: 80 }}>
+      <div className="border-2 border-dashed border-stone-200 rounded-xl flex items-center justify-center" style={{ minHeight: 80, backgroundColor: '#ffffff' }}>
         <span className="text-slate-400 italic text-[10px]">Sin firma</span>
       </div>
     )}
@@ -53,7 +56,7 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
 );
 
 // ── Modal ───────────────────────────────────────────────────────────
-const PAYMENT_METHODS = ['', 'Efectivo', 'Bizum', 'Tarjeta', 'Transferencia'];
+const PAYMENT_METHODS = ['', 'Efectivo', 'Bizum', 'Tarjeta'];
 
 interface ModalProps {
   record: KeyDeliveryDB | null;
@@ -75,10 +78,10 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
   const [sabanasPersonas, setSabanasPersonas] = useState(String(record?.sabanas_personas ?? ''));
   const [fianzaMetodo, setFianzaMetodo] = useState(record?.fianza_monto_metodo ?? '');
   const [fianzaMonto, setFianzaMonto] = useState(String(record?.cantidad_pagada_monto ?? ''));
-  const [bizumMonto, setBizumMonto] = useState(record?.bizum_monto ?? '');
+  const [bizumMonto, setBizumMonto] = useState(formatBizumNumber(record?.bizum_monto ?? ''));
   const [garantiaMetodo, setGarantiaMetodo] = useState(record?.fianza_garantia_metodo ?? '');
   const [garantiaMonto, setGarantiaMonto] = useState(String(record?.cantidad_pagada_garantia ?? ''));
-  const [bizumGarantia, setBizumGarantia] = useState(record?.bizum_garantia ?? '');
+  const [bizumGarantia, setBizumGarantia] = useState(formatBizumNumber(record?.bizum_garantia ?? ''));
   const [km, setKm] = useState(String(record?.km ?? 0));
   const [observaciones, setObservaciones] = useState(record?.observaciones ?? '');
   const [firmaTrabajador, setFirmaTrabajador] = useState(record?.firma_trabajador_url ?? '');
@@ -91,7 +94,11 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
     if (isNew && !workerId) { setError('Selecciona un trabajador.'); return; }
     setSaving(true); setError('');
     try {
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const nameQ = accommodationName.trim().toLowerCase();
+      const accommodationId = accommodations.find(a => a.name.trim().toLowerCase() === nameQ)?.id ?? null;
       const payload = {
+        accommodation_id: accommodationId,
         accommodation_name: accommodationName.trim(),
         nombre_cliente: nombreCliente,
         fecha_entrada_reserva: fechaEntrada || null,
@@ -99,12 +106,12 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
         sabanas_entregadas: sabanasEntregadas,
         sabanas_personas: sabanasEntregadas ? (parseInt(sabanasPersonas) || 0) : null,
         fianza_monto_metodo: fianzaMetodo || null,
-        cantidad_pagada_monto: parseFloat(fianzaMonto) || 0,
-        bizum_monto: bizumMonto,
+        cantidad_pagada_monto: round2(parseFloat(fianzaMonto) || 0),
+        bizum_monto: fianzaMetodo === 'Bizum' ? stripBizum(bizumMonto) : '',
         fianza_garantia_metodo: garantiaMetodo || null,
-        cantidad_pagada_garantia: parseFloat(garantiaMonto) || 0,
-        bizum_garantia: bizumGarantia,
-        km: parseFloat(km) || 0,
+        cantidad_pagada_garantia: round2(parseFloat(garantiaMonto) || 0),
+        bizum_garantia: garantiaMetodo === 'Bizum' ? stripBizum(bizumGarantia) : '',
+        km: round2(parseFloat(km) || 0),
         observaciones,
         firma_trabajador_url: firmaTrabajador || null,
         firma_huesped_url: firmaHuesped || null,
@@ -177,7 +184,10 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
             {sabanasEntregadas && (
               <div>
                 <label className={labelCls}>Nº de personas</label>
-                <input type="number" min={1} value={sabanasPersonas} onChange={e => setSabanasPersonas(e.target.value)} className={inputCls} />
+                <input type="number" min={1} value={sabanasPersonas}
+                  onChange={e => setSabanasPersonas(e.target.value)}
+                  onWheel={e => (e.currentTarget as HTMLInputElement).blur()}
+                  className={inputCls} />
               </div>
             )}
           </div>
@@ -193,13 +203,24 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
               </div>
               <div>
                 <label className={labelCls}>Importe (€)</label>
-                <input type="number" min={0} step={0.01} value={fianzaMonto} onChange={e => setFianzaMonto(e.target.value)} className={inputCls} />
+                <input type="number" min={0} step={0.01} value={fianzaMonto}
+                  onChange={e => setFianzaMonto(e.target.value)}
+                  onWheel={e => (e.currentTarget as HTMLInputElement).blur()}
+                  className={inputCls} />
               </div>
             </div>
             {fianzaMetodo === 'Bizum' && (
               <div>
-                <label className={labelCls}>Concepto / Nº Bizum</label>
-                <input type="text" value={bizumMonto} onChange={e => setBizumMonto(e.target.value)} placeholder="Referencia bizum..." className={inputCls} />
+                <label className={labelCls}>Nº Bizum</label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={bizumMonto}
+                  onChange={e => setBizumMonto(formatBizumNumber(e.target.value))}
+                  placeholder="612 34 56 78"
+                  maxLength={12}
+                  className={inputCls}
+                />
               </div>
             )}
           </div>
@@ -215,20 +236,34 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
               </div>
               <div>
                 <label className={labelCls}>Importe (€)</label>
-                <input type="number" min={0} step={0.01} value={garantiaMonto} onChange={e => setGarantiaMonto(e.target.value)} className={inputCls} />
+                <input type="number" min={0} step={0.01} value={garantiaMonto}
+                  onChange={e => setGarantiaMonto(e.target.value)}
+                  onWheel={e => (e.currentTarget as HTMLInputElement).blur()}
+                  className={inputCls} />
               </div>
             </div>
             {garantiaMetodo === 'Bizum' && (
               <div>
-                <label className={labelCls}>Concepto / Nº Bizum Garantía</label>
-                <input type="text" value={bizumGarantia} onChange={e => setBizumGarantia(e.target.value)} placeholder="Referencia bizum..." className={inputCls} />
+                <label className={labelCls}>Nº Bizum Garantía</label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  value={bizumGarantia}
+                  onChange={e => setBizumGarantia(formatBizumNumber(e.target.value))}
+                  placeholder="612 34 56 78"
+                  maxLength={12}
+                  className={inputCls}
+                />
               </div>
             )}
           </div>
 
           <div>
             <label className={labelCls}>Kilómetros</label>
-            <input type="number" min={0} step={0.1} value={km} onChange={e => setKm(e.target.value)} className={inputCls} />
+            <input type="number" min={0} step={0.1} value={km}
+              onChange={e => setKm(e.target.value)}
+              onWheel={e => (e.currentTarget as HTMLInputElement).blur()}
+              className={inputCls} />
           </div>
 
           <div>
@@ -275,6 +310,73 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
   );
 };
 
+// ── Popup detalles del servicio vinculado ───────────────────────────
+const LinkedServiceRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="flex justify-between gap-3 text-[11px]">
+    <span className="text-slate-500 dark:text-stone-400">{label}</span>
+    <span className="font-medium text-slate-700 dark:text-stone-200 text-right">{value || '—'}</span>
+  </div>
+);
+
+const LinkedServicePopup: React.FC<{ service: ServiceReportDB | null; onClose: () => void }> = ({ service, onClose }) => {
+  if (!service) return null;
+  const isManitas = service.kind === 'manitas';
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-white/60 dark:border-stone-800/50 animate-in zoom-in-95 duration-300">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-stone-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-xl ${isManitas ? 'bg-amber-100 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400'}`}>
+              {isManitas ? <Wrench size={16} /> : <ClipboardList size={16} />}
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-slate-800 dark:text-stone-100">
+                {isManitas ? 'Manitas vinculado' : 'Limpieza reserva vinculada'}
+              </h3>
+              <p className="text-[10px] text-slate-400">{service.accommodation_name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-stone-800/60">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <LinkedServiceRow label="Trabajador" value={service.worker_name} />
+          <LinkedServiceRow label="Fecha" value={fmtDateTime(service.created_at)} />
+          {!isManitas && (
+            <>
+              <LinkedServiceRow label="Hora entrada" value={service.hora_entrada} />
+              <LinkedServiceRow label="Hora salida" value={service.hora_salida} />
+              <LinkedServiceRow label="Recoge llaves" value={service.recoge_llaves ? 'Sí' : 'No'} />
+              <LinkedServiceRow label="Sigue huésped" value={service.sigue_huesped ? 'Sí' : 'No'} />
+              {service.sigue_huesped && service.hora_salida_huesped && (
+                <LinkedServiceRow label="Hora salida huésped" value={service.hora_salida_huesped} />
+              )}
+            </>
+          )}
+          <LinkedServiceRow label="Kilómetros" value={`${service.km || 0} km`} />
+          <LinkedServiceRow label="Horas extra" value={service.horas_extra && service.horas_extra !== '00:00' ? service.horas_extra : '—'} />
+          {service.justificacion_extra && (
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1">Justificación horas extra</p>
+              <p className="text-[11px] text-slate-700 dark:text-stone-200 bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 whitespace-pre-wrap">{service.justificacion_extra}</p>
+            </div>
+          )}
+          {service.notas && (
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1">Notas</p>
+              <p className="text-[11px] text-slate-700 dark:text-stone-200 bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 whitespace-pre-wrap">{service.notas}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 // ── Main Component ───────────────────────────────────────────────────
 interface EntregaDeLlavesDBProps {
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
@@ -294,6 +396,13 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
   
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<KeyDeliveryDB | null>(null);
+  const [linkedServicePopup, setLinkedServicePopup] = useState<ServiceReportDB | null>(null);
+
+  const serviciosById = useMemo(() => {
+    const m = new Map<string, ServiceReportDB>();
+    for (const s of servicios) m.set(s.id, s);
+    return m;
+  }, [servicios]);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -335,10 +444,8 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
   };
 
   const isDeliveryConnected = (ent: KeyDeliveryDB): boolean => {
-    // Conectada si hay un servicio del mismo alojamiento y trabajador
-    return servicios.some(
-      srv => srv.accommodation_name === ent.accommodation_name && srv.worker_id === ent.worker_id
-    );
+    // Conectada si tiene un parent_service_id real y el servicio existe
+    return !!ent.parent_service_id && serviciosById.has(ent.parent_service_id);
   };
 
   const filteredEntregas = useMemo(() => {
@@ -418,6 +525,7 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
             <tbody className="divide-y divide-stone-100 dark:divide-stone-800/60">
               {filteredEntregas.map(ent => {
                 const isExpanded = expandedRows.has(ent.id);
+                const linkedService = ent.parent_service_id ? serviciosById.get(ent.parent_service_id) ?? null : null;
                 return (
                   <React.Fragment key={ent.id}>
                     <tr onClick={() => toggleRow(ent.id)}
@@ -432,7 +540,24 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
                         <div className="font-medium text-[12px]">{ent.worker_name}</div>
                         <div className="text-slate-500">{ent.worker_phone}</div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-stone-200">{ent.accommodation_name || '—'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-stone-200">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{ent.accommodation_name || '—'}</span>
+                          {linkedService && (
+                            <button
+                              onClick={e => { e.stopPropagation(); setLinkedServicePopup(linkedService); }}
+                              title={linkedService.kind === 'manitas' ? 'Manitas vinculado — ver detalles' : 'Limpieza reserva vinculada — ver detalles'}
+                              className={`inline-flex items-center justify-center p-1 rounded-md transition-colors ${
+                                linkedService.kind === 'manitas'
+                                  ? 'bg-amber-50 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-400/20'
+                                  : 'bg-emerald-50 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-400/20'
+                              }`}
+                            >
+                              {linkedService.kind === 'manitas' ? <Wrench size={11} /> : <ClipboardList size={11} />}
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
                         <div className="font-medium mb-0.5">{ent.nombre_cliente || '—'}</div>
                         <div className="text-[10px] text-slate-500 whitespace-nowrap">
@@ -445,14 +570,14 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
                             <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800/30 px-2 py-1 rounded">
                               <span className="font-semibold text-[10px] text-orange-700 dark:text-orange-500 uppercase block mb-0.5">Fianza: {ent.fianza_monto_metodo}</span>
                               <span className="font-medium text-slate-800 dark:text-stone-200">{fmtEuro(ent.cantidad_pagada_monto)}</span>
-                              {ent.bizum_monto && <span className="text-slate-500 ml-1">({ent.bizum_monto})</span>}
+                              {ent.bizum_monto && <span className="text-slate-500 ml-1">({formatBizumNumber(ent.bizum_monto)})</span>}
                             </div>
                           )}
                           {ent.fianza_garantia_metodo && (
                             <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 px-2 py-1 rounded">
                               <span className="font-semibold text-[10px] text-blue-700 dark:text-blue-500 uppercase block mb-0.5">Garantía: {ent.fianza_garantia_metodo}</span>
                               <span className="font-medium text-slate-800 dark:text-stone-200">{fmtEuro(ent.cantidad_pagada_garantia)}</span>
-                              {ent.bizum_garantia && <span className="text-slate-500 ml-1">({ent.bizum_garantia})</span>}
+                              {ent.bizum_garantia && <span className="text-slate-500 ml-1">({formatBizumNumber(ent.bizum_garantia)})</span>}
                             </div>
                           )}
                           {!ent.fianza_monto_metodo && !ent.fianza_garantia_metodo && <span className="text-slate-400 italic">Sin cobros</span>}
@@ -489,7 +614,7 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Sábanas entregadas:</span>
                                   <span className={`font-medium ${ent.sabanas_entregadas ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-stone-200'}`}>
-                                    {ent.sabanas_entregadas ? `Sí (${ent.sabanas_personas || 0} pax)` : 'No'}
+                                    {ent.sabanas_entregadas ? `Sí (${ent.sabanas_personas || 0} pers.)` : 'No'}
                                   </span>
                                 </div>
                               </div>
@@ -523,6 +648,8 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
           onCreate={handleCreated}
         />
       )}
+
+      <LinkedServicePopup service={linkedServicePopup} onClose={() => setLinkedServicePopup(null)} />
     </div>
   );
 };

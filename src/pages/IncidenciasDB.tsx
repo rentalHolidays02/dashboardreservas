@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Search, Trash2, Clock, CalendarDays, Loader2, Plus, Pencil, X, Wrench } from 'lucide-react';
+import { AlertTriangle, Search, Trash2, Clock, CalendarDays, Loader2, Plus, Pencil, X, Wrench, ClipboardList } from 'lucide-react';
 import { supabaseOperationsApi, IncidentReportDB, WorkerOption, ServiceReportDB } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useAdminDraft } from '../utils/useAdminDraft';
@@ -175,6 +175,73 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
   );
 };
 
+// ── Popup detalles del servicio vinculado ───────────────────────────
+const LinkedServiceRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="flex justify-between gap-3 text-[11px]">
+    <span className="text-slate-500 dark:text-stone-400">{label}</span>
+    <span className="font-medium text-slate-700 dark:text-stone-200 text-right">{value || '—'}</span>
+  </div>
+);
+
+const LinkedServicePopup: React.FC<{ service: ServiceReportDB | null; onClose: () => void }> = ({ service, onClose }) => {
+  if (!service) return null;
+  const isManitas = service.kind === 'manitas';
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-white/60 dark:border-stone-800/50 animate-in zoom-in-95 duration-300">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-stone-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-xl ${isManitas ? 'bg-amber-100 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400' : 'bg-emerald-100 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400'}`}>
+              {isManitas ? <Wrench size={16} /> : <ClipboardList size={16} />}
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-slate-800 dark:text-stone-100">
+                {isManitas ? 'Manitas vinculado' : 'Limpieza reserva vinculada'}
+              </h3>
+              <p className="text-[10px] text-slate-400">{service.accommodation_name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-stone-800/60">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          <LinkedServiceRow label="Trabajador" value={service.worker_name} />
+          <LinkedServiceRow label="Fecha" value={fmtDate(service.created_at)} />
+          {!isManitas && (
+            <>
+              <LinkedServiceRow label="Hora entrada" value={service.hora_entrada} />
+              <LinkedServiceRow label="Hora salida" value={service.hora_salida} />
+              <LinkedServiceRow label="Recoge llaves" value={service.recoge_llaves ? 'Sí' : 'No'} />
+              <LinkedServiceRow label="Sigue huésped" value={service.sigue_huesped ? 'Sí' : 'No'} />
+              {service.sigue_huesped && service.hora_salida_huesped && (
+                <LinkedServiceRow label="Hora salida huésped" value={service.hora_salida_huesped} />
+              )}
+            </>
+          )}
+          <LinkedServiceRow label="Kilómetros" value={`${service.km || 0} km`} />
+          <LinkedServiceRow label="Horas extra" value={service.horas_extra && service.horas_extra !== '00:00' ? service.horas_extra : '—'} />
+          {service.justificacion_extra && (
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1">Justificación horas extra</p>
+              <p className="text-[11px] text-slate-700 dark:text-stone-200 bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 whitespace-pre-wrap">{service.justificacion_extra}</p>
+            </div>
+          )}
+          {service.notas && (
+            <div>
+              <p className="text-[11px] text-slate-500 mb-1">Notas</p>
+              <p className="text-[11px] text-slate-700 dark:text-stone-200 bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 whitespace-pre-wrap">{service.notas}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 // ── Main Component ───────────────────────────────────────────────────
 interface IncidenciasDBProps {
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
@@ -193,6 +260,13 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<IncidentReportDB | null>(null);
+  const [linkedServicePopup, setLinkedServicePopup] = useState<ServiceReportDB | null>(null);
+
+  const serviciosById = useMemo(() => {
+    const m = new Map<string, ServiceReportDB>();
+    for (const s of servicios) m.set(s.id, s);
+    return m;
+  }, [servicios]);
 
   useEffect(() => {
     fetchAll();
@@ -233,18 +307,12 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
     setActionLoading(null);
   };
 
-  const isIncidentConnected = (inc: IncidentReportDB): boolean => {
-    // Conectada si hay un servicio del mismo alojamiento y trabajador
-    return servicios.some(
-      srv => srv.accommodation_name === inc.accommodation_name && srv.worker_id === inc.worker_id
-    );
+  const getLinkedService = (inc: IncidentReportDB): ServiceReportDB | null => {
+    return inc.parent_service_id ? serviciosById.get(inc.parent_service_id) ?? null : null;
   };
 
-  const hasManitasService = (inc: IncidentReportDB): boolean => {
-    // Conectada a un manitas específicamente
-    return servicios.some(
-      srv => srv.kind === 'manitas' && srv.accommodation_name === inc.accommodation_name && srv.worker_id === inc.worker_id
-    );
+  const isIncidentConnected = (inc: IncidentReportDB): boolean => {
+    return !!getLinkedService(inc);
   };
 
   const filteredIncidencias = useMemo(() => {
@@ -325,7 +393,9 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 dark:divide-stone-800/60">
-              {filteredIncidencias.map((inc) => (
+              {filteredIncidencias.map((inc) => {
+                const linkedService = getLinkedService(inc);
+                return (
                 <tr key={inc.id}
                   onClick={() => !isReadOnly && openEdit(inc)}
                   className={`transition-colors group ${!isReadOnly ? 'cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-900/30' : ''}`}
@@ -334,11 +404,6 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <CalendarDays size={13} className="text-slate-400" />
                       {fmtDate(inc.created_at)}
-                      {hasManitasService(inc) && (
-                        <span title="Conectada a Manitas">
-                          <Wrench size={12} className="text-orange-500" />
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-slate-700 dark:text-stone-300">
@@ -346,7 +411,22 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
                     <div className="text-[10px] text-slate-500">{inc.worker_phone}</div>
                   </td>
                   <td className="px-5 py-3.5 font-medium text-slate-700 dark:text-stone-200">
-                    {inc.accommodation_name || '—'}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{inc.accommodation_name || '—'}</span>
+                      {linkedService && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setLinkedServicePopup(linkedService); }}
+                          title={linkedService.kind === 'manitas' ? 'Manitas vinculado — ver detalles' : 'Limpieza reserva vinculada — ver detalles'}
+                          className={`inline-flex items-center justify-center p-1 rounded-md transition-colors ${
+                            linkedService.kind === 'manitas'
+                              ? 'bg-amber-50 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-400/20'
+                              : 'bg-emerald-50 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-400/20'
+                          }`}
+                        >
+                          {linkedService.kind === 'manitas' ? <Wrench size={11} /> : <ClipboardList size={11} />}
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-3.5 text-slate-700 dark:text-stone-300">
                     <div className="flex items-center gap-1.5 whitespace-nowrap bg-stone-100 dark:bg-stone-800 w-fit px-2 py-1 rounded text-[11px] font-medium">
@@ -377,7 +457,8 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -393,6 +474,8 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
           onCreate={handleCreated}
         />
       )}
+
+      <LinkedServicePopup service={linkedServicePopup} onClose={() => setLinkedServicePopup(null)} />
     </div>
   );
 };
