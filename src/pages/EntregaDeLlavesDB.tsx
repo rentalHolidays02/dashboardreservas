@@ -36,8 +36,8 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
   <div className="space-y-1">
     <span className="text-[10px] font-semibold text-slate-500 dark:text-stone-400 uppercase tracking-wide block">{label}</span>
     {url ? (
-      <div className={`border-2 ${color} rounded-xl overflow-hidden bg-white p-1`} style={{ minHeight: 80 }}>
-        <img src={url} alt={label} className="w-full max-h-32 object-contain bg-white"
+      <div className={`border-2 ${color} rounded-xl overflow-hidden bg-white dark:bg-white p-1`} style={{ minHeight: 80 }}>
+        <img src={url} alt={label} className="w-full max-h-32 object-contain bg-white dark:bg-white" style={{ backgroundColor: '#fff' }}
           onError={e => {
             (e.target as HTMLImageElement).style.display = 'none';
             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');

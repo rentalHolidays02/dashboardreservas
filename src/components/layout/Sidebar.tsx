@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   PanelLeft,
   LayoutDashboard,
@@ -96,7 +96,33 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { theme, toggleTheme } = useTheme();
   const { requestNavigate } = useNavigationGuard();
   const [isHovered, setIsHovered] = useState(false);
+  const [showExcelOperations, setShowExcelOperations] = useState(() => {
+    const stored = localStorage.getItem('rh_show_excel_operations');
+    return stored === null ? true : stored === 'true';
+  });
   const leaveTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'rh_show_excel_operations') {
+        setShowExcelOperations(event.newValue === 'true');
+      }
+    };
+
+    const handleCustom = (event: Event) => {
+      const custom = event as CustomEvent<boolean>;
+      if (typeof custom.detail !== 'undefined') {
+        setShowExcelOperations(Boolean(custom.detail));
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('rh-show-excel-operations-changed', handleCustom as EventListener);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('rh-show-excel-operations-changed', handleCustom as EventListener);
+    };
+  }, []);
 
   const collapsed = isCollapsed && !isOpen && !isHovered;
   const isHoverExpanded = isCollapsed && isHovered && !isOpen;
@@ -156,6 +182,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         <nav className="flex-1 overflow-y-auto py-2 space-y-4">
           {categories
             .filter(cat => {
+              if (!showExcelOperations && cat.label === 'OPERACIONES (EXCEL)') {
+                return false;
+              }
               if (userRole === 'trabajador') {
                 return cat.label === 'PRINCIPAL';
               }
