@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Search, Trash2, Loader2, CalendarDays, ClipboardList, Wrench, Clock, Plus, Pencil, X } from 'lucide-react';
 import { supabaseOperationsApi, ServiceReportDB, WorkerOption } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { useAdminDraft } from '../utils/useAdminDraft';
 
 const fmtDateTime = (iso: string) => {
   if (!iso) return '—';
@@ -64,6 +65,25 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const clearDraft = useAdminDraft(
+    `admin_draft_servicio_${kind}`,
+    isNew,
+    { workerId, accommodationName, horaEntrada, horaSalida, km, recogeLlaves, sigueHuesped, horaSalidaHuesped, horasExtra, justificacionExtra, notas },
+    (draft: any) => {
+      setWorkerId(draft.workerId ?? '');
+      setAccommodationName(draft.accommodationName ?? '');
+      setHoraEntrada(draft.horaEntrada ?? '');
+      setHoraSalida(draft.horaSalida ?? '');
+      setKm(draft.km ?? '0');
+      setRecogeLlaves(draft.recogeLlaves ?? false);
+      setSigueHuesped(draft.sigueHuesped ?? false);
+      setHoraSalidaHuesped(draft.horaSalidaHuesped ?? '');
+      setHorasExtra(draft.horasExtra ?? '00:00');
+      setJustificacionExtra(draft.justificacionExtra ?? '');
+      setNotas(draft.notas ?? '');
+    }
+  );
+
   const handleSave = async () => {
     if (!accommodationName.trim()) { setError('El alojamiento es obligatorio.'); return; }
     if (isNew && !workerId) { setError('Selecciona un trabajador.'); return; }
@@ -86,6 +106,7 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
       if (isNew) {
         const created = await supabaseOperationsApi.createServiceReport({ worker_id: workerId, kind, ...payload });
         if (!created) { setError('Error al crear el servicio.'); return; }
+        clearDraft();
         onCreate(created);
       } else {
         const ok = await supabaseOperationsApi.updateServiceReport(record!.id, payload);

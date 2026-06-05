@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Trash2, Key, Loader2, CalendarDays, Plus, Pencil, X } from 'lucide-react';
 import SignaturePad from '../components/ui/SignaturePad';
-import { supabaseOperationsApi, KeyDeliveryDB, WorkerOption } from '../services/supabaseOperationsApi';
+import { supabaseOperationsApi, KeyDeliveryDB, WorkerOption, ServiceReportDB } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const fmtDate = (iso: string | null) => {
@@ -45,7 +45,7 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
         <span className="hidden text-slate-400 italic text-[10px] text-center w-full block py-2">No se puede cargar</span>
       </div>
     ) : (
-      <div className={`border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl bg-stone-50 dark:bg-stone-800/50 flex items-center justify-center`} style={{ minHeight: 80 }}>
+      <div className={`border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl bg-white flex items-center justify-center`} style={{ minHeight: 80 }}>
         <span className="text-slate-400 italic text-[10px]">Sin firma</span>
       </div>
     )}
@@ -285,8 +285,10 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
   const [entregas, setEntregas] = useState<KeyDeliveryDB[]>([]);
   const [workers, setWorkers] = useState<WorkerOption[]>([]);
   const [accommodations, setAccommodations] = useState<{ id: string, name: string }[]>([]);
+  const [servicios, setServicios] = useState<ServiceReportDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'connected' | 'unique'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
@@ -297,14 +299,16 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [data, wks, accs] = await Promise.all([
+    const [data, wks, accs, srvs] = await Promise.all([
       supabaseOperationsApi.getKeyDeliveries(),
       supabaseOperationsApi.getWorkers(),
       supabaseOperationsApi.getAccommodations(),
+      supabaseOperationsApi.getServiceReports(),
     ]);
     setEntregas(data);
     setWorkers(wks);
     setAccommodations(accs);
+    setServicios(srvs);
     setLoading(false);
   };
 
@@ -330,16 +334,36 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
     setExpandedRows(s);
   };
 
+  const isDeliveryConnected = (ent: KeyDeliveryDB): boolean => {
+    // Conectada si hay un servicio del mismo alojamiento y trabajador
+    return servicios.some(
+      srv => srv.accommodation_name === ent.accommodation_name && srv.worker_id === ent.worker_id
+    );
+  };
+
   const filteredEntregas = useMemo(() => {
     const s = searchTerm.toLowerCase().trim();
-    if (!s) return entregas;
-    return entregas.filter(e =>
-      e.worker_name.toLowerCase().includes(s) ||
-      e.worker_phone.toLowerCase().includes(s) ||
-      e.accommodation_name.toLowerCase().includes(s) ||
-      e.nombre_cliente.toLowerCase().includes(s)
-    );
-  }, [entregas, searchTerm]);
+    let result = entregas;
+
+    // Filtro de búsqueda
+    if (s) {
+      result = result.filter(e =>
+        e.worker_name.toLowerCase().includes(s) ||
+        e.worker_phone.toLowerCase().includes(s) ||
+        e.accommodation_name.toLowerCase().includes(s) ||
+        e.nombre_cliente.toLowerCase().includes(s)
+      );
+    }
+
+    // Filtro por conexión con servicios
+    if (filterType === 'connected') {
+      result = result.filter(ent => isDeliveryConnected(ent));
+    } else if (filterType === 'unique') {
+      result = result.filter(ent => !isDeliveryConnected(ent));
+    }
+
+    return result;
+  }, [entregas, searchTerm, filterType, servicios]);
 
   if (loading) return <LoadingSpinner message="Cargando entregas de llaves..." />;
 
@@ -355,6 +379,15 @@ const EntregaDeLlavesDB: React.FC<EntregaDeLlavesDBProps> = ({ userRole }) => {
               className="w-full pl-9 pr-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs focus:outline-none focus:bg-white dark:focus:bg-stone-900 transition-all"
             />
           </div>
+          <select
+            value={filterType}
+            onChange={e => setFilterType(e.target.value as 'all' | 'connected' | 'unique')}
+            className="px-3 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs focus:outline-none focus:bg-white dark:focus:bg-stone-900 transition-all whitespace-nowrap"
+          >
+            <option value="all">Todos</option>
+            <option value="connected">Conectados c/ Limpiezas</option>
+            <option value="unique">Únicos</option>
+          </select>
           {!isReadOnly && (
             <button onClick={openCreate}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded-xl transition-colors whitespace-nowrap">
