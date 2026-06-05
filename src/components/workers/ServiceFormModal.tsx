@@ -403,8 +403,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   };
 
   // X o backdrop: persistimos sólo en localStorage.
+  // Sólo para formularios NUEVOS (sin draftId): si editas un borrador existente no ensuciamos
+  // el slot local, para que "Realizar trabajo" abra siempre en blanco.
   const handleCancelOrClose = () => {
-    if (tipo !== null && status?.type !== 'ok') {
+    if (!draftId && tipo !== null && status?.type !== 'ok') {
       const { el_firmaTrabajador: _ft, el_firmaHuesped: _fh, ...rest } = form;
       localDrafts.save('service', { tipo, ...rest });
     }

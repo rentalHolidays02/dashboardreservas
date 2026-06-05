@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
-import WorkerBottomNav from './WorkerBottomNav';
 import { Menu } from 'lucide-react';
 import type { User } from '../../services/mockData';
 
@@ -20,8 +19,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, user, onLogout, onRol
   const isWorker = user.role === 'trabajador';
 
   return (
-    <div className="h-screen bg-transparent flex flex-col xl:flex-row overflow-hidden">
-      {/* Mobile Header — hidden for worker (replaced by bottom nav) */}
+    <div className="h-screen flex flex-col xl:flex-row overflow-hidden bg-transparent">
+      {/* Mobile Header — solo para no-trabajadores */}
       {!isWorker && (
         <div className="xl:hidden bg-transparent p-4 flex items-center justify-between sticky top-0 z-40">
           <span className="font-semibold text-slate-900 dark:text-stone-100 tracking-tight">RH Pagos</span>
@@ -50,16 +49,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, user, onLogout, onRol
 
       {/* Main Content */}
       <main
-        className={`flex-1 flex flex-col sidebar-main-content overflow-y-auto ${isWorker ? 'pt-0 px-4 md:p-8 pb-24 xl:pb-8' : 'p-4 md:p-8'}`}
+        className={`flex-1 flex flex-col sidebar-main-content overflow-x-hidden ${isWorker ? 'overflow-hidden xl:overflow-y-auto p-0 xl:p-8' : 'overflow-y-auto p-4 md:p-8'}`}
         style={{ marginLeft: isEffectivelyCollapsed ? '73px' : '240px' }}
       >
         <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
           {children}
         </div>
       </main>
-
-      {/* Bottom nav for worker on mobile */}
-      {isWorker && <WorkerBottomNav />}
     </div>
   );
 };

@@ -1,30 +1,65 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import type { User, Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, Incidencia, EntregaLlaves } from '../services/mockData';
-import { appsScriptApi } from '../services/api';
-import { computeCleanPay, computeHoursPay, computeHoursWorked, cleanPhone } from '../utils/payments';
+import type { User } from '../services/mockData';
 import {
-  Search,
-  Calendar,
-  Clock,
-  ChevronRight,
-  Info,
-  Wrench,
-  Home,
-  Sparkles,
-  Banknote,
-  Filter,
-  ChevronDown,
-} from 'lucide-react';
+  getMyWorker,
+  listMyServiceReports,
+  listMyKeyDeliveries,
+  listMyIncidentReports,
+} from '../services/reportsApi';
+import { computeCleanPay, computeHoursPay } from '../utils/payments';
+import { Search, ChevronDown, X } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { formatName } from '../utils/formatters';
-import WorkerRecordsFilterModal, { WorkerRecordsFilters } from '../components/workers/WorkerRecordsFilterModal';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 
 interface WorkerRecordsProps {
   user: User;
 }
 
-export type RecordType = 'Normal' | 'Inicial' | 'Manitas' | 'Incidencia' | 'Llaves';
+type DateRangePreset = 'thisMonth' | 'lastMonth' | 'last7' | 'all' | 'custom';
+
+interface DateRangeFilter {
+  startDate: string; // YYYY-MM-DD ('' = sin límite)
+  endDate: string;
+}
+
+const toIso = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const computePresetRange = (preset: DateRangePreset): DateRangeFilter => {
+  const now = new Date();
+  if (preset === 'thisMonth') {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { startDate: toIso(first), endDate: toIso(last) };
+  }
+  if (preset === 'lastMonth') {
+    const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const last = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { startDate: toIso(first), endDate: toIso(last) };
+  }
+  if (preset === 'last7') {
+    const end = new Date(now);
+    const start = new Date(now);
+    start.setDate(end.getDate() - 6);
+    return { startDate: toIso(start), endDate: toIso(end) };
+  }
+  return { startDate: '', endDate: '' };
+};
+
+const presetLabel: Record<DateRangePreset, string> = {
+  thisMonth: 'Este mes',
+  lastMonth: 'Mes pasado',
+  last7: 'Últimos 7 días',
+  all: 'Todo',
+  custom: 'Personalizado',
+};
+
+export type RecordType = 'Normal' | 'Manitas' | 'Incidencia' | 'Llaves';
 
 interface UnifiedRecord {
   id: string;
@@ -32,7 +67,6 @@ interface UnifiedRecord {
   date: string;
   accommodation: string;
   kms: number;
-  minutes?: number;
   hoursWorked: number;
   earnings: number;
   observations: string;
@@ -40,35 +74,16 @@ interface UnifiedRecord {
   horaSalida?: string;
   // Campos extra Incidencias
   description?: string;
-  coste?: number;
-  pagadoPor?: string;
   // Campos extra Entrega de Llaves
   nombreCliente?: string;
   fechaEntrada?: string;
   fechaSalida?: string;
 }
 
-/** Normaliza un nombre para comparación: minúsculas sin acentos */
-const normName = (s: string) =>
-  s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-/** Matching por teléfono limpio (principal) o nombre (fallback) */
-const matchRecord = (
-  recordPhone: string,
-  recordNombre: string,
-  recordApellidos: string,
-  userPhone: string | undefined,
-  userName: string
-): boolean => {
-  const recPhone = cleanPhone(recordPhone);
-  const usrPhone = cleanPhone(userPhone);
-
-  // Prioridad 1: teléfono como ID exacto
-  if (recPhone && usrPhone) return recPhone === usrPhone;
-
-  // Fallback: nombre completo si no hay teléfono en la sesión
-  const full = normName(`${recordNombre} ${recordApellidos}`);
-  return normName(userName).split(/\s+/).every(part => full.includes(part));
+// duracion "HH:MM" → horas decimales.
+const durationToHours = (raw: string): number => {
+  const m = raw?.match(/^(\d{1,2}):(\d{2})$/);
+  return m ? Number(m[1]) + Number(m[2]) / 60 : 0;
 };
 
 const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
@@ -76,150 +91,93 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   const [records, setRecords] = useState<UnifiedRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Pills de tipo (sector). Set vacío = mostrar todos.
+  const [selectedTypes, setSelectedTypes] = useState<Set<RecordType>>(new Set());
 
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const [filters, setFilters] = useState<WorkerRecordsFilters>({
-    startDate: '',
-    endDate: '',
-    type: 'all'
-  });
+  // Selector de rango de fechas (sustituye al modal de filtros).
+  const [preset, setPreset] = useState<DateRangePreset>('thisMonth');
+  const [range, setRange] = useState<DateRangeFilter>(() => computePresetRange('thisMonth'));
+  const [isRangePickerOpen, setIsRangePickerOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState<DateRangeFilter>(() => computePresetRange('thisMonth'));
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [workers, normal, initial, handyman, incidencias, llaves] = await Promise.all([
-          appsScriptApi.getWorkers(),
-          appsScriptApi.getNormalCleans(),
-          appsScriptApi.getInitialCleans(),
-          appsScriptApi.getHandymanRecords(),
-          appsScriptApi.getRecentIncidencias(200).catch(() => [] as Incidencia[]),
-          appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
+        const [me, services, keys, incidents] = await Promise.all([
+          getMyWorker(),
+          listMyServiceReports(),
+          listMyKeyDeliveries(),
+          listMyIncidentReports(),
         ]);
 
-        // Buscar al trabajador para obtener su tarifa (por teléfono primero, luego nombre)
-        const workerData: Worker | undefined = workers.find(w => {
-          const wPhone = cleanPhone(w.telefono);
-          const uPhone = cleanPhone(user.telefono);
-          if (wPhone && uPhone) return wPhone === uPhone;
-          return normName(w.fullName).includes(normName(user.name).split(/\s+/)[0]);
-        });
-        const pagoPorReserva = workerData?.pagoPorReserva ?? 0;
-        const precioPorKm = workerData?.precioPorKm ?? 0;
+        if (!me) {
+          setRecords([]);
+          return;
+        }
 
         const unified: UnifiedRecord[] = [
-          ...normal
-            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
-            .map((r: NormalCleanRecord) => {
-              const pay = computeCleanPay(r.apartamento, r.horaEntrada, r.horaSalida, pagoPorReserva);
-              const kmPay = (r.km || 0) * precioPorKm;
+          ...services.map((s): UnifiedRecord => {
+            if (s.kind === 'reserva') {
+              const pay = computeCleanPay(
+                s.accommodationName,
+                s.horaEntrada || '',
+                s.horaSalida || '',
+                me.pagoPorReserva
+              );
               return {
-                id: r.id,
-                type: 'Normal' as RecordType,
-                date: r.checkoutFecha || r.checkinFecha,
-                accommodation: r.apartamento,
-                kms: r.km || 0,
+                id: s.id,
+                type: 'Normal',
+                date: s.createdAt,
+                accommodation: s.accommodationName,
+                kms: s.km,
                 hoursWorked: pay.hoursWorked,
-                earnings: pay.base + pay.extraPay + kmPay,
-                observations: r.observaciones || '',
-                horaEntrada: r.horaEntrada,
-                horaSalida: r.horaSalida,
+                earnings: pay.base + pay.extraPay + s.km * me.precioPorKm,
+                observations: s.notas,
+                horaEntrada: s.horaEntrada || undefined,
+                horaSalida: s.horaSalida || undefined,
               };
-            }),
-          ...initial
-            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
-            .map((r: InitialCleanRecord) => {
-              const hp = computeHoursPay(r.horaEntrada, r.horaSalida);
-              const kmPay = (r.km || 0) * precioPorKm;
-              return {
-                id: r.id,
-                type: 'Inicial' as RecordType,
-                date: r.checkoutFecha || r.checkinFecha,
-                accommodation: r.apartamento,
-                kms: r.km || 0,
-                hoursWorked: hp.hours,
-                earnings: hp.pay + kmPay,
-                observations: r.observaciones || '',
-                horaEntrada: r.horaEntrada,
-                horaSalida: r.horaSalida,
-              };
-            }),
-          ...handyman
-            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
-            .map((r: HandymanRecord) => {
-              const hp = computeHoursPay(r.horaInicioTarea, r.horaFinTarea);
-              const kms = r.cantidadMinutos || 0;
-              return {
-                id: r.id,
-                type: 'Manitas' as RecordType,
-                date: r.fechaFin || r.fechaLlegada,
-                accommodation: r.alojamiento,
-                kms,
-                minutes: r.cantidadMinutos || 0,
-                hoursWorked: hp.hours,
-                earnings: hp.pay + kms * precioPorKm,
-                observations: r.observacionesTarea || '',
-                horaEntrada: r.horaInicioTarea,
-                horaSalida: r.horaFinTarea,
-              };
-            }),
-          ...incidencias
-            .filter(r => matchRecord(
-              r.telefono || '',
-              r.nombre || '',
-              r.apellidos || '',
-              user.telefono,
-              user.name
-            ))
-            .map((r: Incidencia) => {
-              // Calcular horas si hay paradaInicial y paradaFinal o paradas con hora
-              let calculatedHours = 0;
-              const extractTime = (stopStr?: string): string | null => {
-                if (!stopStr) return null;
-                const m = stopStr.match(/\((\d{1,2}:\d{2})\)/);
-                return m ? m[1] : null;
-              };
-              const tIni = extractTime(r.paradaInicial);
-              const tFin = extractTime(r.paradaFinal);
-              if (tIni && tFin) {
-                calculatedHours = computeHoursWorked(tIni, tFin);
-              }
-
-              const pagoPorIncidencia = workerData?.pagoPorIncidencia ?? 0;
-              const kmPay = (r.kms || 0) * precioPorKm;
-              return {
-                id: r.id,
-                type: 'Incidencia' as RecordType,
-                date: r.timestamp || new Date().toISOString(),
-                accommodation: r.accommodationName,
-                kms: r.kms || 0,
-                hoursWorked: calculatedHours,
-                earnings: pagoPorIncidencia + kmPay,
-                observations: r.observaciones || '',
-                description: r.description,
-                coste: r.coste,
-                pagadoPor: r.pagadoPor,
-                horaEntrada: tIni || undefined,
-                horaSalida: tFin || undefined,
-              };
-            }),
-          ...llaves
-            .filter(r => matchRecord(r.telefono, r.nombre, r.apellidos, user.telefono, user.name))
-            .map((r: EntregaLlaves) => {
-              return {
-                id: r.id,
-                type: 'Llaves' as RecordType,
-                date: r.fechaEntradaReserva || r.fechaUbicacionEntrega || new Date().toISOString(),
-                accommodation: r.apartamento,
-                kms: r.km || 0,
-                hoursWorked: 0, // No se calcula desde fechas de reserva del cliente
-                earnings: 0,
-                observations: r.observaciones || '',
-                nombreCliente: r.nombreCliente,
-                fechaEntrada: r.fechaEntradaReserva,
-                fechaSalida: r.fechaSalidaReserva,
-              };
-            }),
+            }
+            const hp = computeHoursPay(s.horaEntrada || '', s.horaSalida || '');
+            return {
+              id: s.id,
+              type: 'Manitas',
+              date: s.createdAt,
+              accommodation: s.accommodationName,
+              kms: s.km,
+              hoursWorked: hp.hours,
+              earnings: hp.pay + s.km * me.precioPorKm,
+              observations: s.notas,
+              horaEntrada: s.horaEntrada || undefined,
+              horaSalida: s.horaSalida || undefined,
+            };
+          }),
+          ...keys.map((k): UnifiedRecord => ({
+            id: k.id,
+            type: 'Llaves',
+            date: k.createdAt,
+            accommodation: k.accommodationName,
+            kms: k.km,
+            hoursWorked: 0,
+            earnings:
+              (k.sabanasEntregadas ? me.pagoPorServicioSabanas * (k.sabanasPersonas ?? 0) : 0) +
+              k.km * me.precioPorKm,
+            observations: k.observaciones,
+            nombreCliente: k.nombreCliente,
+            fechaEntrada: k.fechaEntradaReserva || undefined,
+            fechaSalida: k.fechaSalidaReserva || undefined,
+          })),
+          ...incidents.map((i): UnifiedRecord => ({
+            id: i.id,
+            type: 'Incidencia',
+            date: i.createdAt,
+            accommodation: i.accommodationName,
+            kms: 0,
+            hoursWorked: durationToHours(i.duracion),
+            earnings: me.pagoPorIncidencia,
+            observations: '',
+            description: i.detalles,
+          })),
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         setRecords(unified);
@@ -232,30 +190,68 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
     fetchData();
   }, [user]);
 
+  // Normaliza la fecha del registro a YYYY-MM-DD (soporta ISO y "D/M/YYYY").
+  const toIsoKey = (raw: string): string => {
+    if (!raw) return '';
+    const head = String(raw).split('|')[0].trim();
+    const iso = head.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const loc = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (loc) return `${loc[3]}-${loc[2].padStart(2, '0')}-${loc[1].padStart(2, '0')}`;
+    return '';
+  };
+
   const filteredRecords = useMemo(() => {
     return records.filter(r => {
-      const matchesType = filters.type === 'all' || r.type === filters.type;
       const matchesSearch =
         r.accommodation.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.observations.toLowerCase().includes(searchTerm.toLowerCase());
-        
-      let matchesDate = true;
-      if (filters.startDate || filters.endDate) {
-        const recordDate = (r.date || '').split('T')[0].split(' ')[0];
-        if (filters.startDate && recordDate < filters.startDate) matchesDate = false;
-        if (filters.endDate && recordDate > filters.endDate) matchesDate = false;
-      }
-      
-      return matchesType && matchesSearch && matchesDate;
-    });
-  }, [records, filters, searchTerm]);
 
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (filters.type !== 'all') count++;
-    if (filters.startDate || filters.endDate) count++;
-    return count;
-  }, [filters]);
+      const matchesType = selectedTypes.size === 0 || selectedTypes.has(r.type);
+
+      let matchesDate = true;
+      if (range.startDate || range.endDate) {
+        const key = toIsoKey(r.date);
+        if (!key) matchesDate = false;
+        else {
+          if (range.startDate && key < range.startDate) matchesDate = false;
+          if (range.endDate && key > range.endDate) matchesDate = false;
+        }
+      }
+
+      return matchesSearch && matchesType && matchesDate;
+    });
+  }, [records, range, searchTerm, selectedTypes]);
+
+  const toggleType = (t: RecordType) => {
+    setSelectedTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  };
+
+  // Aplica preset y cierra el picker.
+  const applyPreset = (p: DateRangePreset) => {
+    setPreset(p);
+    if (p === 'custom') {
+      setCustomDraft(range);
+      return;
+    }
+    setRange(computePresetRange(p));
+    setIsRangePickerOpen(false);
+  };
+
+  const applyCustom = () => {
+    if (!customDraft.startDate || !customDraft.endDate) return;
+    setRange(customDraft);
+    setIsRangePickerOpen(false);
+  };
+
+  const rangeLabel = preset === 'custom' && range.startDate && range.endDate
+    ? `${range.startDate.slice(8, 10)}/${range.startDate.slice(5, 7)} – ${range.endDate.slice(8, 10)}/${range.endDate.slice(5, 7)}`
+    : presetLabel[preset];
 
   // Totales del resumen
   const totals = useMemo(() => ({
@@ -269,441 +265,368 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   const animEarnings = useAnimatedNumber(totals.earnings);
 
   if (loading) {
-    return <LoadingSpinner message="Cargando tu historial de registros..." />;
+    return (
+      <div className="animate-in fade-in duration-500">
+        <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
+          {/* Skeleton selector */}
+          <div className="max-w-xl mx-auto lg:mx-0 pt-2">
+            <div className="h-9 w-40 rounded-lg bg-stone-200/60 dark:bg-stone-800/40 animate-pulse" />
+          </div>
+          {/* Skeleton boxes resumen */}
+          <div className="max-w-xl mx-auto lg:mx-0 space-y-3">
+            <div className="h-3 w-16 rounded bg-stone-200/60 dark:bg-stone-800/40 animate-pulse ml-1" />
+            <div className="grid grid-cols-3 gap-2">
+              {[0, 1, 2].map(i => (
+                <div
+                  key={i}
+                  className="aspect-square rounded-2xl bg-stone-100/60 dark:bg-stone-800/30 border border-stone-200/50 dark:border-stone-700/40 animate-pulse"
+                />
+              ))}
+            </div>
+          </div>
+          {/* Skeleton buscador */}
+          <div className="max-w-xl mx-auto lg:mx-0">
+            <div className="h-11 w-full rounded-xl bg-stone-100/60 dark:bg-stone-800/30 border border-stone-200/50 dark:border-stone-700/40 animate-pulse" />
+          </div>
+          {/* Skeleton lista */}
+          <div className="max-w-xl mx-auto lg:mx-0 space-y-3">
+            <div className="h-3 w-20 rounded bg-stone-200/60 dark:bg-stone-800/40 animate-pulse ml-1" />
+            <div className="rounded-xl bg-stone-50/60 dark:bg-stone-800/25 border border-stone-200/70 dark:border-stone-700/50 divide-y divide-stone-200/60 dark:divide-stone-700/40">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className="px-4 py-4 flex items-center gap-3">
+                  <div className="w-[52px] h-[52px] rounded-lg bg-stone-200/60 dark:bg-stone-800/40 animate-pulse" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3.5 w-2/3 rounded bg-stone-200/60 dark:bg-stone-800/40 animate-pulse" />
+                    <div className="h-3 w-1/3 rounded bg-stone-200/50 dark:bg-stone-800/30 animate-pulse" />
+                  </div>
+                  <div className="h-4 w-14 rounded bg-stone-200/60 dark:bg-stone-800/40 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const typeConfig: Record<RecordType, { label: string; badge: string; icon: React.ComponentType<any> }> = {
-    Normal:     { label: 'Normal',     badge: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',       icon: Home },
-    Inicial:    { label: 'Inicial',    badge: 'bg-purple-50 text-purple-600 dark:bg-purple-900/20 dark:text-purple-400', icon: Sparkles },
-    Manitas:    { label: 'Manitas',    badge: 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400',    icon: Wrench },
-    Incidencia: { label: 'Incidencia', badge: 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400',            icon: Info },
-    Llaves:     { label: 'Llaves',     badge: 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',        icon: Banknote },
+  // Etiqueta visible por tipo (sin badge de color — sintonía con Inicio).
+  const typeLabel: Record<RecordType, string> = {
+    Normal: 'Limpieza',
+    Manitas: 'Manitas',
+    Incidencia: 'Incidencia',
+    Llaves: 'Entrega de llaves',
+  };
+
+  // Marcador-fecha: día y mes corto (mismo formato que "Últimos trabajos" de Inicio).
+  const dayNum = (raw: string) => {
+    const d = raw ? new Date(raw) : null;
+    return d && !isNaN(d.getTime()) ? d.getDate() : '—';
+  };
+  const monthShort = (raw: string) => {
+    const d = raw ? new Date(raw) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    return d.toLocaleString('es-ES', { month: 'short' }).replace('.', '');
+  };
+  const fechaLarga = (raw: string) => {
+    const d = raw ? new Date(raw) : null;
+    return d && !isNaN(d.getTime())
+      ? d.toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' })
+      : '—';
   };
 
   return (
-    <div className="space-y-0 md:pb-20">
-      {/* ── BLOQUE STICKY MÓVIL ── */}
-      <div className="sticky top-0 z-30 pt-0 lg:pt-0 pb-4 lg:pb-0 mb-4 lg:mb-6 lg:static flex flex-col gap-6 -mx-4 px-4 lg:mx-0 lg:px-0 bg-[#F5F4F2] dark:bg-[#1c1a18] lg:bg-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
-        
-        {/* Header Desktop / Titles */}
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
-            Mis Registros
-          </h1>
-          <p className="text-sm text-slate-400 dark:text-stone-500 font-light">
-            {records.length > 0 ? `${records.length} servicios realizados en total` : 'Sin registros encontrados'}
-          </p>
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
+
+        {/* ── Selector de rango — tipografía del greeting de Inicio ── */}
+        <div className="max-w-xl mx-auto lg:mx-0 pt-2 pr-8">
+          <button
+            onClick={() => setIsRangePickerOpen(true)}
+            className="inline-flex items-center gap-2 text-left text-3xl font-medium tracking-tight leading-snug text-[#bfb9b7] dark:text-stone-500 font-dm active:opacity-70 transition-opacity"
+          >
+            <span className="text-stone-800 dark:text-stone-200">{rangeLabel}</span>
+            <ChevronDown size={22} strokeWidth={2.5} className="text-stone-800 dark:text-stone-200 relative top-[1px]" />
+          </button>
         </div>
 
-        <div className="hidden sm:flex flex-row items-center gap-3">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4 group-focus-within:text-orange-500 transition-colors" />
-            <input
-              type="text"
-              placeholder="Buscar alojamiento..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2.5 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-56"
-            />
-          </div>
-          <div className="relative">
-            <button 
-              onClick={() => setIsFilterModalOpen(true)}
-              className={`flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all active:scale-[0.98] relative shadow-sm ${
-                activeFiltersCount > 0 ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90 shadow-md' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
-              }`}
-            >
-              <Filter size={12} className={activeFiltersCount > 0 ? "text-orange-600" : "text-orange-500"} />
-              <span>Filtro</span>
-              {activeFiltersCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50 border border-white/50">
-                  {activeFiltersCount}
-                </span>
-              )}
-            </button>
-            <WorkerRecordsFilterModal 
-              isOpen={isFilterModalOpen}
-              onClose={() => setIsFilterModalOpen(false)}
-              filters={filters}
-              onApply={(newFilters) => {
-                setFilters(newFilters);
-              }}
-            />
-          </div>
-        </div>
-      </header>
-
-      {/* ── Resumen de totales ── */}
-      {filteredRecords.length > 0 && (
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
-          {[
-            { label: 'Servicios realizados', value: animCount.toFixed(0), suffix: '' },
-            { label: 'Horas totales', value: animHours.toFixed(1), suffix: 'h' },
-            { label: 'Total generado', value: animEarnings.toFixed(2), suffix: '€', highlight: true },
-          ].map(stat => (
-            <div
-              key={stat.label}
-              className={`bg-white/60 dark:bg-stone-900/40 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-white/60 dark:border-stone-800/50 p-3 sm:p-5 flex-col justify-center items-center sm:items-start flex`}
-            >
-              <div className="flex flex-col items-start justify-center text-left w-fit gap-0.5 sm:gap-1">
-                <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-stone-500">
-                  <span className="hidden sm:inline">{stat.label}</span>
-                  <span className="sm:hidden leading-tight flex flex-col">
-                    {stat.label.split(' ').map((word, idx) => (
-                      <span key={idx} className="block">{word}</span>
-                    ))}
+        {/* ── Resumen — boxes estilo cards de Inicio ── */}
+        {filteredRecords.length > 0 && (
+          <section className="max-w-xl mx-auto lg:mx-0 space-y-3 font-gsf">
+            <h2 className="px-1 text-xs font-medium text-slate-500 dark:text-stone-400">Resumen</h2>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                {
+                  label: 'Servicios',
+                  value: animCount.toFixed(0),
+                  valueClass: 'text-slate-800 dark:text-stone-100',
+                },
+                {
+                  label: 'Horas',
+                  value: `${animHours.toFixed(1).replace('.', ',')}h`,
+                  valueClass: 'text-slate-800 dark:text-stone-100',
+                },
+                {
+                  label: 'Ganado',
+                  value: `${animEarnings.toFixed(2).replace('.', ',')}€`,
+                  valueClass: 'text-emerald-600 dark:text-emerald-400',
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="aspect-square rounded-2xl bg-stone-50 dark:bg-stone-800/40 border border-stone-200/70 dark:border-stone-700/50 p-4 flex flex-col justify-between"
+                >
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-stone-400 font-gsf">
+                    {stat.label}
                   </span>
-                </p>
-                <p className={`text-lg sm:text-2xl font-normal font-display tabular-nums tracking-tight ${stat.highlight ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-stone-100'}`}>
-                  {stat.value}<span className="text-[10px] sm:text-sm font-normal ml-0.5 text-slate-400 dark:text-stone-500">{stat.suffix}</span>
-                </p>
-              </div>
+                  <span className={`text-xl font-medium tabular-nums font-dm leading-tight ${stat.valueClass}`}>
+                    {stat.value}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          </section>
+        )}
+
+        {/* ── Buscador + pills de tipo. Ocultos si no hay nada y no se está buscando. ── */}
+        {(records.length > 0 || searchTerm) && (
+          <div className="max-w-xl mx-auto lg:mx-0 space-y-3">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-stone-500" />
+              <input
+                type="search"
+                placeholder="Buscar por alojamiento…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-xl bg-stone-50 dark:bg-stone-800/40 border border-stone-200/70 dark:border-stone-700/50 text-sm text-slate-700 dark:text-stone-200 placeholder:text-slate-400 dark:placeholder:text-stone-500 font-gsf focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+              />
+            </div>
+            {/* Pills de sector */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+              {(['Normal', 'Manitas', 'Llaves', 'Incidencia'] as RecordType[]).map((t) => {
+                const active = selectedTypes.has(t);
+                return (
+                  <button
+                    key={t}
+                    onClick={() => toggleType(t)}
+                    className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium font-gsf border transition-colors active:scale-[0.97] ${
+                      active
+                        ? 'bg-stone-100 dark:bg-stone-800/60 border-stone-200/70 dark:border-stone-700/50 text-slate-700 dark:text-stone-200'
+                        : 'bg-transparent border-stone-200/70 dark:border-stone-700/40 text-slate-500 dark:text-stone-400'
+                    }`}
+                  >
+                    {typeLabel[t]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Lista de registros ── */}
+        <section className="max-w-xl mx-auto lg:mx-0 space-y-3 font-gsf">
+          <div className="flex items-center gap-2 px-1">
+            <h2 className="text-xs font-medium text-slate-500 dark:text-stone-400">Registros</h2>
+            {filteredRecords.length > 0 && (
+              <span className="ml-auto text-[11px] text-slate-400 dark:text-stone-500">
+                {filteredRecords.length}
+              </span>
+            )}
+          </div>
+
+          {filteredRecords.length === 0 ? (
+            <div className="px-4 py-6 rounded-xl border border-dashed border-stone-200/70 dark:border-stone-700/40 text-center">
+              <p className="text-sm text-slate-400 dark:text-stone-500">
+                No se encontraron registros.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-stone-50/60 dark:bg-stone-800/25 border border-stone-200/70 dark:border-stone-700/50 divide-y divide-stone-200/60 dark:divide-stone-700/40">
+              {filteredRecords.map((r) => {
+                const isExpanded = expandedId === r.id;
+                return (
+                  <div key={r.id}>
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : r.id)}
+                      className="w-full px-4 py-4 flex items-center gap-3 text-left active:bg-stone-100/40 dark:active:bg-stone-700/20 transition-colors"
+                    >
+                      {/* Marcador-fecha 52×52 — sin fondo ni borde */}
+                      <div className="shrink-0 w-[52px] h-[52px] flex flex-col items-center justify-center">
+                        <span className="text-base font-medium text-slate-800 dark:text-stone-100 leading-none tabular-nums">
+                          {dayNum(r.date)}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-stone-500 mt-0.5">
+                          {monthShort(r.date)}
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-sm font-medium text-slate-800 dark:text-stone-100 truncate">
+                          {r.accommodation ? formatName(r.accommodation) : '—'}
+                        </p>
+                        <p className="text-[11px] text-slate-400 dark:text-stone-500">
+                          {typeLabel[r.type]}
+                          {r.hoursWorked > 0 ? ` · ${r.hoursWorked.toFixed(1).replace('.', ',')} h` : ''}
+                          {r.kms > 0 ? ` · ${r.kms} km` : ''}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 text-sm font-medium tabular-nums ${
+                        r.earnings > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-stone-500'
+                      }`}>
+                        {r.earnings > 0 ? `${r.earnings.toFixed(2).replace('.', ',')} €` : '—'}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-4 -mt-1 space-y-2 font-gsf text-[12px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 dark:text-stone-500">Fecha</span>
+                          <span className="text-slate-700 dark:text-stone-200 text-right">{fechaLarga(r.date)}</span>
+                        </div>
+
+                        {(r.type === 'Normal' || r.type === 'Manitas') && r.horaEntrada && r.horaSalida && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400 dark:text-stone-500">Horario</span>
+                            <span className="text-slate-700 dark:text-stone-200 tabular-nums">{r.horaEntrada} – {r.horaSalida}</span>
+                          </div>
+                        )}
+
+                        {r.type === 'Incidencia' && (
+                          <>
+                            {r.hoursWorked > 0 && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-400 dark:text-stone-500">Duración</span>
+                                <span className="text-slate-700 dark:text-stone-200 tabular-nums">
+                                  {r.hoursWorked.toFixed(1).replace('.', ',')} h
+                                </span>
+                              </div>
+                            )}
+                            {r.description && (
+                              <div className="space-y-1">
+                                <span className="text-slate-400 dark:text-stone-500">Descripción</span>
+                                <p className="text-slate-700 dark:text-stone-200 leading-relaxed">{r.description}</p>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {r.type === 'Llaves' && (
+                          <>
+                            {r.nombreCliente && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-400 dark:text-stone-500">Cliente</span>
+                                <span className="text-slate-700 dark:text-stone-200">{r.nombreCliente}</span>
+                              </div>
+                            )}
+                            {r.fechaEntrada && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-400 dark:text-stone-500">Entrada reserva</span>
+                                <span className="text-slate-700 dark:text-stone-200">
+                                  {new Date(r.fechaEntrada).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                </span>
+                              </div>
+                            )}
+                            {r.fechaSalida && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-400 dark:text-stone-500">Salida reserva</span>
+                                <span className="text-slate-700 dark:text-stone-200">
+                                  {new Date(r.fechaSalida).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {r.observations && (
+                          <div className="space-y-1">
+                            <span className="text-slate-400 dark:text-stone-500">Observaciones</span>
+                            <p className="text-slate-700 dark:text-stone-200 leading-relaxed">{r.observations}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* ── Picker de rango (modal) ── */}
+      {isRangePickerOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+          onClick={() => setIsRangePickerOpen(false)}
+        >
+          <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" />
+          <div
+            className="relative w-full sm:max-w-sm bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-3xl border border-stone-200/70 dark:border-stone-700/50 p-6 space-y-4 animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-300 font-gsf"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-medium text-slate-800 dark:text-stone-100 font-dm">
+                Periodo
+              </h3>
+              <button
+                onClick={() => setIsRangePickerOpen(false)}
+                className="p-1.5 -mr-1.5 rounded-full text-slate-400 dark:text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                aria-label="Cerrar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {(['thisMonth', 'lastMonth', 'last7', 'all', 'custom'] as DateRangePreset[]).map((p) => {
+                const active = preset === p;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => applyPreset(p)}
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition-colors text-sm ${
+                      active
+                        ? 'bg-stone-100 dark:bg-stone-800/60 border-stone-200/70 dark:border-stone-700/50 text-slate-800 dark:text-stone-100 font-medium'
+                        : 'bg-transparent border-stone-200/70 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800/30'
+                    }`}
+                  >
+                    {presetLabel[p]}
+                  </button>
+                );
+              })}
+            </div>
+
+            {preset === 'custom' && (
+              <div className="space-y-3 pt-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500 dark:text-stone-400">Desde</label>
+                    <input
+                      type="date"
+                      value={customDraft.startDate}
+                      onChange={(e) => setCustomDraft((s) => ({ ...s, startDate: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/40 border border-stone-200/70 dark:border-stone-700/50 text-sm text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500 dark:text-stone-400">Hasta</label>
+                    <input
+                      type="date"
+                      value={customDraft.endDate}
+                      onChange={(e) => setCustomDraft((s) => ({ ...s, endDate: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl bg-stone-50 dark:bg-stone-800/40 border border-stone-200/70 dark:border-stone-700/50 text-sm text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={applyCustom}
+                  disabled={!customDraft.startDate || !customDraft.endDate}
+                  className="w-full py-3 rounded-xl bg-orange-500 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98] transition-transform"
+                >
+                  Aplicar
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
-
-      {/* Mobile Search Bar - rendered BELOW cards */}
-      <div className="sm:hidden relative group mt-1">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4 group-focus-within:text-orange-500 transition-colors" />
-        <input
-          type="text"
-          placeholder="Buscar alojamiento..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="pl-10 pr-4 py-3 sm:py-2.5 bg-white/60 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-800/50 rounded-xl text-sm sm:text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all w-full"
-        />
-      </div>
-
-      </div> {/* END OF STICKY TOP */}
-
-      {/* ── CONTENIDO CREADO RESPONSIVO CON INNER SCROLL ── */}
-      <div className="flex-1 overflow-y-auto w-full lg:overflow-visible pb-24 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-both">
-      <div className="hidden lg:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
-        <div className="grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_0.5fr] gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800">
-           {['Fecha', 'Tipo', 'Alojamiento', 'Horas', 'KM', 'Generado', 'Notas', ''].map(col => (
-             <span key={col} className="text-xs text-slate-400 dark:text-stone-500">
-               {col}
-             </span>
-           ))}
-        </div>
-        
-        <ul className="divide-y divide-stone-100 dark:divide-stone-800 flex-1 overflow-y-auto">
-          {filteredRecords.length === 0 ? (
-            <li className="flex items-center justify-center py-16">
-              <span className="text-slate-400 dark:text-stone-500 text-sm">
-                No se encontraron registros
-              </span>
-            </li>
-          ) : (
-            filteredRecords.map(record => {
-              const cfg = typeConfig[record.type];
-              const isExpanded = expandedId === record.id;
-              return (
-                <li
-                  key={record.id}
-                  className={`transition-all duration-300 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 cursor-pointer ${
-                    isExpanded ? 'bg-stone-50/80 dark:bg-stone-850/50' : ''
-                  }`}
-                  onClick={() => setExpandedId(isExpanded ? null : record.id)}
-                >
-                  <div className="group module-item grid grid-cols-[1.2fr_1fr_1.8fr_0.8fr_0.8fr_1.2fr_3fr_0.5fr] gap-4 px-8 py-4 items-center">
-                    {/* Fecha */}
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm text-slate-800 dark:text-stone-200 truncate">
-                        {record.date
-                          ? new Date(record.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '—'}
-                      </span>
-                      {record.horaEntrada && record.horaSalida && (
-                        <span className="text-[10px] text-slate-400 tabular-nums truncate">{record.horaEntrada} – {record.horaSalida}</span>
-                      )}
-                    </div>
-                    
-                    <div className="min-w-0">
-                      <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-medium truncate max-w-full ${cfg.badge}`}>
-                        {cfg.label}
-                      </span>
-                    </div>
-                    
-                    {/* Alojamiento */}
-                    <p className="text-sm text-slate-800 dark:text-stone-200 truncate font-medium">
-                      {record.accommodation ? formatName(record.accommodation) : '—'}
-                    </p>
-                    
-                    {/* Horas */}
-                    <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
-                      {record.hoursWorked > 0 ? `${record.hoursWorked.toFixed(1)}h` : '—'}
-                    </p>
-                    
-                    {/* KM */}
-                    <p className="text-xs text-slate-500 dark:text-stone-400 tabular-nums truncate">
-                      {record.kms > 0 ? `${record.kms} km` : '—'}
-                    </p>
-                    
-                    {/* Generado */}
-                    <p className={`text-xs tabular-nums truncate ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
-                      {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
-                    </p>
-                    
-                    {/* Notas */}
-                    <p className="text-[11px] text-slate-600 dark:text-stone-300 truncate w-full block" title={record.observations}>
-                      {record.observations || <span className="opacity-40 italic">—</span>}
-                    </p>
-
-                    {/* Chevron icon */}
-                    <div className="flex justify-end pr-2 text-slate-400">
-                      <ChevronRight size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-90 text-orange-500' : ''}`} />
-                    </div>
-                  </div>
-
-                  {/* Panel de detalles en escritorio */}
-                  <div className={`overflow-hidden transition-all duration-300 ease-in-out px-8 ${
-                    isExpanded ? 'max-h-60 pb-6 pt-2 border-t border-stone-100 dark:border-stone-800/40 bg-white/40 dark:bg-stone-900/40' : 'max-h-0'
-                  }`}
-                  onClick={(e) => e.stopPropagation()} // Evitar colapsar al hacer clic en detalles
-                  >
-                    <div className="grid grid-cols-4 gap-4 bg-stone-50/50 dark:bg-stone-850/40 p-4 rounded-2xl border border-stone-100 dark:border-stone-800/60">
-                      <div className="space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Alojamiento Completo</span>
-                        <p className="text-xs text-slate-700 dark:text-stone-200 font-medium">
-                          {record.accommodation || '—'}
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Fecha Completa</span>
-                        <p className="text-xs text-slate-700 dark:text-stone-200">
-                          {record.date ? new Date(record.date).toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' }) : '—'}
-                        </p>
-                      </div>
-
-                      {record.type === 'Incidencia' && (
-                        <>
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Coste Estimado</span>
-                            <p className="text-xs text-red-500 font-semibold">
-                              {record.coste != null && record.coste > 0 ? `${record.coste.toFixed(2)}€` : '—'}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Pagado Por</span>
-                            <p className="text-xs text-slate-700 dark:text-stone-200 capitalize">
-                              {record.pagadoPor || '—'}
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      {record.type === 'Llaves' && (
-                        <>
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cliente</span>
-                            <p className="text-xs text-slate-700 dark:text-stone-200 font-medium">
-                              {record.nombreCliente || '—'}
-                            </p>
-                          </div>
-                          {record.fechaEntrada && (
-                            <div className="space-y-1">
-                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Entrada de Reserva</span>
-                              <p className="text-xs text-slate-700 dark:text-stone-200">
-                                {new Date(record.fechaEntrada).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
-                              </p>
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {(record.type === 'Normal' || record.type === 'Inicial' || record.type === 'Manitas') && (
-                        <>
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horario del Registro</span>
-                            <p className="text-xs text-slate-700 dark:text-stone-200 font-mono">
-                              {record.horaEntrada && record.horaSalida ? `${record.horaEntrada} – ${record.horaSalida}` : '—'}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                              {record.type === 'Manitas' ? 'Minutos Trabajados' : 'Kilómetros totales'}
-                            </span>
-                            <p className="text-xs text-slate-700 dark:text-stone-200">
-                              {record.type === 'Manitas' ? `${record.minutes || 0} min` : `${record.kms || 0} km`}
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      <div className="col-span-2 space-y-1">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Detalles / Observaciones</span>
-                        <p className="text-xs text-slate-600 dark:text-stone-400 italic font-light">
-                          "{record.description || record.observations || 'Sin anotaciones adicionales'}"
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              );
-            })
-          )}
-        </ul>
-      </div>
-
-      {/* ── MÓVIL: Tarjetas ── */}
-      <div className="lg:hidden space-y-3">
-        {filteredRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-16 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md rounded-[32px] border border-slate-200 dark:border-stone-800">
-            <Search size={32} className="text-slate-300 dark:text-stone-600 mb-4" />
-            <p className="text-slate-500 dark:text-stone-400 font-medium">No se encontraron registros</p>
-            <p className="text-xs text-slate-400 dark:text-stone-500 mt-1">Prueba a cambiar los filtros o el término de búsqueda.</p>
-          </div>
-        ) : (
-          filteredRecords.map(record => {
-            const cfg = typeConfig[record.type];
-            const isExpanded = expandedId === record.id;
-            return (
-              <div
-                key={record.id}
-                onClick={() => setExpandedId(isExpanded ? null : record.id)}
-                className={`bg-white/80 dark:bg-stone-900/60 backdrop-blur-md rounded-3xl border border-white/60 dark:border-stone-800/50 overflow-hidden transition-all duration-300 ${
-                  isExpanded ? 'pb-1 shadow-sm bg-white dark:bg-stone-900/80' : 'active:scale-[0.98]'
-                }`}
-              >
-                {/* Card header */}
-                <div className="p-4 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {/* Fecha box */}
-                    <div className="flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl bg-stone-50 dark:bg-stone-800 shrink-0 border border-stone-100 dark:border-stone-800">
-                      <span className="text-[10px] font-normal text-slate-500 capitalize leading-none mb-1">
-                        {record.date ? new Date(record.date).toLocaleDateString('es-ES', { month: 'short' }) : '—'}
-                     </span>
-                      <span className="text-base font-bold text-slate-800 dark:text-stone-200 leading-none">
-                        {record.date ? new Date(record.date).getDate() : '—'}
-                      </span>
-                    </div>
-
-                    <h3 className="text-[13px] font-medium text-slate-800 dark:text-stone-100 truncate">
-                      {record.accommodation ? formatName(record.accommodation) : '—'}
-                    </h3>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[13px] tabular-nums font-medium ${record.earnings > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>
-                      {record.earnings > 0 ? `${record.earnings.toFixed(2)}€` : '—'}
-                    </span>
-                    <ChevronRight size={18} className={`text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-90 text-slate-700 dark:text-stone-300' : ''}`} />
-                  </div>
-                </div>
-
-                {/* Detalle expandible */}
-                <div className={`px-4 overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-96 pb-4 border-t border-slate-50 dark:border-stone-800/40 pt-4' : 'max-h-0'}`}>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                      <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Tipo</p>
-                      <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{cfg.label}</p>
-                    </div>
-
-                    {(record.type === 'Normal' || record.type === 'Inicial' || record.type === 'Manitas') && (
-                      <>
-                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Horario</p>
-                          <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 tabular-nums">
-                            {record.horaEntrada && record.horaSalida ? `${record.horaEntrada}-${record.horaSalida}` : '—'}
-                          </p>
-                        </div>
-                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">
-                            {record.type === 'Manitas' ? 'Min' : 'KM'}
-                          </p>
-                          <p className="text-xs font-semibold text-slate-700 dark:text-stone-200">
-                            {record.type === 'Manitas'
-                              ? record.minutes ? `${record.minutes}` : '—'
-                              : record.kms ? `${record.kms}` : '—'}
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                    {record.type === 'Incidencia' && (
-                      <>
-                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Coste</p>
-                          <p className="text-xs font-semibold text-red-500 tabular-nums">
-                            {record.coste != null && record.coste > 0 ? `${record.coste.toFixed(2)}€` : '—'}
-                          </p>
-                        </div>
-                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Pagado por</p>
-                          <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 truncate w-full">
-                            {record.pagadoPor === 'empresa' ? 'Empresa' : record.pagadoPor === 'limpiador' ? 'Limpiador' : '—'}
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                    {record.type === 'Llaves' && (
-                      <>
-                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">Cliente</p>
-                          <p className="text-[11px] font-semibold text-slate-700 dark:text-stone-200 truncate w-full">{record.nombreCliente || '—'}</p>
-                        </div>
-                        <div className="bg-stone-50/50 dark:bg-stone-800/30 p-2.5 rounded-2xl flex flex-col items-center text-center">
-                          <p className="text-[9px] uppercase font-bold tracking-wider text-slate-400 mb-1">KM</p>
-                          <p className="text-xs font-semibold text-slate-700 dark:text-stone-200 tabular-nums">{record.kms || 0}</p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {record.type === 'Incidencia' && record.description && (
-                    <div className="bg-red-50/50 dark:bg-red-900/10 p-3.5 rounded-2xl border border-red-100/50 dark:border-red-800/30 mb-2">
-                      <div className="flex items-center gap-1.5 mb-1.5 text-red-500">
-                        <Info size={12} />
-                        <span className="text-[9px] uppercase font-bold tracking-wider">Descripción</span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
-                        "{record.description}"
-                      </p>
-                    </div>
-                  )}
-
-                  {record.observations && (
-                    <div className="bg-stone-50 dark:bg-stone-900/40 p-3.5 rounded-2xl border border-stone-100/50 dark:border-stone-800/50">
-                      <div className="flex items-center gap-1.5 mb-1.5 text-slate-500 dark:text-stone-400">
-                        <Info size={12} />
-                        <span className="text-[9px] uppercase font-bold tracking-wider">Observaciones</span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-stone-400 italic font-light leading-relaxed">
-                        "{record.observations}"
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-      </div>
-      {/* ── BOTON FILTRO FLOTANTE MÓVIL ── */}
-      <div className="fixed bottom-16 right-4 z-50 sm:hidden animate-in fade-in zoom-in duration-300">
-        <button
-          onClick={() => setIsFilterModalOpen(true)}
-          className={`flex items-center justify-center w-[52px] h-[52px] rounded-full shadow-2xl transition-all active:scale-[0.92] border ${
-            activeFiltersCount > 0 
-              ? 'bg-orange-500 border-orange-400 text-white' 
-              : 'bg-white dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-slate-600 dark:text-stone-300'
-          }`}
-        >
-          <Filter size={20} className={activeFiltersCount > 0 ? "text-white" : "text-orange-500"} />
-          {activeFiltersCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white dark:border-stone-900">
-              {activeFiltersCount}
-            </span>
-          )}
-        </button>
-      </div>
-
     </div>
   );
 };

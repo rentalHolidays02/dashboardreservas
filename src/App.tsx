@@ -18,9 +18,9 @@ import EntregaDeLlaves from './pages/EntregaDeLlaves';
 import Profile from './pages/Profile';
 import MainLayout from './components/layout/MainLayout';
 import ChatBot from './components/chatbot/ChatBot';
-import WorkerPanel from './pages/WorkerPanel';
 import WorkerAnalytics from './pages/WorkerAnalytics';
 import WorkerRecords from './pages/WorkerRecords';
+import WorkerSwipeShell from './components/workers/WorkerSwipeShell';
 import { User } from './services/mockData';
 import { Sparkles } from 'lucide-react';
 
@@ -138,7 +138,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      {user.role === 'trabajador' ? <WorkerPanel user={user} /> : <Dashboard userRole={user.role} />}
+                      {user.role === 'trabajador' ? <WorkerSwipeShell user={user} onLogout={handleLogout} initialIndex={0} /> : <Dashboard userRole={user.role} />}
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
@@ -164,7 +164,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <WorkerRecords user={user} />
+                      {user.role === 'trabajador' ? <WorkerSwipeShell user={user} onLogout={handleLogout} initialIndex={1} /> : <WorkerRecords user={user} />}
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />
@@ -334,7 +334,7 @@ function App() {
                 element={
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
-                      <Profile user={user} onLogout={handleLogout} />
+                      {user.role === 'trabajador' ? <WorkerSwipeShell user={user} onLogout={handleLogout} initialIndex={2} /> : <Profile user={user} onLogout={handleLogout} />}
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />

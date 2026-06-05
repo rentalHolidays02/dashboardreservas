@@ -1,22 +1,25 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '../services/mockData';
 import {
   Sparkles,
   Key,
+  KeyRound,
+  Briefcase,
   AlertTriangle,
-  MessageCircle,
-  ChevronRight,
-  Trash2,
-  FileText,
+  AlertCircle,
   Home,
   Wrench,
+  Clock,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import ServiceFormModal from '../components/workers/ServiceFormModal';
 import EntregaLlavesFormModal from '../components/workers/EntregaLlavesFormModal';
 import IncidenciaFormModal from '../components/workers/IncidenciaFormModal';
 import SugerenciaFormModal from '../components/sugerencias/SugerenciaFormModal';
-import { deleteDraft, listDrafts, type DraftRow } from '../services/reportsApi';
+import { listDrafts, type DraftRow } from '../services/reportsApi';
+import { useWorkerMonthStats } from '../hooks/useWorkerMonthStats';
+import { formatName } from '../utils/formatters';
 
 interface WorkerPanelProps {
   user: User;
@@ -31,57 +34,56 @@ interface ActionConfig {
 }
 
 // Etiqueta visible + icono según kind y payload.
+// Título = nombre del alojamiento (informativo); subtítulo = tipo · fecha de creación.
 const getDraftMeta = (
   draft: DraftRow
-): { title: string; Icon: LucideIcon; iconWrap: string; iconColor: string } => {
+): { title: string; typeLabel: string; fecha: string; Icon: LucideIcon; iconWrap: string; iconColor: string } => {
+  const apartamento = String((draft.payload as any)?.apartamento ?? '').trim();
+  const fecha = new Date(draft.createdAt).toLocaleDateString('es-ES', {
+    day: 'numeric',
+    month: 'short',
+  });
+
+  let typeLabel: string;
+  let Icon: LucideIcon;
+  let iconWrap: string;
+  let iconColor: string;
+
   if (draft.kind === 'service') {
     const tipo = (draft.payload as any)?.tipo as 'reserva' | 'manitas' | undefined;
     if (tipo === 'manitas') {
-      return {
-        title: 'Manitas',
-        Icon: Wrench,
-        iconWrap: 'bg-orange-100 dark:bg-orange-400/10',
-        iconColor: 'text-orange-600 dark:text-orange-400',
-      };
+      typeLabel = 'Manitas';
+      Icon = Wrench;
+    } else {
+      typeLabel = 'Limpieza de reserva';
+      Icon = Home;
     }
-    return {
-      title: 'Limpieza de reserva',
-      Icon: Home,
-      iconWrap: 'bg-orange-100 dark:bg-orange-400/10',
-      iconColor: 'text-orange-600 dark:text-orange-400',
-    };
+    iconWrap = 'bg-orange-100 dark:bg-orange-400/10';
+    iconColor = 'text-orange-600 dark:text-orange-400';
+  } else if (draft.kind === 'key_delivery') {
+    typeLabel = 'Entrega de llaves';
+    Icon = Key;
+    iconWrap = 'bg-blue-100 dark:bg-blue-400/10';
+    iconColor = 'text-blue-600 dark:text-blue-400';
+  } else {
+    typeLabel = 'Incidencia';
+    Icon = AlertTriangle;
+    iconWrap = 'bg-red-100 dark:bg-red-400/10';
+    iconColor = 'text-red-600 dark:text-red-400';
   }
-  if (draft.kind === 'key_delivery') {
-    return {
-      title: 'Entrega de llaves',
-      Icon: Key,
-      iconWrap: 'bg-blue-100 dark:bg-blue-400/10',
-      iconColor: 'text-blue-600 dark:text-blue-400',
-    };
-  }
+
   return {
-    title: 'Incidencia',
-    Icon: AlertTriangle,
-    iconWrap: 'bg-red-100 dark:bg-red-400/10',
-    iconColor: 'text-red-600 dark:text-red-400',
+    title: apartamento ? formatName(apartamento) : typeLabel,
+    typeLabel,
+    fecha,
+    Icon,
+    iconWrap,
+    iconColor,
   };
 };
 
-const formatRelative = (iso: string): string => {
-  const d = new Date(iso);
-  const diffMs = Date.now() - d.getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'ahora mismo';
-  if (mins < 60) return `hace ${mins} min`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `hace ${hours} h`;
-  const days = Math.round(hours / 24);
-  if (days < 7) return `hace ${days} día${days === 1 ? '' : 's'}`;
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-};
-
 const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
-  const firstName = (user.name || 'trabajador').split(' ')[0];
+  const { loading: statsLoading, stats, recentJobs, totalJobs } = useWorkerMonthStats(user);
   const [isServiceFormOpen, setIsServiceFormOpen] = useState(false);
   const [isLlavesFormOpen, setIsLlavesFormOpen] = useState(false);
   const [isIncidenciaFormOpen, setIsIncidenciaFormOpen] = useState(false);
@@ -89,6 +91,28 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
 
   const [drafts, setDrafts] = useState<DraftRow[]>([]);
   const [editingDraft, setEditingDraft] = useState<DraftRow | null>(null);
+  const [draftsExpanded, setDraftsExpanded] = useState(false);
+
+  // Carrusel de acciones: fade en bordes según posición de scroll.
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [carEdges, setCarEdges] = useState({ atStart: true, atEnd: true });
+
+  useEffect(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const update = () => {
+      const atStart = el.scrollLeft <= 1;
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+      setCarEdges({ atStart, atEnd });
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      el.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
 
   const refreshDrafts = useCallback(async () => {
     try {
@@ -116,60 +140,36 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
     else setIsIncidenciaFormOpen(true);
   };
 
-  const handleDeleteDraft = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    try {
-      await deleteDraft(id);
-      await refreshDrafts();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const actions: ActionConfig[] = [
     {
-      icon: Sparkles,
-      label: 'Realizar servicios',
+      icon: Briefcase,
+      label: 'Realizar trabajo',
       iconWrap: 'bg-orange-100 dark:bg-orange-400/10',
       iconColor: 'text-orange-600 dark:text-orange-400',
       onClick: () => {
-        const existing = drafts.find((d) => d.kind === 'service');
-        if (existing) {
-          openDraft(existing);
-        } else {
-          setEditingDraft(null);
-          setIsServiceFormOpen(true);
-        }
+        // Siempre formulario nuevo → los borradores se acumulan
+        setEditingDraft(null);
+        setIsServiceFormOpen(true);
       },
     },
     {
-      icon: Key,
+      icon: KeyRound,
       label: 'Entrega de llaves',
       iconWrap: 'bg-blue-100 dark:bg-blue-400/10',
       iconColor: 'text-blue-600 dark:text-blue-400',
       onClick: () => {
-        const existing = drafts.find((d) => d.kind === 'key_delivery');
-        if (existing) {
-          openDraft(existing);
-        } else {
-          setEditingDraft(null);
-          setIsLlavesFormOpen(true);
-        }
+        setEditingDraft(null);
+        setIsLlavesFormOpen(true);
       },
     },
     {
       icon: AlertTriangle,
-      label: 'Solucionar incidencias',
+      label: 'Solucionar Incidencia',
       iconWrap: 'bg-red-100 dark:bg-red-400/10',
       iconColor: 'text-red-600 dark:text-red-400',
       onClick: () => {
-        const existing = drafts.find((d) => d.kind === 'incident');
-        if (existing) {
-          openDraft(existing);
-        } else {
-          setEditingDraft(null);
-          setIsIncidenciaFormOpen(true);
-        }
+        setEditingDraft(null);
+        setIsIncidenciaFormOpen(true);
       },
     },
   ];
@@ -180,96 +180,185 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
   const draftPayloadFor = (kind: DraftRow['kind']): any =>
     editingDraft && editingDraft.kind === kind ? editingDraft.payload : null;
 
+  // Máscara de fade: sin fade en el lado donde no hay más scroll (inicio/fin).
+  const carouselMask = `linear-gradient(to right, ${carEdges.atStart ? 'black' : 'transparent'} 0, black 28px, black calc(100% - 28px), ${carEdges.atEnd ? 'black' : 'transparent'} 100%)`;
+
   return (
-    <div className="space-y-8 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <header className="flex flex-col items-center lg:items-start justify-center lg:justify-start text-center lg:text-left gap-2 pt-8 pb-2">
-        <h1 className="text-2xl font-normal text-slate-800 dark:text-stone-200 tracking-tight font-display">
-          Hola, {firstName} 👋
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
+      <header className="flex flex-col items-start text-left pt-2 pb-2 pr-8 font-dm">
+        <h1 className="text-3xl font-medium tracking-tight leading-snug text-[#bfb9b7] dark:text-stone-500">
+          {stats !== null || statsLoading ? (
+            <>
+              Este mes llevas{' '}
+              <Briefcase size={26} strokeWidth={2.5} className="inline align-middle relative -top-[2px] text-orange-500 mr-1.5" />
+              <span className="text-stone-800 dark:text-stone-200">
+                {statsLoading || !stats ? '—' : stats.cleanCount} servicios
+              </span>{' '}
+              y{' '}
+              <Clock size={26} strokeWidth={2.5} className="inline align-middle relative -top-[2px] text-sky-500 mr-1.5" />
+              <span className="text-stone-800 dark:text-stone-200">
+                {statsLoading || !stats ? '—' : stats.hoursWorked.toFixed(1).replace('.', ',')} horas
+              </span>{' '}
+              trabajadas. Tienes{' '}
+              <Wallet size={26} strokeWidth={2.5} className="inline align-middle relative -top-[2px] text-violet-500 mr-1.5" />
+              <span className="text-stone-800 dark:text-stone-200">
+                {statsLoading || !stats ? '—' : stats.totalOwed.toFixed(2).replace('.', ',')} €
+              </span>{' '}
+              pendientes.
+            </>
+          ) : null}
         </h1>
-        <p className="text-sm text-slate-400 dark:text-stone-500 font-light">
-          Rellenar informe
-        </p>
       </header>
 
-      <div className="space-y-3 max-w-xl mx-auto lg:mx-0">
-        {actions.map(({ icon: Icon, label, iconWrap, iconColor, onClick }) => (
+      <div
+        ref={carouselRef}
+        className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory"
+        style={{ maskImage: carouselMask, WebkitMaskImage: carouselMask }}
+      >
+        {actions.map(({ icon: Icon, label, onClick }) => (
           <button
             key={label}
             onClick={onClick}
-            className="w-full flex items-center gap-4 px-5 py-5 rounded-3xl bg-white/80 dark:bg-stone-900/60 backdrop-blur-md border border-white/60 dark:border-stone-800/50 shadow-sm hover:shadow-md active:scale-[0.98] transition-all group"
+            className="shrink-0 snap-start w-[130px] h-[130px] flex flex-col p-4 rounded-2xl bg-stone-50 dark:bg-stone-800/40 border border-stone-200/70 dark:border-stone-700/50 active:scale-[0.98] transition-all group"
           >
-            <div className={`p-3 rounded-2xl ${iconWrap} ${iconColor} shrink-0`}>
-              <Icon size={22} />
-            </div>
-            <span className="flex-1 text-left text-base font-medium text-slate-800 dark:text-stone-100">
+            <span className="flex-1 min-w-0 text-left text-[19px] font-medium text-slate-800 dark:text-stone-100 font-dm leading-tight break-words">
               {label}
             </span>
-            <ChevronRight size={18} className="text-slate-400 dark:text-stone-500 group-hover:text-orange-500 transition-colors" />
+            <div className="flex items-center justify-between w-full">
+              <Icon
+                size={24}
+                className={
+                  label === 'Realizar trabajo'
+                    ? 'text-blue-500'
+                    : label === 'Entrega de llaves'
+                      ? 'text-yellow-500'
+                      : 'text-orange-500'
+                }
+              />
+            </div>
           </button>
         ))}
       </div>
 
-      <div className="pt-2 max-w-xl mx-auto lg:mx-0">
-        <button
-          onClick={() => setIsSugerenciaFormOpen(true)}
-          className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-stone-100 dark:bg-stone-800/40 border border-stone-200 dark:border-stone-700/40 text-slate-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-700/40 active:scale-[0.98] transition-all"
-        >
-          <MessageCircle size={18} />
-          <span className="text-sm font-medium">Enviar sugerencia</span>
-        </button>
-      </div>
-
       {drafts.length > 0 && (
-        <div className="max-w-xl mx-auto lg:mx-0 pt-2 space-y-3 animate-in fade-in duration-500">
+        <div className="max-w-xl mx-auto lg:mx-0 pt-2 space-y-3 animate-in fade-in duration-500 font-gsf">
           <div className="flex items-center gap-2 px-1">
-            <FileText size={14} className="text-slate-400 dark:text-stone-500" />
-            <h2 className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-stone-400">
+            <h2 className="text-xs font-medium text-slate-500 dark:text-stone-400">
               Mis borradores
             </h2>
-            <span className="ml-auto text-[10px] text-slate-400 dark:text-stone-500">
+            <span className="ml-auto text-[11px] text-slate-400 dark:text-stone-500">
               {drafts.length} {drafts.length === 1 ? 'pendiente' : 'pendientes'}
             </span>
           </div>
           <ul className="space-y-2">
-            {drafts.map((d) => {
+            {(draftsExpanded ? drafts : drafts.slice(0, 3)).map((d) => {
               const meta = getDraftMeta(d);
-              const { Icon } = meta;
               return (
                 <li key={d.id}>
                   <button
                     onClick={() => openDraft(d)}
-                    className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200/70 dark:border-amber-800/40 hover:bg-amber-50 dark:hover:bg-amber-900/20 active:scale-[0.99] transition-all"
+                    className="w-full flex items-start justify-between gap-3 px-4 py-5 rounded-xl border border-dashed border-stone-200/70 dark:border-stone-700/40 hover:bg-stone-50 dark:hover:bg-stone-800/40 active:scale-[0.99] transition-all"
                   >
-                    <div className={`p-2 rounded-xl ${meta.iconWrap} ${meta.iconColor} shrink-0`}>
-                      <Icon size={16} />
+                    <div className="flex items-center min-w-0 flex-1 text-left">
+                      <AlertCircle size={16} className="text-slate-400 dark:text-stone-500 shrink-0 mr-4" />
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-medium text-slate-800 dark:text-stone-100 truncate">
+                          {meta.title}
+                        </p>
+                        <p className="text-[11px] text-slate-400 dark:text-stone-500">
+                          {meta.typeLabel}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium text-slate-800 dark:text-stone-100 truncate">
-                        {meta.title}
-                      </p>
-                      <p className="text-[11px] text-slate-400 dark:text-stone-500">
-                        Borrador · actualizado {formatRelative(d.updatedAt)}
-                      </p>
-                    </div>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => handleDeleteDraft(e, d.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') handleDeleteDraft(e as any, d.id);
-                      }}
-                      className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                      title="Eliminar borrador"
-                    >
-                      <Trash2 size={14} />
+                    <span className="text-[11px] text-slate-400 dark:text-stone-500 shrink-0">
+                      {meta.fecha}
                     </span>
                   </button>
                 </li>
               );
             })}
           </ul>
+          {drafts.length > 3 && (
+            <button
+              onClick={() => setDraftsExpanded((v) => !v)}
+              className="w-full text-center text-xs font-medium text-slate-500 dark:text-stone-400 hover:text-slate-700 dark:hover:text-stone-200 py-2 transition-colors"
+            >
+              {draftsExpanded ? 'Ver menos' : `Ver más (${drafts.length - 3})`}
+            </button>
+          )}
         </div>
       )}
+
+      {/* Últimos trabajos — historial breve (máx 3). Un contenedor con items separados por divisores. */}
+      <div className="max-w-xl mx-auto lg:mx-0 pt-2 space-y-3 font-gsf">
+        <div className="flex items-center gap-2 px-1">
+          <h2 className="text-xs font-medium text-slate-500 dark:text-stone-400">
+            Últimos trabajos
+          </h2>
+          {recentJobs.length > 0 && (
+            <span className="ml-auto text-[11px] text-slate-400 dark:text-stone-500">
+              {recentJobs.length}
+            </span>
+          )}
+        </div>
+        {statsLoading ? (
+          <p className="px-1 text-[11px] text-slate-400 dark:text-stone-500">Cargando…</p>
+        ) : recentJobs.length > 0 ? (
+          <>
+            <div className="rounded-xl bg-stone-50/60 dark:bg-stone-800/25 border border-stone-200/70 dark:border-stone-700/50 divide-y divide-stone-200/60 dark:divide-stone-700/40">
+              {recentJobs.map((j) => (
+                <div key={j.id} className="px-4 py-4 flex items-center gap-3">
+                  {/* Marcador-fecha 52×52 — sin fondo ni borde */}
+                  <div className="shrink-0 w-[52px] h-[52px] flex flex-col items-center justify-center">
+                    <span className="text-base font-medium text-slate-800 dark:text-stone-100 leading-none tabular-nums">
+                      {j.date.getDate()}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-stone-500 mt-0.5">
+                      {j.date.toLocaleString('es-ES', { month: 'short' }).replace('.', '')}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-medium text-slate-800 dark:text-stone-100 truncate">
+                      {formatName(j.name)}
+                    </p>
+                    <p className="text-[11px] text-slate-400 dark:text-stone-500">
+                      {j.type} · {j.hours.toFixed(1).replace('.', ',')} h
+                      {j.km > 0 ? ` · ${j.km} km` : ''}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-sm font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    {j.pay.toFixed(2).replace('.', ',')} €
+                  </span>
+                </div>
+              ))}
+            </div>
+            {totalJobs > 3 && (
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('worker-pane:goto', { detail: 1 }))}
+                className="w-full text-center text-xs font-medium text-slate-500 dark:text-stone-400 hover:text-slate-700 dark:hover:text-stone-200 py-2 transition-colors"
+              >
+                Ver más ({totalJobs - 3})
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="px-4 py-6 rounded-xl border border-dashed border-stone-200/70 dark:border-stone-700/40 text-center">
+            <p className="text-sm text-slate-400 dark:text-stone-500">
+              Todavía no has realizado ningún trabajo.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="pt-2 max-w-xl mx-auto lg:mx-0">
+        <button
+          onClick={() => setIsSugerenciaFormOpen(true)}
+          className="w-full flex items-center justify-center px-6 py-4 rounded-xl bg-red-50/70 dark:bg-red-900/10 border border-red-200/60 dark:border-red-800/30 text-red-600/90 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-[0.98] transition-all font-gsf">
+          <span className="text-sm font-medium">Tengo un problema</span>
+        </button>
+      </div>
+      </div>
 
       <ServiceFormModal
         isOpen={isServiceFormOpen}
