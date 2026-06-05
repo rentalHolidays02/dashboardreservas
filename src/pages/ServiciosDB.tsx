@@ -2,6 +2,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Trash2, Loader2, CalendarDays, ClipboardList, Wrench, Clock, Plus, Pencil, X, Key, AlertTriangle } from 'lucide-react';
 import { supabaseOperationsApi, ServiceReportDB, WorkerOption, KeyDeliveryDB, IncidentReportDB } from '../services/supabaseOperationsApi';
+import { uploadSignature } from '../services/reportsApi';
+import SignaturePad from '../components/ui/SignaturePad';
+import { DuracionInput, parseHHMM } from '../components/workers/serviceFormHelpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useAdminDraft } from '../utils/useAdminDraft';
 
@@ -43,12 +46,14 @@ interface ModalProps {
   kind: TabType;
   workers: WorkerOption[];
   accommodations: { id: string, name: string }[];
+  existingLinkedKey?: KeyDeliveryDB | null;     // si el servicio en edición ya tiene una entrega vinculada
+  existingLinkedInc?: IncidentReportDB | null;  // si el servicio en edición ya tiene una incidencia vinculada
   onClose: () => void;
-  onSave: (updated: ServiceReportDB) => void;
-  onCreate: (created: ServiceReportDB) => void;
+  onSave: (updated: ServiceReportDB, linkedKey?: KeyDeliveryDB, linkedInc?: IncidentReportDB) => void;
+  onCreate: (created: ServiceReportDB, linkedKey?: KeyDeliveryDB, linkedInc?: IncidentReportDB) => void;
 }
 
-const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodations, onClose, onSave, onCreate }) => {
+const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodations, existingLinkedKey, existingLinkedInc, onClose, onSave, onCreate }) => {
   const isNew = !record;
 
   const [workerId, setWorkerId] = useState(record?.worker_id ?? '');
@@ -65,6 +70,29 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Entrega de llaves anidada — pre-rellenada si el servicio en edición ya tiene una
+  const [incluyeLlaves, setIncluyeLlaves] = useState(!!existingLinkedKey);
+  const [kdNombreCliente, setKdNombreCliente] = useState(existingLinkedKey?.nombre_cliente ?? '');
+  const [kdFechaEntrada, setKdFechaEntrada] = useState(existingLinkedKey?.fecha_entrada_reserva?.slice(0, 16) ?? '');
+  const [kdFechaSalida, setKdFechaSalida] = useState(existingLinkedKey?.fecha_salida_reserva?.slice(0, 16) ?? '');
+  const [kdSabanas, setKdSabanas] = useState(existingLinkedKey?.sabanas_entregadas ?? false);
+  const [kdSabanasPersonas, setKdSabanasPersonas] = useState(String(existingLinkedKey?.sabanas_personas ?? ''));
+  const [kdFianzaMetodo, setKdFianzaMetodo] = useState(existingLinkedKey?.fianza_monto_metodo || 'Efectivo');
+  const [kdFianzaMonto, setKdFianzaMonto] = useState(String(existingLinkedKey?.cantidad_pagada_monto ?? ''));
+  const [kdBizumMonto, setKdBizumMonto] = useState(existingLinkedKey?.bizum_monto ?? '');
+  const [kdGarantiaMetodo, setKdGarantiaMetodo] = useState(existingLinkedKey?.fianza_garantia_metodo || 'Efectivo');
+  const [kdGarantiaMonto, setKdGarantiaMonto] = useState(String(existingLinkedKey?.cantidad_pagada_garantia ?? ''));
+  const [kdBizumGarantia, setKdBizumGarantia] = useState(existingLinkedKey?.bizum_garantia ?? '');
+  // Firma: en edición puede ser una URL pública (Storage). Si el usuario no la redibuja la guardamos tal cual.
+  const [kdFirmaTrabajador, setKdFirmaTrabajador] = useState(existingLinkedKey?.firma_trabajador_url ?? '');
+  const [kdFirmaHuesped, setKdFirmaHuesped] = useState(existingLinkedKey?.firma_huesped_url ?? '');
+
+  // Incidencia anidada — pre-rellenada si el servicio en edición ya tiene una
+  const [incluyeIncidencia, setIncluyeIncidencia] = useState(!!existingLinkedInc);
+  const [incDuracion, setIncDuracion] = useState(existingLinkedInc?.duracion ?? '00:00');
+  const [incDetalles, setIncDetalles] = useState(existingLinkedInc?.detalles ?? '');
+
+  // Auto-borrador en localStorage (solo "Nuevo") para no perder lo escrito si cierras el modal.
   const clearDraft = useAdminDraft(
     `admin_draft_servicio_${kind}`,
     isNew,
@@ -87,32 +115,136 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
   const handleSave = async () => {
     if (!accommodationName.trim()) { setError('El alojamiento es obligatorio.'); return; }
     if (isNew && !workerId) { setError('Selecciona un trabajador.'); return; }
+    if (kind === 'reserva' && parseHHMM(horasExtra) > 0 && !justificacionExtra.trim()) {
+      setError('Si hay horas extra, debes indicar la justificación.'); return;
+    }
+    if (incluyeIncidencia && !incDetalles.trim()) { setError('Los detalles de la incidencia son obligatorios.'); return; }
+    if (incluyeLlaves && !kdNombreCliente.trim()) { setError('El nombre del cliente (entrega de llaves) es obligatorio.'); return; }
+
     setSaving(true);
     setError('');
     try {
+      // Resolver accommodation_id por nombre (insensible a mayúsculas) → mismo patrón que la vista trabajador.
+      const accNameClean = accommodationName.trim();
+      const resolvedAccId = accommodations.find(
+        a => a.name.trim().toLowerCase() === accNameClean.toLowerCase()
+      )?.id ?? null;
+
+      const isManitas = kind === 'manitas';
+      // Para manitas el CHECK manitas_no_reserva_fields exige neutralidad en los 5 campos reserva-only.
       const payload = {
-        accommodation_name: accommodationName.trim(),
+        accommodation_id: resolvedAccId,
+        accommodation_name: accNameClean,
         hora_entrada: horaEntrada || null,
         hora_salida: horaSalida || null,
         km: parseFloat(km) || 0,
-        recoge_llaves: recogeLlaves,
-        sigue_huesped: sigueHuesped,
-        hora_salida_huesped: sigueHuesped ? (horaSalidaHuesped || null) : null,
-        horas_extra: ensureHHMM(horasExtra),
-        justificacion_extra: justificacionExtra,
+        recoge_llaves: isManitas ? false : recogeLlaves,
+        sigue_huesped: isManitas ? false : sigueHuesped,
+        hora_salida_huesped: isManitas ? null : (sigueHuesped ? (horaSalidaHuesped || null) : null),
+        horas_extra: isManitas ? '00:00' : ensureHHMM(horasExtra),
+        justificacion_extra: isManitas ? '' : justificacionExtra,
         notas,
       };
 
+      // 1) Crear o actualizar el servicio padre
+      let parentService: ServiceReportDB;
+      let parentWorkerId: string;
       if (isNew) {
         const created = await supabaseOperationsApi.createServiceReport({ worker_id: workerId, kind, ...payload });
         if (!created) { setError('Error al crear el servicio.'); return; }
-        clearDraft();
-        onCreate(created);
+        parentService = created;
+        parentWorkerId = workerId;
       } else {
         const ok = await supabaseOperationsApi.updateServiceReport(record!.id, payload);
         if (!ok) { setError('Error al guardar los cambios.'); return; }
-        onSave({ ...record!, ...payload, hora_entrada: payload.hora_entrada, hora_salida: payload.hora_salida, hora_salida_huesped: payload.hora_salida_huesped });
+        parentService = { ...record!, ...payload, hora_entrada: payload.hora_entrada, hora_salida: payload.hora_salida, hora_salida_huesped: payload.hora_salida_huesped };
+        parentWorkerId = record!.worker_id;
       }
+
+      // Helper: resuelve la firma final. URL→passthrough, base64→sube y devuelve URL pública, vacío→null.
+      const resolveSignature = async (val: string, prefix: string): Promise<string | null> => {
+        if (!val) return null;
+        if (val.startsWith('data:image/')) return await uploadSignature(val, prefix);
+        if (/^https?:\/\//.test(val)) return val;
+        return null;
+      };
+
+      // 2) Crear o actualizar entrega de llaves anidada
+      let linkedKey: KeyDeliveryDB | undefined;
+      if (incluyeLlaves) {
+        const firmaTrabUrl = await resolveSignature(kdFirmaTrabajador, `trabajador-${parentWorkerId}`);
+        const firmaHuespUrl = await resolveSignature(kdFirmaHuesped, `huesped-${parentWorkerId}`);
+
+        const kdPayload = {
+          accommodation_id: resolvedAccId,
+          accommodation_name: accNameClean,
+          nombre_cliente: kdNombreCliente.trim(),
+          fecha_entrada_reserva: kdFechaEntrada || null,
+          fecha_salida_reserva: kdFechaSalida || null,
+          sabanas_entregadas: kdSabanas,
+          sabanas_personas: kdSabanas ? (parseInt(kdSabanasPersonas) || null) : null,
+          fianza_monto_metodo: kdFianzaMetodo || null,
+          cantidad_pagada_monto: parseFloat(kdFianzaMonto) || 0,
+          bizum_monto: kdFianzaMetodo === 'Bizum' ? kdBizumMonto.replace(/\D/g, '') : '',
+          fianza_garantia_metodo: kdGarantiaMetodo || null,
+          cantidad_pagada_garantia: parseFloat(kdGarantiaMonto) || 0,
+          bizum_garantia: kdGarantiaMetodo === 'Bizum' ? kdBizumGarantia.replace(/\D/g, '') : '',
+          firma_trabajador_url: firmaTrabUrl,
+          firma_huesped_url: firmaHuespUrl,
+        };
+
+        if (existingLinkedKey?.id) {
+          // UPDATE
+          const ok = await supabaseOperationsApi.updateKeyDelivery(existingLinkedKey.id, kdPayload);
+          if (ok) linkedKey = { ...existingLinkedKey, ...kdPayload };
+          else { setError('Servicio guardado, pero falló la actualización de la entrega de llaves.'); return; }
+        } else {
+          // CREATE
+          const kd = await supabaseOperationsApi.createKeyDelivery({
+            worker_id: parentWorkerId,
+            parent_service_id: parentService.id,
+            ...kdPayload,
+          });
+          if (kd) linkedKey = kd;
+          else { setError(isNew ? 'Servicio creado, pero falló la entrega de llaves vinculada.' : 'Servicio guardado, pero falló la entrega de llaves vinculada.'); return; }
+        }
+      }
+
+      // 3) Crear o actualizar incidencia anidada
+      let linkedInc: IncidentReportDB | undefined;
+      if (incluyeIncidencia) {
+        const incPayload = {
+          accommodation_id: resolvedAccId,
+          accommodation_name: accNameClean,
+          duracion: ensureHHMM(incDuracion),
+          detalles: incDetalles.trim(),
+        };
+
+        if (existingLinkedInc?.id) {
+          // UPDATE
+          const ok = await supabaseOperationsApi.updateIncidentReport(existingLinkedInc.id, incPayload);
+          if (ok) linkedInc = { ...existingLinkedInc, ...incPayload };
+          else { setError('Servicio guardado, pero falló la actualización de la incidencia.'); return; }
+        } else {
+          // CREATE
+          const inc = await supabaseOperationsApi.createIncidentReport({
+            worker_id: parentWorkerId,
+            parent_service_id: parentService.id,
+            ...incPayload,
+          });
+          if (inc) linkedInc = inc;
+          else { setError(isNew ? 'Servicio creado, pero falló la incidencia vinculada.' : 'Servicio guardado, pero falló la incidencia vinculada.'); return; }
+        }
+      }
+
+      // 4) Borrar el borrador local (solo en creación nueva) y notificar al parent
+      if (isNew) {
+        clearDraft();
+        onCreate(parentService, linkedKey, linkedInc);
+      } else {
+        onSave(parentService, linkedKey, linkedInc);
+      }
+
       onClose();
     } finally {
       setSaving(false);
@@ -123,7 +255,7 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative w-full max-w-md bg-white dark:bg-stone-900 shadow-2xl rounded-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-stone-200 dark:border-stone-700">
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800 shrink-0">
           <div>
@@ -186,16 +318,22 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Horas Extra (HH:MM)</label>
-                  <input type="text" value={horasExtra} onChange={e => setHorasExtra(e.target.value)} placeholder="00:00" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Justificación extra</label>
-                  <input type="text" value={justificacionExtra} onChange={e => setJustificacionExtra(e.target.value)} placeholder="Motivo..." className={inputCls} />
-                </div>
+              <div>
+                <label className={labelCls}>Horas Extra realizadas</label>
+                <DuracionInput value={horasExtra} onChange={setHorasExtra} />
               </div>
+              {parseHHMM(horasExtra) > 0 && (
+                <div>
+                  <label className={labelCls}>Justificación horas extra <span className="text-orange-500">*</span></label>
+                  <textarea
+                    rows={3}
+                    value={justificacionExtra}
+                    onChange={e => setJustificacionExtra(e.target.value)}
+                    placeholder="Motivo de las horas extra..."
+                    className={`${inputCls} resize-none`}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -204,6 +342,127 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
             <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={4}
               placeholder="Observaciones adicionales..." className={`${inputCls} resize-none`} />
           </div>
+
+          {/* Secciones anidadas — crear o añadir más al editar */}
+          {/* Entrega de llaves */}
+              <div className="rounded-xl border border-stone-200 dark:border-stone-700 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setIncluyeLlaves(v => !v)}
+                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${incluyeLlaves ? 'bg-blue-50 dark:bg-blue-400/10' : 'bg-stone-50 dark:bg-stone-800/40 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
+                >
+                  <span className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-stone-200">
+                    <Key size={13} className="text-blue-600 dark:text-blue-400" />
+                    Añadir entrega de llaves
+                  </span>
+                  <span className={`text-[10px] font-semibold ${incluyeLlaves ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>
+                    {incluyeLlaves ? 'Activada' : 'Desactivada'}
+                  </span>
+                </button>
+                {incluyeLlaves && (
+                  <div className="px-4 py-3 space-y-3 bg-white dark:bg-stone-900">
+                    <div>
+                      <label className={labelCls}>Nombre del cliente *</label>
+                      <input type="text" value={kdNombreCliente} onChange={e => setKdNombreCliente(e.target.value)} className={inputCls} placeholder="Ej: Juan Pérez" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>Entrada reserva</label>
+                        <input type="datetime-local" value={kdFechaEntrada} onChange={e => setKdFechaEntrada(e.target.value)} min="1900-01-01T00:00" max="9999-12-31T23:59" className={inputCls} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Salida reserva</label>
+                        <input type="datetime-local" value={kdFechaSalida} onChange={e => setKdFechaSalida(e.target.value)} min="1900-01-01T00:00" max="9999-12-31T23:59" className={inputCls} />
+                      </div>
+                    </div>
+                    <div className="bg-stone-50 dark:bg-stone-800/60 rounded-xl px-3 py-2.5 space-y-2">
+                      <Toggle value={kdSabanas} onChange={setKdSabanas} label="¿Sábanas y toallas entregadas?" />
+                      {kdSabanas && (
+                        <input type="number" min={1} value={kdSabanasPersonas} onChange={e => setKdSabanasPersonas(e.target.value)} className={inputCls} placeholder="Nº personas" />
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>Fianza monto (método)</label>
+                        <select value={kdFianzaMetodo} onChange={e => setKdFianzaMetodo(e.target.value)} className={inputCls}>
+                          <option value="Efectivo">Efectivo</option>
+                          <option value="Tarjeta">Tarjeta</option>
+                          <option value="Bizum">Bizum</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Monto pagado (€)</label>
+                        <input type="number" min={0} step={0.01} value={kdFianzaMonto} onChange={e => setKdFianzaMonto(e.target.value)} className={inputCls} placeholder="0.00" />
+                      </div>
+                    </div>
+                    {kdFianzaMetodo === 'Bizum' && (
+                      <div>
+                        <label className={labelCls}>Bizum (monto) — 9 dígitos</label>
+                        <input type="tel" inputMode="numeric" value={kdBizumMonto} onChange={e => setKdBizumMonto(e.target.value.replace(/\D/g, '').slice(0, 9))} className={inputCls} placeholder="612345678" maxLength={9} />
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelCls}>Fianza garantía (método)</label>
+                        <select value={kdGarantiaMetodo} onChange={e => setKdGarantiaMetodo(e.target.value)} className={inputCls}>
+                          <option value="Efectivo">Efectivo</option>
+                          <option value="Tarjeta">Tarjeta</option>
+                          <option value="Bizum">Bizum</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Garantía pagada (€)</label>
+                        <input type="number" min={0} step={0.01} value={kdGarantiaMonto} onChange={e => setKdGarantiaMonto(e.target.value)} className={inputCls} placeholder="0.00" />
+                      </div>
+                    </div>
+                    {kdGarantiaMetodo === 'Bizum' && (
+                      <div>
+                        <label className={labelCls}>Bizum (garantía) — 9 dígitos</label>
+                        <input type="tel" inputMode="numeric" value={kdBizumGarantia} onChange={e => setKdBizumGarantia(e.target.value.replace(/\D/g, '').slice(0, 9))} className={inputCls} placeholder="612345678" maxLength={9} />
+                      </div>
+                    )}
+                    <SignaturePad
+                      label="Firma del trabajador"
+                      value={kdFirmaTrabajador}
+                      onChange={setKdFirmaTrabajador}
+                    />
+                    <SignaturePad
+                      label="Firma del huésped"
+                      value={kdFirmaHuesped}
+                      onChange={setKdFirmaHuesped}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Incidencia */}
+              <div className="rounded-xl border border-stone-200 dark:border-stone-700 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setIncluyeIncidencia(v => !v)}
+                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${incluyeIncidencia ? 'bg-red-50 dark:bg-red-400/10' : 'bg-stone-50 dark:bg-stone-800/40 hover:bg-stone-100 dark:hover:bg-stone-800'}`}
+                >
+                  <span className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-stone-200">
+                    <AlertTriangle size={13} className="text-red-600 dark:text-red-400" />
+                    Añadir incidencia
+                  </span>
+                  <span className={`text-[10px] font-semibold ${incluyeIncidencia ? 'text-red-600 dark:text-red-400' : 'text-slate-400'}`}>
+                    {incluyeIncidencia ? 'Activada' : 'Desactivada'}
+                  </span>
+                </button>
+                {incluyeIncidencia && (
+                  <div className="px-4 py-3 space-y-3 bg-white dark:bg-stone-900">
+                    <div>
+                      <label className={labelCls}>Duración de la incidencia *</label>
+                      <DuracionInput value={incDuracion} onChange={setIncDuracion} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Detalles de la incidencia *</label>
+                      <textarea rows={4} value={incDetalles} onChange={e => setIncDetalles(e.target.value)} className={`${inputCls} resize-none`} placeholder="Describe la incidencia..." />
+                    </div>
+                  </div>
+                )}
+              </div>
 
           {error && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 text-xs px-3 py-2 rounded-xl">
@@ -381,8 +640,25 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
   const openEdit = (rep: ServiceReportDB) => { setEditingRecord(rep); setModalOpen(true); };
   const closeModal = () => setModalOpen(false);
 
-  const handleCreated = (created: ServiceReportDB) => setReports(prev => [created, ...prev]);
-  const handleSaved = (updated: ServiceReportDB) => setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
+  const upsertKeyInState = (kd: KeyDeliveryDB) => setKeyDeliveries(prev => {
+    const i = prev.findIndex(k => k.id === kd.id);
+    return i === -1 ? [kd, ...prev] : prev.map((k, idx) => idx === i ? kd : k);
+  });
+  const upsertIncInState = (inc: IncidentReportDB) => setIncidents(prev => {
+    const i = prev.findIndex(x => x.id === inc.id);
+    return i === -1 ? [inc, ...prev] : prev.map((x, idx) => idx === i ? inc : x);
+  });
+
+  const handleCreated = (created: ServiceReportDB, linkedKey?: KeyDeliveryDB, linkedInc?: IncidentReportDB) => {
+    setReports(prev => [created, ...prev]);
+    if (linkedKey) upsertKeyInState(linkedKey);
+    if (linkedInc) upsertIncInState(linkedInc);
+  };
+  const handleSaved = (updated: ServiceReportDB, linkedKey?: KeyDeliveryDB, linkedInc?: IncidentReportDB) => {
+    setReports(prev => prev.map(r => r.id === updated.id ? updated : r));
+    if (linkedKey) upsertKeyInState(linkedKey);
+    if (linkedInc) upsertIncInState(linkedInc);
+  };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Seguro que quieres borrar este registro permanentemente?')) return;
@@ -622,17 +898,22 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
         )}
       </div>
 
-      {modalOpen && (
-        <ServiceModal
-          record={editingRecord}
-          kind={activeTab}
-          workers={workers}
-          accommodations={accommodations}
-          onClose={closeModal}
-          onSave={handleSaved}
-          onCreate={handleCreated}
-        />
-      )}
+      {modalOpen && (() => {
+        const linked = editingRecord ? linksByService.get(editingRecord.id) : undefined;
+        return (
+          <ServiceModal
+            record={editingRecord}
+            kind={activeTab}
+            workers={workers}
+            accommodations={accommodations}
+            existingLinkedKey={linked?.keys[0] ?? null}
+            existingLinkedInc={linked?.incs[0] ?? null}
+            onClose={closeModal}
+            onSave={handleSaved}
+            onCreate={handleCreated}
+          />
+        );
+      })()}
 
       <LinkedPopup state={linkedPopup} onClose={() => setLinkedPopup(null)} />
     </div>

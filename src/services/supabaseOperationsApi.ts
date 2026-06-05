@@ -112,6 +112,7 @@ export const supabaseOperationsApi = {
   createServiceReport: async (payload: {
     worker_id: string;
     kind: 'reserva' | 'manitas';
+    accommodation_id?: string | null;
     accommodation_name: string;
     hora_entrada?: string | null;
     hora_salida?: string | null;
@@ -157,6 +158,8 @@ export const supabaseOperationsApi = {
 
   createKeyDelivery: async (payload: {
     worker_id: string;
+    parent_service_id?: string | null;
+    accommodation_id?: string | null;
     accommodation_name: string;
     nombre_cliente?: string;
     fecha_entrada_reserva?: string | null;
@@ -208,6 +211,8 @@ export const supabaseOperationsApi = {
 
   createIncidentReport: async (payload: {
     worker_id: string;
+    parent_service_id?: string | null;
+    accommodation_id?: string | null;
     accommodation_name: string;
     duracion?: string;
     detalles?: string;
