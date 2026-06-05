@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Search, Trash2, Clock, CalendarDays, Loader2, Plus, Pencil, X } from 'lucide-react';
-import { supabaseOperationsApi, IncidentReportDB, WorkerOption } from '../services/supabaseOperationsApi';
+import { AlertTriangle, Search, Trash2, Clock, CalendarDays, Loader2, Plus, Pencil, X, Wrench } from 'lucide-react';
+import { supabaseOperationsApi, IncidentReportDB, WorkerOption, ServiceReportDB } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { useAdminDraft } from '../utils/useAdminDraft';
 
 const fmtDate = (iso: string) => {
   if (!iso) return '—';
@@ -54,6 +55,18 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const clearDraft = useAdminDraft(
+    'admin_draft_incidencia',
+    isNew,
+    { workerId, accommodationName, duracion, detalles },
+    (draft: any) => {
+      setWorkerId(draft.workerId ?? '');
+      setAccommodationName(draft.accommodationName ?? '');
+      setDuracion(draft.duracion ?? '00:00');
+      setDetalles(draft.detalles ?? '');
+    }
+  );
+
   const handleSave = async () => {
     if (!accommodationName.trim()) { setError('El alojamiento es obligatorio.'); return; }
     if (isNew && !workerId) { setError('Selecciona un trabajador.'); return; }
@@ -69,6 +82,7 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
           detalles,
         });
         if (!created) { setError('Error al crear la incidencia.'); return; }
+        clearDraft();
         onCreate(created);
       } else {
         const ok = await supabaseOperationsApi.updateIncidentReport(record!.id, {
@@ -87,7 +101,7 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative w-full max-w-md bg-white dark:bg-stone-900 shadow-2xl rounded-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-stone-200 dark:border-stone-700">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800 shrink-0">
@@ -171,8 +185,10 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
   const [incidencias, setIncidencias] = useState<IncidentReportDB[]>([]);
   const [workers, setWorkers] = useState<WorkerOption[]>([]);
   const [accommodations, setAccommodations] = useState<{ id: string, name: string }[]>([]);
+  const [servicios, setServicios] = useState<ServiceReportDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'connected' | 'unique'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -184,14 +200,16 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [data, wks, accs] = await Promise.all([
+    const [data, wks, accs, srvs] = await Promise.all([
       supabaseOperationsApi.getIncidentReports(),
       supabaseOperationsApi.getWorkers(),
       supabaseOperationsApi.getAccommodations(),
+      supabaseOperationsApi.getServiceReports(),
     ]);
     setIncidencias(data);
     setWorkers(wks);
     setAccommodations(accs);
+    setServicios(srvs);
     setLoading(false);
   };
 
@@ -215,16 +233,43 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
     setActionLoading(null);
   };
 
+  const isIncidentConnected = (inc: IncidentReportDB): boolean => {
+    // Conectada si hay un servicio del mismo alojamiento y trabajador
+    return servicios.some(
+      srv => srv.accommodation_name === inc.accommodation_name && srv.worker_id === inc.worker_id
+    );
+  };
+
+  const hasManitasService = (inc: IncidentReportDB): boolean => {
+    // Conectada a un manitas específicamente
+    return servicios.some(
+      srv => srv.kind === 'manitas' && srv.accommodation_name === inc.accommodation_name && srv.worker_id === inc.worker_id
+    );
+  };
+
   const filteredIncidencias = useMemo(() => {
     const s = searchTerm.toLowerCase().trim();
-    if (!s) return incidencias;
-    return incidencias.filter(inc =>
-      inc.worker_name.toLowerCase().includes(s) ||
-      inc.worker_phone.toLowerCase().includes(s) ||
-      inc.accommodation_name.toLowerCase().includes(s) ||
-      inc.detalles.toLowerCase().includes(s)
-    );
-  }, [incidencias, searchTerm]);
+    let result = incidencias;
+
+    // Filtro de búsqueda
+    if (s) {
+      result = result.filter(inc =>
+        inc.worker_name.toLowerCase().includes(s) ||
+        inc.worker_phone.toLowerCase().includes(s) ||
+        inc.accommodation_name.toLowerCase().includes(s) ||
+        inc.detalles.toLowerCase().includes(s)
+      );
+    }
+
+    // Filtro por conexión con servicios
+    if (filterType === 'connected') {
+      result = result.filter(inc => isIncidentConnected(inc));
+    } else if (filterType === 'unique') {
+      result = result.filter(inc => !isIncidentConnected(inc));
+    }
+
+    return result;
+  }, [incidencias, searchTerm, filterType, servicios]);
 
   if (loading) return <LoadingSpinner message="Cargando reportes de incidencias..." />;
 
@@ -242,6 +287,15 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
               className="w-full pl-9 pr-4 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs focus:outline-none focus:bg-white dark:focus:bg-stone-900 transition-all"
             />
           </div>
+          <select
+            value={filterType}
+            onChange={e => setFilterType(e.target.value as 'all' | 'connected' | 'unique')}
+            className="px-3 py-2.5 bg-white/40 dark:bg-stone-900/40 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-slate-700 dark:text-stone-300 text-xs focus:outline-none focus:bg-white dark:focus:bg-stone-900 transition-all whitespace-nowrap"
+          >
+            <option value="all">Todos</option>
+            <option value="connected">Conectados c/ Limpiezas</option>
+            <option value="unique">Únicos</option>
+          </select>
           {!isReadOnly && (
             <button onClick={openCreate}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded-xl transition-colors whitespace-nowrap">
@@ -280,6 +334,11 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <CalendarDays size={13} className="text-slate-400" />
                       {fmtDate(inc.created_at)}
+                      {hasManitasService(inc) && (
+                        <span title="Conectada a Manitas">
+                          <Wrench size={12} className="text-orange-500" />
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-slate-700 dark:text-stone-300">

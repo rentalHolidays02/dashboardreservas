@@ -32,6 +32,7 @@ export interface KeyDeliveryDB {
   worker_name: string;
   worker_phone: string;
   parent_service_id: string | null;
+  parent_service_kind?: string | null;
   accommodation_id: string | null;
   accommodation_name: string;
   nombre_cliente: string;
@@ -58,6 +59,7 @@ export interface IncidentReportDB {
   worker_name: string;
   worker_phone: string;
   parent_service_id: string | null;
+  parent_service_kind?: string | null;
   accommodation_id: string | null;
   accommodation_name: string;
   duracion: string;
@@ -141,7 +143,7 @@ export const supabaseOperationsApi = {
   getKeyDeliveries: async (): Promise<KeyDeliveryDB[]> => {
     const { data, error } = await supabase
       .from('key_deliveries')
-      .select('*, workers(full_name, phone)')
+      .select('*, workers(full_name, phone), parent_service:service_reports(kind)')
       .order('created_at', { ascending: false });
 
     if (error) { console.error('Error fetching key deliveries:', error); return []; }
@@ -150,6 +152,7 @@ export const supabaseOperationsApi = {
       ...row,
       worker_name: transformWorkerName(row.workers),
       worker_phone: transformWorkerPhone(row.workers),
+      parent_service_kind: row.parent_service ? row.parent_service.kind : null,
     }));
   },
 
@@ -193,7 +196,7 @@ export const supabaseOperationsApi = {
   getIncidentReports: async (): Promise<IncidentReportDB[]> => {
     const { data, error } = await supabase
       .from('incident_reports')
-      .select('*, workers(full_name, phone)')
+      .select('*, workers(full_name, phone), parent_service:service_reports(kind)')
       .order('created_at', { ascending: false });
 
     if (error) { console.error('Error fetching incident reports:', error); return []; }
@@ -202,6 +205,7 @@ export const supabaseOperationsApi = {
       ...row,
       worker_name: transformWorkerName(row.workers),
       worker_phone: transformWorkerPhone(row.workers),
+      parent_service_kind: row.parent_service ? row.parent_service.kind : null,
     }));
   },
 

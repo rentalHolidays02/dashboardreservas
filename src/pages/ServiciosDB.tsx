@@ -6,6 +6,7 @@ import { uploadSignature } from '../services/reportsApi';
 import SignaturePad from '../components/ui/SignaturePad';
 import { DuracionInput, parseHHMM } from '../components/workers/serviceFormHelpers';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { useAdminDraft } from '../utils/useAdminDraft';
 
 const fmtDateTime = (iso: string) => {
   if (!iso) return '—';
@@ -90,6 +91,26 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
   const [incluyeIncidencia, setIncluyeIncidencia] = useState(!!existingLinkedInc);
   const [incDuracion, setIncDuracion] = useState(existingLinkedInc?.duracion ?? '00:00');
   const [incDetalles, setIncDetalles] = useState(existingLinkedInc?.detalles ?? '');
+
+  // Auto-borrador en localStorage (solo "Nuevo") para no perder lo escrito si cierras el modal.
+  const clearDraft = useAdminDraft(
+    `admin_draft_servicio_${kind}`,
+    isNew,
+    { workerId, accommodationName, horaEntrada, horaSalida, km, recogeLlaves, sigueHuesped, horaSalidaHuesped, horasExtra, justificacionExtra, notas },
+    (draft: any) => {
+      setWorkerId(draft.workerId ?? '');
+      setAccommodationName(draft.accommodationName ?? '');
+      setHoraEntrada(draft.horaEntrada ?? '');
+      setHoraSalida(draft.horaSalida ?? '');
+      setKm(draft.km ?? '0');
+      setRecogeLlaves(draft.recogeLlaves ?? false);
+      setSigueHuesped(draft.sigueHuesped ?? false);
+      setHoraSalidaHuesped(draft.horaSalidaHuesped ?? '');
+      setHorasExtra(draft.horasExtra ?? '00:00');
+      setJustificacionExtra(draft.justificacionExtra ?? '');
+      setNotas(draft.notas ?? '');
+    }
+  );
 
   const handleSave = async () => {
     if (!accommodationName.trim()) { setError('El alojamiento es obligatorio.'); return; }
@@ -216,9 +237,13 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
         }
       }
 
-      // 4) Notificar al parent
-      if (isNew) onCreate(parentService, linkedKey, linkedInc);
-      else onSave(parentService, linkedKey, linkedInc);
+      // 4) Borrar el borrador local (solo en creación nueva) y notificar al parent
+      if (isNew) {
+        clearDraft();
+        onCreate(parentService, linkedKey, linkedInc);
+      } else {
+        onSave(parentService, linkedKey, linkedInc);
+      }
 
       onClose();
     } finally {

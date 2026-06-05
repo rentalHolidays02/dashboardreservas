@@ -6,6 +6,7 @@ import {
   KeyRound,
   Moon,
   Sun,
+  Sparkles,
   Check,
   Eye,
   EyeOff,
@@ -45,6 +46,17 @@ const ROLE_COLOR: Record<string, string> = {
 
 const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
   const { theme, toggleTheme } = useTheme();
+  const [showExcelOperations, setShowExcelOperations] = useState(() => {
+    const stored = localStorage.getItem('rh_show_excel_operations');
+    return stored === null ? true : stored === 'true';
+  });
+
+  const toggleShowExcelOperations = () => {
+    const next = !showExcelOperations;
+    setShowExcelOperations(next);
+    localStorage.setItem('rh_show_excel_operations', String(next));
+    window.dispatchEvent(new CustomEvent('rh-show-excel-operations-changed', { detail: next }));
+  };
 
   // Edit name state
   const [editingName, setEditingName] = useState(false);
@@ -464,6 +476,34 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                 {/* Toggle pill */}
                 <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${theme === 'dark' ? 'bg-orange-500' : 'bg-slate-200 dark:bg-stone-700'}`}>
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-300 ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </button>
+            </div>
+          </section>
+
+          <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
+            <div className="module-header">
+              <div className="flex items-center gap-2">
+                <Sparkles size={15} className="text-orange-500" />
+                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Operaciones Excel</span>
+              </div>
+            </div>
+            <div className="px-5 py-4">
+              <button
+                onClick={toggleShowExcelOperations}
+                className="flex items-center justify-between w-full group"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-lg bg-stone-50 dark:bg-stone-800 flex items-center justify-center transition-colors group-hover:bg-orange-50 dark:group-hover:bg-orange-800/40">
+                    <Sparkles size={15} className="text-orange-400" />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-slate-700 dark:text-stone-200">Mostrar en el menú</p>
+                    <p className="text-xs text-slate-400 dark:text-stone-500">{showExcelOperations ? 'Operaciones Excel visibles' : 'Operaciones Excel ocultas'}</p>
+                  </div>
+                </div>
+                <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${showExcelOperations ? 'bg-orange-500' : 'bg-slate-200 dark:bg-stone-700'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-300 ${showExcelOperations ? 'translate-x-5' : 'translate-x-0'}`} />
                 </div>
               </button>
             </div>
