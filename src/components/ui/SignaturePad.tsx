@@ -46,6 +46,8 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     const img = new Image();
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       setHasContent(true);
       loadedExternalIntoCanvas.current = false;
@@ -56,6 +58,15 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     };
     img.src = value;
   }, [value, readOnly]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, []);
 
   const getPos = useCallback(
     (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
@@ -186,7 +197,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
             width={600}
             height={180}
             className={`w-full block ${readOnly ? 'cursor-default' : 'cursor-crosshair'}`}
-            style={{ height: 110 }}
+            style={{ height: 110, backgroundColor: '#ffffff' }}
             onMouseDown={startDraw}
             onMouseMove={draw}
             onMouseUp={stopDraw}

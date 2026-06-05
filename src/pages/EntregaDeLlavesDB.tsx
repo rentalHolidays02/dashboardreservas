@@ -37,7 +37,7 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
     <span className="text-[10px] font-semibold text-slate-500 dark:text-stone-400 uppercase tracking-wide block">{label}</span>
     {url ? (
       <div className={`border-2 ${color} rounded-xl overflow-hidden bg-white p-1`} style={{ minHeight: 80 }}>
-        <img src={url} alt={label} className="w-full max-h-32 object-contain"
+        <img src={url} alt={label} className="w-full max-h-32 object-contain bg-white"
           onError={e => {
             (e.target as HTMLImageElement).style.display = 'none';
             (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
@@ -45,7 +45,7 @@ const SignaturePreview: React.FC<{ url: string | null; label: string; color: str
         <span className="hidden text-slate-400 italic text-[10px] text-center w-full block py-2">No se puede cargar</span>
       </div>
     ) : (
-      <div className={`border-2 border-dashed border-stone-200 dark:border-stone-700 rounded-xl bg-white flex items-center justify-center`} style={{ minHeight: 80 }}>
+      <div className="border-2 border-dashed border-stone-200 rounded-xl bg-white flex items-center justify-center" style={{ minHeight: 80 }}>
         <span className="text-slate-400 italic text-[10px]">Sin firma</span>
       </div>
     )}
@@ -125,7 +125,7 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative w-full max-w-md bg-white dark:bg-stone-900 shadow-2xl rounded-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 border border-stone-200 dark:border-stone-700">
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100 dark:border-stone-800 shrink-0">
           <div>
@@ -238,7 +238,7 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
           </div>
 
           <div className="space-y-3">
-            <h4 className="text-[11px] font-semibold text-slate-600 dark:text-stone-400 uppercase tracking-wide">Firmas (URLs)</h4>
+            <h4 className="text-[11px] font-semibold text-slate-600 dark:text-stone-400 uppercase tracking-wide">Firmas</h4>
             <div className="grid grid-cols-1 gap-3">
               <SignaturePad
                 label="Firma Trabajador"
