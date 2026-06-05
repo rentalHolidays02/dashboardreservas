@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Trash2, Key, Loader2, CalendarDays, Plus, Pencil, X } from 'lucide-react';
+import SignaturePad from '../components/ui/SignaturePad';
 import { supabaseOperationsApi, KeyDeliveryDB, WorkerOption } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
@@ -80,6 +81,8 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
   const [bizumGarantia, setBizumGarantia] = useState(record?.bizum_garantia ?? '');
   const [km, setKm] = useState(String(record?.km ?? 0));
   const [observaciones, setObservaciones] = useState(record?.observaciones ?? '');
+  const [firmaTrabajador, setFirmaTrabajador] = useState(record?.firma_trabajador_url ?? '');
+  const [firmaHuesped, setFirmaHuesped] = useState(record?.firma_huesped_url ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -103,6 +106,8 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
         bizum_garantia: bizumGarantia,
         km: parseFloat(km) || 0,
         observaciones,
+        firma_trabajador_url: firmaTrabajador || null,
+        firma_huesped_url: firmaHuesped || null,
       };
 
       if (isNew) {
@@ -112,7 +117,7 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
       } else {
         const ok = await supabaseOperationsApi.updateKeyDelivery(record!.id, payload);
         if (!ok) { setError('Error al guardar los cambios.'); return; }
-        onSave({ ...record!, ...payload, fianza_monto_metodo: payload.fianza_monto_metodo ?? null, fianza_garantia_metodo: payload.fianza_garantia_metodo ?? null, fecha_entrada_reserva: payload.fecha_entrada_reserva ?? null, fecha_salida_reserva: payload.fecha_salida_reserva ?? null, sabanas_personas: payload.sabanas_personas ?? null });
+        onSave({ ...record!, ...payload, fianza_monto_metodo: payload.fianza_monto_metodo ?? null, fianza_garantia_metodo: payload.fianza_garantia_metodo ?? null, fecha_entrada_reserva: payload.fecha_entrada_reserva ?? null, fecha_salida_reserva: payload.fecha_salida_reserva ?? null, sabanas_personas: payload.sabanas_personas ?? null, firma_trabajador_url: payload.firma_trabajador_url ?? null, firma_huesped_url: payload.firma_huesped_url ?? null });
       }
       onClose();
     } finally { setSaving(false); }
@@ -230,6 +235,22 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
             <label className={labelCls}>Observaciones</label>
             <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={3}
               placeholder="Observaciones adicionales..." className={`${inputCls} resize-none`} />
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-[11px] font-semibold text-slate-600 dark:text-stone-400 uppercase tracking-wide">Firmas (URLs)</h4>
+            <div className="grid grid-cols-1 gap-3">
+              <SignaturePad
+                label="Firma Trabajador"
+                value={firmaTrabajador}
+                onChange={setFirmaTrabajador}
+              />
+              <SignaturePad
+                label="Firma Huésped"
+                value={firmaHuesped}
+                onChange={setFirmaHuesped}
+              />
+            </div>
           </div>
 
           {error && (

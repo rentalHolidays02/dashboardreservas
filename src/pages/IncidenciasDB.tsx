@@ -23,6 +23,14 @@ const formatDuration = (val: string) => {
   return val;
 };
 
+const ensureHHMM = (val: string) => {
+  const clean = val.replace(/[^0-9:]/g, '');
+  const parts = clean.split(':');
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
 // ── Shared UI helpers ────────────────────────────────────────────────
 const inputCls = 'w-full px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-400/50 placeholder:text-slate-400';
 const labelCls = 'block text-[11px] font-medium text-slate-500 dark:text-stone-400 mb-1';
@@ -51,12 +59,13 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
     if (isNew && !workerId) { setError('Selecciona un trabajador.'); return; }
     setSaving(true);
     setError('');
+    const finalDuracion = ensureHHMM(duracion);
     try {
       if (isNew) {
         const created = await supabaseOperationsApi.createIncidentReport({
           worker_id: workerId,
           accommodation_name: accommodationName.trim(),
-          duracion,
+          duracion: finalDuracion,
           detalles,
         });
         if (!created) { setError('Error al crear la incidencia.'); return; }
@@ -64,11 +73,11 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
       } else {
         const ok = await supabaseOperationsApi.updateIncidentReport(record!.id, {
           accommodation_name: accommodationName.trim(),
-          duracion,
+          duracion: finalDuracion,
           detalles,
         });
         if (!ok) { setError('Error al guardar los cambios.'); return; }
-        onSave({ ...record!, accommodation_name: accommodationName.trim(), duracion, detalles });
+        onSave({ ...record!, accommodation_name: accommodationName.trim(), duracion: finalDuracion, detalles });
       }
       onClose();
     } finally {

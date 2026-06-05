@@ -167,6 +167,8 @@ export const supabaseOperationsApi = {
     bizum_garantia?: string;
     km?: number;
     observaciones?: string;
+    firma_trabajador_url?: string | null;
+    firma_huesped_url?: string | null;
   }): Promise<KeyDeliveryDB | null> => {
     const { data, error } = await supabase
       .from('key_deliveries')

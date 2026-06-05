@@ -12,6 +12,15 @@ const fmtDateTime = (iso: string) => {
   });
 };
 
+const ensureHHMM = (val: string) => {
+  if (!val) return '00:00';
+  const clean = val.replace(/[^0-9:]/g, '');
+  const parts = clean.split(':');
+  const h = parseInt(parts[0], 10) || 0;
+  const m = parseInt(parts[1], 10) || 0;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
 type TabType = 'reserva' | 'manitas';
 
 const inputCls = 'w-full px-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs text-slate-700 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-orange-400/50 placeholder:text-slate-400';
@@ -69,7 +78,7 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
         recoge_llaves: recogeLlaves,
         sigue_huesped: sigueHuesped,
         hora_salida_huesped: sigueHuesped ? (horaSalidaHuesped || null) : null,
-        horas_extra: horasExtra,
+        horas_extra: ensureHHMM(horasExtra),
         justificacion_extra: justificacionExtra,
         notas,
       };
