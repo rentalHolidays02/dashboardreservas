@@ -18,6 +18,7 @@ const features = [
 
 const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [email, setEmail] = useState('');
+  const [sessionEmail, setSessionEmail] = useState(''); // email del usuario en invite/recovery (lo usa Google PM para asociar la pwd)
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -46,6 +47,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         if (event === 'PASSWORD_RECOVERY') {
           // El usuario viene de un enlace de "Cambiar contraseña" → mostrar formulario de restablecimiento
           setAuthFlow('recovery');
+          if (session?.user?.email) setSessionEmail(session.user.email);
 
         } else if (event === 'SIGNED_IN' && session?.user) {
           // El usuario viene de un magic link o invitación
@@ -57,9 +59,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               onLoginSuccess(appUser);
             } else if (isMounted) {
               setAuthFlow('invite');
+              if (session.user.email) setSessionEmail(session.user.email);
             }
           } catch {
-            if (isMounted) setAuthFlow('invite');
+            if (isMounted) {
+              setAuthFlow('invite');
+              if (session.user.email) setSessionEmail(session.user.email);
+            }
           }
         }
       });
@@ -236,16 +242,39 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
             <form onSubmit={handleSubmit} className="space-y-5">
 
+              {/* Email read-only en invite/recovery: ayuda al gestor de contraseñas a vincular la pwd
+                  a la cuenta correcta + el usuario confirma sobre qué cuenta está actuando. */}
+              {authFlow !== 'login' && sessionEmail && (
+                <div className="space-y-1.5">
+                  <label htmlFor="login-session-email" className="block text-xs font-medium text-slate-600 dark:text-stone-400">
+                    Cuenta
+                  </label>
+                  <input
+                    id="login-session-email"
+                    name="email"
+                    type="email"
+                    value={sessionEmail}
+                    readOnly
+                    autoComplete="username"
+                    className="w-full px-4 py-3 rounded-xl bg-stone-50 dark:bg-stone-800/40 border border-slate-200 dark:border-stone-700/60 text-slate-600 dark:text-stone-400 text-sm cursor-not-allowed"
+                  />
+                </div>
+              )}
+
               {/* Email (solo se muestra en login normal) */}
               {authFlow === 'login' && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
+                  <label htmlFor="login-email" className="block text-xs font-medium text-slate-600 dark:text-stone-400">
                     Correo electrónico
                   </label>
                   <input
+                    id="login-email"
+                    name="email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="username"
+                    inputMode="email"
                     className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
                     placeholder="tu@email.com"
                     required
@@ -255,14 +284,17 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
               {/* Password */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
+                <label htmlFor="login-password" className="block text-xs font-medium text-slate-600 dark:text-stone-400">
                   {authFlow !== 'login' ? 'Nueva Contraseña' : 'Contraseña'}
                 </label>
                 <div className="relative">
                   <input
+                    id="login-password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={authFlow === 'login' ? 'current-password' : 'new-password'}
                     className="w-full px-4 py-3 pr-11 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
                     placeholder="••••••••"
                     required
@@ -281,13 +313,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               {/* Confirm Password (en invitación y recuperación) */}
               {authFlow !== 'login' && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-slate-600 dark:text-stone-400">
+                  <label htmlFor="login-confirm-password" className="block text-xs font-medium text-slate-600 dark:text-stone-400">
                     Confirmar Contraseña
                   </label>
                   <input
+                    id="login-confirm-password"
+                    name="confirm-password"
                     type={showPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
                     className="w-full px-4 py-3 rounded-xl bg-white/80 dark:bg-stone-800/80 border border-slate-200 dark:border-stone-700/60 text-slate-900 dark:text-stone-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all placeholder:text-slate-400 dark:placeholder:text-stone-500"
                     placeholder="••••••••"
                     required
