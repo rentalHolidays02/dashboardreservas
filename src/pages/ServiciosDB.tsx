@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Trash2, Loader2, CalendarDays, ClipboardList, Wrench, Clock, Plus, Pencil, X } from 'lucide-react';
-import { supabaseOperationsApi, ServiceReportDB, WorkerOption } from '../services/supabaseOperationsApi';
+import { Search, Trash2, Loader2, CalendarDays, ClipboardList, Wrench, Clock, Plus, Pencil, X, Key, AlertTriangle } from 'lucide-react';
+import { supabaseOperationsApi, ServiceReportDB, WorkerOption, KeyDeliveryDB, IncidentReportDB } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const fmtDateTime = (iso: string) => {
@@ -206,6 +206,97 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
   );
 };
 
+// ── Popup detalles de registro vinculado ────────────────────────────
+type LinkedPopupState =
+  | { kind: 'key_delivery'; record: KeyDeliveryDB }
+  | { kind: 'incident'; record: IncidentReportDB }
+  | null;
+
+const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="flex justify-between gap-3 text-[11px]">
+    <span className="text-slate-500 dark:text-stone-400">{label}</span>
+    <span className="font-medium text-slate-700 dark:text-stone-200 text-right">{value || '—'}</span>
+  </div>
+);
+
+const LinkedPopup: React.FC<{ state: LinkedPopupState; onClose: () => void }> = ({ state, onClose }) => {
+  if (!state) return null;
+  const isKey = state.kind === 'key_delivery';
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-white/60 dark:border-stone-800/50 animate-in zoom-in-95 duration-300">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-stone-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-xl ${isKey ? 'bg-blue-100 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400' : 'bg-red-100 dark:bg-red-400/10 text-red-600 dark:text-red-400'}`}>
+              {isKey ? <Key size={16} /> : <AlertTriangle size={16} />}
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-slate-800 dark:text-stone-100">
+                {isKey ? 'Entrega de llaves vinculada' : 'Incidencia vinculada'}
+              </h3>
+              <p className="text-[10px] text-slate-400">{state.record.accommodation_name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-stone-800/60">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {isKey ? (
+            <>
+              <Row label="Cliente" value={state.record.nombre_cliente} />
+              <Row label="Entrada reserva" value={state.record.fecha_entrada_reserva ? new Date(state.record.fecha_entrada_reserva).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'} />
+              <Row label="Salida reserva" value={state.record.fecha_salida_reserva ? new Date(state.record.fecha_salida_reserva).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'} />
+              <Row label="Sábanas/toallas" value={state.record.sabanas_entregadas ? `Sí (${state.record.sabanas_personas ?? '?'} pers.)` : 'No'} />
+              <Row label="Fianza monto" value={`${state.record.fianza_monto_metodo ?? '—'} · ${state.record.cantidad_pagada_monto} €`} />
+              {state.record.fianza_monto_metodo === 'Bizum' && state.record.bizum_monto && <Row label="Bizum monto" value={state.record.bizum_monto} />}
+              <Row label="Fianza garantía" value={`${state.record.fianza_garantia_metodo ?? '—'} · ${state.record.cantidad_pagada_garantia} €`} />
+              {state.record.fianza_garantia_metodo === 'Bizum' && state.record.bizum_garantia && <Row label="Bizum garantía" value={state.record.bizum_garantia} />}
+              {state.record.observaciones && (
+                <div>
+                  <p className="text-[11px] text-slate-500 mb-1">Observaciones</p>
+                  <p className="text-[11px] text-slate-700 dark:text-stone-200 bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 whitespace-pre-wrap">{state.record.observaciones}</p>
+                </div>
+              )}
+              {(state.record.firma_trabajador_url || state.record.firma_huesped_url) && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {state.record.firma_trabajador_url && (
+                    <div>
+                      <p className="text-[10px] text-slate-500 mb-1">Firma trabajador</p>
+                      <div style={{ backgroundColor: '#ffffff' }} className="w-full h-20 rounded-lg border border-stone-200 overflow-hidden">
+                        <img src={state.record.firma_trabajador_url} alt="Firma trabajador" className="w-full h-full object-contain" />
+                      </div>
+                    </div>
+                  )}
+                  {state.record.firma_huesped_url && (
+                    <div>
+                      <p className="text-[10px] text-slate-500 mb-1">Firma huésped</p>
+                      <div style={{ backgroundColor: '#ffffff' }} className="w-full h-20 rounded-lg border border-stone-200 overflow-hidden">
+                        <img src={state.record.firma_huesped_url} alt="Firma huésped" className="w-full h-full object-contain" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <Row label="Duración" value={state.record.duracion} />
+              <div>
+                <p className="text-[11px] text-slate-500 mb-1">Detalles</p>
+                <p className="text-[11px] text-slate-700 dark:text-stone-200 bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 whitespace-pre-wrap">{state.record.detalles || '—'}</p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 // ── Main Component ───────────────────────────────────────────────────
 interface ServiciosDBProps {
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
@@ -217,11 +308,14 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
   const [reports, setReports] = useState<ServiceReportDB[]>([]);
   const [workers, setWorkers] = useState<WorkerOption[]>([]);
   const [accommodations, setAccommodations] = useState<{ id: string, name: string }[]>([]);
+  const [keyDeliveries, setKeyDeliveries] = useState<KeyDeliveryDB[]>([]);
+  const [incidents, setIncidents] = useState<IncidentReportDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-  
+  const [linkedPopup, setLinkedPopup] = useState<LinkedPopupState>(null);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<ServiceReportDB | null>(null);
 
@@ -229,16 +323,38 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
 
   const fetchAll = async () => {
     setLoading(true);
-    const [data, wks, accs] = await Promise.all([
+    const [data, wks, accs, keys, incs] = await Promise.all([
       supabaseOperationsApi.getServiceReports(),
       supabaseOperationsApi.getWorkers(),
       supabaseOperationsApi.getAccommodations(),
+      supabaseOperationsApi.getKeyDeliveries(),
+      supabaseOperationsApi.getIncidentReports(),
     ]);
     setReports(data);
     setWorkers(wks);
     setAccommodations(accs);
+    setKeyDeliveries(keys);
+    setIncidents(incs);
     setLoading(false);
   };
+
+  // Mapa serviceId → { keys, incs } para renderizar iconos vinculados en cada fila
+  const linksByService = useMemo(() => {
+    const m = new Map<string, { keys: KeyDeliveryDB[]; incs: IncidentReportDB[] }>();
+    for (const k of keyDeliveries) {
+      if (!k.parent_service_id) continue;
+      const e = m.get(k.parent_service_id) ?? { keys: [], incs: [] };
+      e.keys.push(k);
+      m.set(k.parent_service_id, e);
+    }
+    for (const i of incidents) {
+      if (!i.parent_service_id) continue;
+      const e = m.get(i.parent_service_id) ?? { keys: [], incs: [] };
+      e.incs.push(i);
+      m.set(i.parent_service_id, e);
+    }
+    return m;
+  }, [keyDeliveries, incidents]);
 
   const openCreate = () => { setEditingRecord(null); setModalOpen(true); };
   const openEdit = (rep: ServiceReportDB) => { setEditingRecord(rep); setModalOpen(true); };
@@ -345,6 +461,7 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
             <tbody className="divide-y divide-stone-100 dark:divide-stone-800/60">
               {filteredReports.map(rep => {
                 const isExpanded = expandedRows.has(rep.id);
+                const linked = linksByService.get(rep.id);
                 return (
                   <React.Fragment key={rep.id}>
                     <tr onClick={() => toggleRow(rep.id)}
@@ -359,7 +476,31 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
                         <div className="font-medium text-[12px]">{rep.worker_name}</div>
                         <div className="text-slate-500">{rep.worker_phone}</div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-stone-200">{rep.accommodation_name || '—'}</td>
+                      <td className="px-4 py-3 font-medium text-slate-700 dark:text-stone-200">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{rep.accommodation_name || '—'}</span>
+                          {linked?.keys.map(k => (
+                            <button
+                              key={k.id}
+                              onClick={e => { e.stopPropagation(); setLinkedPopup({ kind: 'key_delivery', record: k }); }}
+                              title="Entrega de llaves vinculada — ver detalles"
+                              className="inline-flex items-center justify-center p-1 rounded-md bg-blue-50 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-400/20 transition-colors"
+                            >
+                              <Key size={11} />
+                            </button>
+                          ))}
+                          {linked?.incs.map(i => (
+                            <button
+                              key={i.id}
+                              onClick={e => { e.stopPropagation(); setLinkedPopup({ kind: 'incident', record: i }); }}
+                              title="Incidencia vinculada — ver detalles"
+                              className="inline-flex items-center justify-center p-1 rounded-md bg-red-50 dark:bg-red-400/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-400/20 transition-colors"
+                            >
+                              <AlertTriangle size={11} />
+                            </button>
+                          ))}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-stone-300">
                         <div className="flex items-center gap-1">
                           <Clock size={11} className="text-emerald-500" />
@@ -471,6 +612,8 @@ const ServiciosDB: React.FC<ServiciosDBProps> = ({ userRole }) => {
           onCreate={handleCreated}
         />
       )}
+
+      <LinkedPopup state={linkedPopup} onClose={() => setLinkedPopup(null)} />
     </div>
   );
 };
