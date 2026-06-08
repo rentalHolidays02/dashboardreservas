@@ -1,10 +1,46 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Overrides explícitos con comillas — garantiza match en browsers que parseen estrictos */
+.font-dm  { font-family: "DM Sans", sans-serif !important; }
+.font-gsf { font-family: "Google Sans Flex", sans-serif !important; }
+.font-mono { font-family: "Space Mono", monospace !important; }
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+/* Custom thin scrollbar — minimal, tone neutro */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 113, 108, 0.35) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(120, 113, 108, 0.35);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(120, 113, 108, 0.55);
+}
+html.dark * {
+  scrollbar-color: rgba(168, 162, 158, 0.25) transparent;
+}
+html.dark *::-webkit-scrollbar-thumb {
+  background-color: rgba(168, 162, 158, 0.25);
+}
+html.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(168, 162, 158, 0.45);
 }
 
 @layer components {
@@ -48,6 +84,20 @@
 .animate-slide-out-right {
   animation: slide-out-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Header trabajador: "pop inverso" — crece un poco y colapsa desapareciendo */
+@keyframes header-pop-out {
+  0%   { transform: scale(1);    opacity: 1; }
+  35%  { transform: scale(1.1);  opacity: 1; }
+  100% { transform: scale(0.3);  opacity: 0; }
+}
+@keyframes header-pop-in {
+  0%   { transform: scale(0.3);  opacity: 0; }
+  65%  { transform: scale(1.1);  opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.header-pop-out { animation: header-pop-out 0.3s ease-in forwards; }
+.header-pop-in  { animation: header-pop-in 0.3s ease-out forwards; }
 
 /* Master-Detail Suggestions Layout */
 .suggestions-grid {
@@ -122,7 +172,14 @@
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 420ms;
   --app-bg: linear-gradient(135deg, #F5F4F2 0%, #F7F5F0 100%);
+  /* Negro de móvil: fondo común de las pestañas del trabajador (Inicio/Historial/Perfil),
+     del overlay del header y del body en dark mode. Tono unificado. */
+  --mobile-black: #1c1a18;
 }
+
+/* Fondo común mobile (pestañas + overlay header) — evita el override global de bg-white. */
+.bg-mobile-app { background-color: #ffffff; }
+html.dark .bg-mobile-app { background-color: var(--mobile-black) !important; }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────────
    Timing strategy (sequential, not simultaneous):
@@ -223,11 +280,21 @@ body {
   background-attachment: fixed;
 }
 
+/* Móvil: fondo blanco global (la app rol trabajador en mobile vive sobre el blanco) */
+@media (max-width: 1279px) {
+  body { background: #ffffff !important; background-attachment: initial !important; }
+}
+@media (max-width: 1279px) {
+  html.dark body { background: var(--mobile-black) !important; }
+}
+
+
 html.dark body {
   background: linear-gradient(135deg, #1c1a18 0%, #1f1d1a 100%);
   background-attachment: fixed;
   color: #e7e5e4;
 }
+
 
 /* ═══════════════════════════════════════════════════════════
    DARK MODE — OVERRIDES GLOBALES

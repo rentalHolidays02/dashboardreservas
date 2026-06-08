@@ -109,7 +109,7 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
 
   // Al salir sin pulsar "Guardar en borrador": persistimos sólo en localStorage.
   const handleCancelOrClose = () => {
-    if (hasData && status?.type !== 'ok') {
+    if (!draftId && hasData && status?.type !== 'ok') {
       localDrafts.save('incident', form);
     }
     onClose();

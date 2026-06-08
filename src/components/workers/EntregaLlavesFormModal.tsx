@@ -145,7 +145,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
 
   // Al salir sin pulsar "Guardar en borrador": persistimos sólo en localStorage.
   const handleCancelOrClose = () => {
-    if (hasData && status?.type !== 'ok') {
+    if (!draftId && hasData && status?.type !== 'ok') {
       // Las firmas son base64 pesado: las omitimos del local también.
       const { firmaTrabajador: _ft, firmaHuesped: _fh, ...rest } = form;
       localDrafts.save('key_delivery', rest);

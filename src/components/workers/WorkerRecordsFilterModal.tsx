@@ -99,8 +99,7 @@ const WorkerRecordsFilterModal: React.FC<WorkerRecordsFilterModalProps> = ({ isO
             <div className="flex flex-wrap gap-2">
               {([
                 { value: 'all',        label: 'Cualquiera', color: '' },
-                { value: 'Normal',     label: 'Normal',     color: '' },
-                { value: 'Inicial',    label: 'Inicial',    color: '' },
+                { value: 'Normal',     label: 'Limpieza',   color: '' },
                 { value: 'Manitas',    label: 'Manitas',    color: '' },
                 { value: 'Incidencia', label: 'Incidencia', color: 'incidencia' },
                 { value: 'Llaves',     label: 'Llaves',     color: 'llaves' },

@@ -289,3 +289,130 @@ export const deleteDraft = async (id: string): Promise<void> => {
   const { error } = await supabase.from('report_drafts').delete().eq('id', id);
   if (error) throw error;
 };
+
+// ─── Lectores para vistas del trabajador (Inicio + Historial) ────────────
+
+export interface MyWorkerRow {
+  id: string;
+  fullName: string;
+  pagoPorReserva: number;
+  precioPorKm: number;
+  pagoPorServicioSabanas: number;
+  pagoPorIncidencia: number;
+}
+
+// Devuelve el worker autenticado con su subset de tarifas.
+export const getMyWorker = async (): Promise<MyWorkerRow | null> => {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+  const { data, error } = await supabase
+    .from('workers')
+    .select('id, full_name, pay_per_reservation, price_per_km, pay_per_linen_service, pay_per_incident')
+    .eq('profile_id', auth.user.id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    id: data.id,
+    fullName: data.full_name,
+    pagoPorReserva: Number(data.pay_per_reservation || 0),
+    precioPorKm: Number(data.price_per_km || 0),
+    pagoPorServicioSabanas: Number(data.pay_per_linen_service || 0),
+    pagoPorIncidencia: Number(data.pay_per_incident || 0),
+  };
+};
+
+export interface ServiceReportRow {
+  id: string;
+  kind: 'reserva' | 'manitas';
+  accommodationName: string;
+  horaEntrada: string | null;
+  horaSalida: string | null;
+  km: number;
+  notas: string;
+  horasExtra: string;
+  createdAt: string;
+}
+
+export const listMyServiceReports = async (): Promise<ServiceReportRow[]> => {
+  const workerId = await getCurrentWorkerId();
+  if (!workerId) return [];
+  const { data, error } = await supabase
+    .from('service_reports')
+    .select('id, kind, accommodation_name, hora_entrada, hora_salida, km, notas, horas_extra, created_at')
+    .eq('worker_id', workerId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    kind: r.kind,
+    accommodationName: r.accommodation_name || '',
+    horaEntrada: r.hora_entrada,
+    horaSalida: r.hora_salida,
+    km: Number(r.km || 0),
+    notas: r.notas || '',
+    horasExtra: r.horas_extra || '00:00',
+    createdAt: r.created_at,
+  }));
+};
+
+export interface KeyDeliveryRow {
+  id: string;
+  accommodationName: string;
+  nombreCliente: string;
+  km: number;
+  sabanasEntregadas: boolean;
+  sabanasPersonas: number | null;
+  fechaEntradaReserva: string | null;
+  fechaSalidaReserva: string | null;
+  observaciones: string;
+  createdAt: string;
+}
+
+export const listMyKeyDeliveries = async (): Promise<KeyDeliveryRow[]> => {
+  const workerId = await getCurrentWorkerId();
+  if (!workerId) return [];
+  const { data, error } = await supabase
+    .from('key_deliveries')
+    .select('id, accommodation_name, nombre_cliente, km, sabanas_entregadas, sabanas_personas, fecha_entrada_reserva, fecha_salida_reserva, observaciones, created_at')
+    .eq('worker_id', workerId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    accommodationName: r.accommodation_name || '',
+    nombreCliente: r.nombre_cliente || '',
+    km: Number(r.km || 0),
+    sabanasEntregadas: !!r.sabanas_entregadas,
+    sabanasPersonas: r.sabanas_personas ?? null,
+    fechaEntradaReserva: r.fecha_entrada_reserva,
+    fechaSalidaReserva: r.fecha_salida_reserva,
+    observaciones: r.observaciones || '',
+    createdAt: r.created_at,
+  }));
+};
+
+export interface IncidentReportRow {
+  id: string;
+  accommodationName: string;
+  duracion: string;
+  detalles: string;
+  createdAt: string;
+}
+
+export const listMyIncidentReports = async (): Promise<IncidentReportRow[]> => {
+  const workerId = await getCurrentWorkerId();
+  if (!workerId) return [];
+  const { data, error } = await supabase
+    .from('incident_reports')
+    .select('id, accommodation_name, duracion, detalles, created_at')
+    .eq('worker_id', workerId)
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    accommodationName: r.accommodation_name || '',
+    duracion: r.duracion || '00:00',
+    detalles: r.detalles || '',
+    createdAt: r.created_at,
+  }));
+};

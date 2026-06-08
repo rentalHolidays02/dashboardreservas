@@ -10,6 +10,9 @@ export default {
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
         display: ['Outfit', 'sans-serif'],
+        gsf: ["'Google Sans Flex'", 'sans-serif'],
+        dm: ["'DM Sans'", 'sans-serif'],
+        mono: ["'Space Mono'", 'monospace'],
       },
       borderRadius: {
         none: '0',
