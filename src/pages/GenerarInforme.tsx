@@ -20,7 +20,6 @@ import {
 import { generatePDF, ReportData } from '../services/pdfExport';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import logoSrc from '../assets/logo/LogoEstandar.png';
-import { buildPayableItems } from '../utils/paymentItems';
 import { supabase } from '../services/supabaseClient';
 
 type ExportStep = 'idle' | 'collecting' | 'building' | 'done';
@@ -259,30 +258,8 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
   // Rango de fechas activo para el periodo seleccionado
   const dateRange = useMemo(() => getDateRange(selectedPeriod), [selectedPeriod]);
 
-  const derivedPagos = useMemo<PagoRecord[]>(() => {
-    const items = buildPayableItems(workers, cleans, initialCleans, handyman, entregas, incidencias);
-    return items.map((it) => ({
-      id: `derived_${it.key}`,
-      workerId: it.workerId,
-      workerName: it.workerName,
-      telefono: '',
-      dni: '',
-      email: '',
-      fecha: it.date,
-      concepto: `${it.type === 'incidencia' ? 'Incidencia' : it.type === 'entrega' ? 'Entrega' : 'Liquidación'} · ${it.apartamento}`,
-      importe: it.monto,
-      limpiezas: it.type === 'reserva' ? 1 : 0,
-      km: 0,
-      estado: 'pendiente',
-    }));
-  }, [workers, cleans, initialCleans, handyman, entregas, incidencias]);
-
-  // Para que "mes pasado" cuadre con la lógica de Nóminas/Pagos,
-  // priorizamos siempre el cálculo derivado desde actividad real.
-  const pagosSource = useMemo(
-    () => (derivedPagos.length > 0 ? derivedPagos : pagos),
-    [derivedPagos, pagos]
-  );
+  // Los pagos del informe se toman tal cual vienen de Apps Script.
+  const pagosSource = pagos;
 
   // Filtros: periodo + trabajador + alojamiento
   const fPagos  = useMemo(() => pagosSource.filter(p =>

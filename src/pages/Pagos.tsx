@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Banknote, Clock, ChevronLeft, ChevronRight, Search, CheckCircle2, Calculator, Wallet, X, TrendingUp } from 'lucide-react';
-import { appsScriptApi, activityLogApi } from '../services/api';
-import { Worker, NormalCleanRecord, InitialCleanRecord, HandymanRecord, EntregaLlaves, Incidencia, User as AppUser } from '../services/mockData';
-import { computeWorkerEarnings, matchesWorkerByPhone, EXTRA_HOUR_RATE } from '../utils/payments';
-import { buildPayableItems, PayableItem, buildDesgloseDetalle, DesgloseDetalle, DesgloseFila } from '../utils/paymentItems';
-import { supabase } from '../services/supabaseClient';
+import { Banknote, Clock, ChevronLeft, ChevronRight, Search, CheckCircle2, Calculator, Wallet, X } from 'lucide-react';
+import { supabaseOperationsApi, WorkerPayments, ServiceReportDB, KeyDeliveryDB, IncidentReportDB } from '../services/supabaseOperationsApi';
+import { activityLogApi } from '../services/api';
+import { User as AppUser } from '../services/mockData';
+import {
+  computeMonthlySummaries,
+  computeDesglose,
+  MonthlySummary,
+  DesgloseDetalle,
+  DesgloseFila,
+  EXTRA_HOUR_RATE,
+} from '../utils/paymentsSupabase';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import ItemSelectorModal from '../components/pagos/ItemSelectorModal';
-import CobrosBulkBar from '../components/pagos/CobrosBulkBar';
 
 const fmtCurrency = (n: number) =>
   n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
@@ -30,43 +34,7 @@ const shiftPeriod = (period: string, deltaMonths: number): string => {
   return periodOfMonth(d);
 };
 
-const extractYearMonth = (raw: string): string | null => {
-  if (!raw) return null;
-  // Quita sufijo de ubicación "… | lat, lng" si existe.
-  const head = String(raw).split('|')[0].trim();
-  // ISO: "YYYY-MM-DD" o "YYYY-MM-DDTHH:MM"
-  if (/^\d{4}-\d{2}-\d{2}/.test(head)) return head.slice(0, 7);
-  // Locale es-ES: "D/M/YYYY" o "DD/MM/YYYY" (con o sin hora detrás)
-  const m = head.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (m) return `${m[3]}-${m[2].padStart(2, '0')}`;
-  return null;
-};
-
 const periodToYearMonth = (period: string): string => period.slice(0, 7);
-
-const inMonth = <T,>(records: T[], dateField: (r: T) => string, ym: string): T[] =>
-  records.filter(r => extractYearMonth(dateField(r)) === ym);
-
-interface MonthlySummary {
-  workerId: string;
-  worker: Worker;
-  numReservations: number;
-  numKilometers: number;
-  hoursWorked: number;
-  extraHours: number;
-  initialHours: number;
-  manitasHours: number;
-  numIncidents: number;
-  numLinenServices: number;
-  montoReservas: number;
-  montoExtras: number;
-  montoInicialManitas: number;
-  montoKm: number;
-  montoIncidencias: number;
-  montoSabanas: number;
-  efectivoRetenidoMes: number;
-  total: number;
-}
 
 interface PagosProps {
   user?: AppUser;
@@ -76,12 +44,10 @@ interface PagosProps {
 type EstadoFilter = 'all' | 'pendiente' | 'pagado';
 
 const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
-  const [workers, setWorkers] = useState<Worker[]>([]);
-  const [normalCleans, setNormalCleans] = useState<NormalCleanRecord[]>([]);
-  const [initialCleans, setInitialCleans] = useState<InitialCleanRecord[]>([]);
-  const [handymanRecords, setHandymanRecords] = useState<HandymanRecord[]>([]);
-  const [entregaLlaves, setEntregaLlaves] = useState<EntregaLlaves[]>([]);
-  const [incidencias, setIncidencias] = useState<Incidencia[]>([]);
+  const [workers, setWorkers] = useState<WorkerPayments[]>([]);
+  const [services, setServices] = useState<ServiceReportDB[]>([]);
+  const [keyDeliveries, setKeyDeliveries] = useState<KeyDeliveryDB[]>([]);
+  const [incidents, setIncidents] = useState<IncidentReportDB[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [period, setPeriod] = useState<string>(periodOfMonth(new Date()));
@@ -90,100 +56,38 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
   const [selected, setSelected] = useState<string | null>(null);
   const [savingWorkerId, setSavingWorkerId] = useState<string | null>(null);
 
-  const [itemModalOpen, setItemModalOpen] = useState(false);
-
   const canEdit = userRole === 'admin' || userRole === 'editor';
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [ws, nc, ic, hm, el, inc] = await Promise.all([
-        appsScriptApi.getWorkers().catch(() => [] as Worker[]),
-        appsScriptApi.getNormalCleans().catch(() => [] as NormalCleanRecord[]),
-        appsScriptApi.getInitialCleans().catch(() => [] as InitialCleanRecord[]),
-        appsScriptApi.getHandymanRecords().catch(() => [] as HandymanRecord[]),
-        appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
-        appsScriptApi.getRecentIncidencias(500).catch(() => [] as Incidencia[]),
+      const [ws, srv, kd, inc] = await Promise.all([
+        supabaseOperationsApi.getWorkersPayments(),
+        supabaseOperationsApi.getServiceReports(),
+        supabaseOperationsApi.getKeyDeliveries(),
+        supabaseOperationsApi.getIncidentReports(),
       ]);
       setWorkers(ws);
-      setNormalCleans(nc);
-      setInitialCleans(ic);
-      setHandymanRecords(hm);
-      setEntregaLlaves(el);
-      setIncidencias(inc);
+      setServices(srv);
+      setKeyDeliveries(kd);
+      setIncidents(inc);
     } finally {
       setLoading(false);
     }
-  };
-
-  const refreshWorkers = async () => {
-    try {
-      const ws = await appsScriptApi.getWorkers();
-      setWorkers(ws);
-    } catch (e) { console.error(e); }
   };
 
   useEffect(() => { loadAll(); }, []);
 
   const summaries = useMemo<MonthlySummary[]>(() => {
     const ym = periodToYearMonth(period);
-    const ncMonth = inMonth(normalCleans,    r => r.checkinFecha,            ym);
-    const icMonth = inMonth(initialCleans,   r => r.checkinFecha,            ym);
-    const hmMonth = inMonth(handymanRecords, r => r.fechaLlegada,            ym);
-    const elMonth = inMonth(entregaLlaves,   e => e.fechaUbicacionEntrega || '', ym);
-    const incMonth = inMonth(incidencias,    i => i.timestamp,               ym);
-
-    return workers.map(w => {
-      const earnings = computeWorkerEarnings(w, ncMonth, icMonth, hmMonth, elMonth, incMonth);
-
-      const numIncidents = incMonth.filter(i => matchesWorkerByPhone(i.telefono, w.telefono)).length;
-      const rateIncidente = w.pagoPorIncidencia ?? 0;
-      const montoIncidencias = numIncidents * rateIncidente;
-
-      const numLinenServices = elMonth.filter(e => {
-        if (!matchesWorkerByPhone(e.telefono, w.telefono)) return false;
-        const v = String(e.sabanasToallas || '').toLowerCase();
-        return v.includes('entregad') || v.includes('sí') || v.includes('si') || v === 'true';
-      }).length;
-      const rateLinen = w.pagoPorServicioSabanas ?? 0;
-      const montoSabanas = numLinenServices * rateLinen;
-
-      const montoReservas = earnings.reservasPay;
-      const montoExtras = earnings.extraPay;
-      const montoInicialManitas = earnings.initialPay + earnings.manitasPay;
-      const montoKm = earnings.kmsPay;
-      const total = montoReservas + montoExtras + montoInicialManitas + montoKm + montoIncidencias + montoSabanas;
-
-      return {
-        workerId: w.id,
-        worker: w,
-        numReservations: earnings.cleanCount,
-        numKilometers: Math.round(earnings.kms * 100) / 100,
-        hoursWorked: Math.round(earnings.hoursWorked * 100) / 100,
-        extraHours: Math.round(earnings.extraHours * 100) / 100,
-        initialHours: Math.round(earnings.initialHours * 100) / 100,
-        manitasHours: Math.round(earnings.manitasHours * 100) / 100,
-        numIncidents,
-        numLinenServices,
-        montoReservas,
-        montoExtras,
-        montoInicialManitas,
-        montoKm,
-        montoIncidencias,
-        montoSabanas,
-        // Calculado desde las entregas del mes (fianzas Monto + Garantía en efectivo).
-        // No usar workers.retained_cash (DB) porque es histórico/manual.
-        efectivoRetenidoMes: Math.round(earnings.efectivoRetenido * 100) / 100,
-        total: Math.round(total * 100) / 100,
-      };
-    });
-  }, [workers, normalCleans, initialCleans, handymanRecords, entregaLlaves, incidencias, period]);
+    return computeMonthlySummaries(workers, services, keyDeliveries, incidents, ym);
+  }, [workers, services, keyDeliveries, incidents, period]);
 
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return summaries.filter(s => {
-      if (q && !s.worker.fullName.toLowerCase().includes(q)) return false;
-      const pendiente = s.worker.owedMoney ?? 0;
+      if (q && !s.worker.full_name.toLowerCase().includes(q)) return false;
+      const pendiente = s.worker.pending_balance;
       if (filter === 'pendiente' && pendiente <= 0) return false;
       if (filter === 'pagado'    && pendiente >  0) return false;
       if (filter === 'all' && s.total <= 0 && pendiente <= 0 && s.efectivoRetenidoMes <= 0) return false;
@@ -193,9 +97,9 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
 
   const stats = useMemo(() => {
     const totalMes        = filtered.reduce((sum, s) => sum + s.total, 0);
-    const totalPendiente  = filtered.reduce((sum, s) => sum + (s.worker.owedMoney ?? 0), 0);
+    const totalPendiente  = filtered.reduce((sum, s) => sum + s.worker.pending_balance, 0);
     const totalRetenido   = filtered.reduce((sum, s) => sum + s.efectivoRetenidoMes, 0);
-    const numPendientes   = filtered.filter(s => (s.worker.owedMoney ?? 0) > 0).length;
+    const numPendientes   = filtered.filter(s => s.worker.pending_balance > 0).length;
     return { totalMes, totalPendiente, totalRetenido, numPendientes };
   }, [filtered]);
 
@@ -209,40 +113,23 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
     [selected, summaries]
   );
 
-  // Items cobrables solo del trabajador seleccionado (modo single del ItemSelectorModal)
-  const selectedWorkerItems = useMemo<PayableItem[]>(() => {
-    if (!selectedSummary) return [];
-    return buildPayableItems(
-      [selectedSummary.worker],
-      normalCleans, initialCleans, handymanRecords, entregaLlaves, incidencias
-    );
-  }, [selectedSummary, normalCleans, initialCleans, handymanRecords, entregaLlaves, incidencias]);
-
-  // Desglose detallado del mes seleccionado SOLO para el trabajador del modal abierto.
-  // Sirve a las líneas expandibles del Desglose económico.
   const selectedDesglose = useMemo<DesgloseDetalle | null>(() => {
     if (!selectedSummary) return null;
-    const ym = periodToYearMonth(period);
-    const ncM = inMonth(normalCleans,    r => r.checkinFecha,            ym);
-    const icM = inMonth(initialCleans,   r => r.checkinFecha,            ym);
-    const hmM = inMonth(handymanRecords, r => r.fechaLlegada,            ym);
-    const elM = inMonth(entregaLlaves,   e => e.fechaUbicacionEntrega || '', ym);
-    const incM = inMonth(incidencias,    i => i.timestamp,               ym);
-    return buildDesgloseDetalle(selectedSummary.worker, ncM, icM, hmM, elM, incM);
-  }, [selectedSummary, period, normalCleans, initialCleans, handymanRecords, entregaLlaves, incidencias]);
+    return computeDesglose(selectedSummary.worker, services, keyDeliveries, incidents, periodToYearMonth(period));
+  }, [selectedSummary, period, services, keyDeliveries, incidents]);
 
   const handleMarcarPagado = async (workerId: string) => {
     if (!canEdit) return;
     setSavingWorkerId(workerId);
     try {
       const w = workers.find(x => x.id === workerId);
-      const prevBalance = w?.owedMoney ?? 0;
-      const { error } = await supabase.from('workers').update({ pending_balance: 0 }).eq('id', workerId);
-      if (error) throw error;
-      setWorkers(prev => prev.map(x => x.id === workerId ? { ...x, owedMoney: 0 } : x));
+      const prevBalance = w?.pending_balance ?? 0;
+      const ok = await supabaseOperationsApi.markWorkerAsPaid(workerId);
+      if (!ok) throw new Error('No se pudo actualizar');
+      setWorkers(prev => prev.map(x => x.id === workerId ? { ...x, pending_balance: 0 } : x));
       await activityLogApi.log(
         user?.id || null, user?.name || 'Sistema',
-        `Marcó como pagado a ${w?.fullName || 'trabajador'} (saldaba ${prevBalance.toFixed(2)}€)`,
+        `Marcó como pagado a ${w?.full_name || 'trabajador'} (saldaba ${prevBalance.toFixed(2)}€)`,
         'marcar_pagado'
       );
     } catch (e: any) {
@@ -253,20 +140,26 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
     }
   };
 
-  const handleSingleConfirm = async (items: PayableItem[]) => {
-    if (!selectedSummary) return;
-    const w = selectedSummary.worker;
-    const addAmount = items.reduce((s, it) => s + it.monto, 0);
-    const current = w.owedMoney ?? 0;
-    const next = Math.round((current + addAmount) * 100) / 100;
-    const { error } = await supabase.from('workers').update({ pending_balance: next }).eq('id', w.id);
-    if (error) throw error;
-    setWorkers(prev => prev.map(x => x.id === w.id ? { ...x, owedMoney: next } : x));
-    await activityLogApi.log(
-      user?.id || null, user?.name || 'Sistema',
-      `Sumó ${addAmount.toFixed(2)}€ (${items.length} items) al pendiente de ${w.fullName} · selección individual`,
-      'asignar_cobro_individual'
-    );
+  const handleAddToPending = async (workerId: string, amount: number) => {
+    if (!canEdit || amount <= 0) return;
+    setSavingWorkerId(workerId);
+    try {
+      const w = workers.find(x => x.id === workerId);
+      const ok = await supabaseOperationsApi.addToWorkerBalance(workerId, amount);
+      if (!ok) throw new Error('No se pudo actualizar');
+      const next = Math.round(((w?.pending_balance ?? 0) + amount) * 100) / 100;
+      setWorkers(prev => prev.map(x => x.id === workerId ? { ...x, pending_balance: next } : x));
+      await activityLogApi.log(
+        user?.id || null, user?.name || 'Sistema',
+        `Sumó ${amount.toFixed(2)}€ al pendiente de ${w?.full_name || 'trabajador'} (total mes)`,
+        'asignar_cobro_mes'
+      );
+    } catch (e: any) {
+      console.error('Error añadiendo al pendiente:', e);
+      alert(`Error: ${e?.message || e}`);
+    } finally {
+      setSavingWorkerId(null);
+    }
   };
 
   return (
@@ -278,7 +171,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
             Nóminas mensuales
           </h1>
           <p className="text-xs text-slate-400 dark:text-stone-500 mt-1">
-            Cálculo en vivo desde checkouts e incidencias del mes
+            Cálculo en vivo desde servicios, entregas e incidencias del mes
           </p>
         </div>
 
@@ -316,10 +209,6 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
               </button>
             ))}
           </div>
-
-          {canEdit && (
-            <CobrosBulkBar user={user} onAfterApply={refreshWorkers} />
-          )}
         </div>
       </header>
 
@@ -373,7 +262,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-stone-200">Sin actividad ni saldo en {fmtMonthYear(period)}</h3>
               <p className="text-xs text-slate-400 dark:text-stone-500 mt-1 max-w-xs">
-                No hay trabajadores con checkouts, incidencias ni saldo pendiente para mostrar.
+                No hay trabajadores con servicios, entregas, incidencias ni saldo pendiente para mostrar.
               </p>
             </div>
           </div>
@@ -394,7 +283,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                 <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
                   {filtered.map(s => {
                     const w = s.worker;
-                    const tienePendiente = (w.owedMoney ?? 0) > 0;
+                    const tienePendiente = w.pending_balance > 0;
                     return (
                       <tr key={s.workerId}
                         onClick={() => setSelected(s.workerId)}
@@ -402,16 +291,16 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-3">
                             <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 bg-white dark:bg-stone-800 soft-shadow">
-                              {w.photo ? (
-                                <img src={w.photo} alt={w.fullName} className="w-full h-full object-cover" />
+                              {w.photo_url ? (
+                                <img src={w.photo_url} alt={w.full_name} className="w-full h-full object-cover" />
                               ) : (
                                 <span className="w-full h-full flex items-center justify-center text-xs font-normal text-slate-500 dark:text-stone-400">
-                                  {w.fullName.charAt(0)}
+                                  {w.full_name.charAt(0)}
                                 </span>
                               )}
                             </div>
                             <div>
-                              <span className="block text-sm font-normal text-slate-800 dark:text-stone-200">{w.fullName}</span>
+                              <span className="block text-sm font-normal text-slate-800 dark:text-stone-200">{w.full_name}</span>
                               <span className="text-xs text-slate-400 dark:text-stone-500 font-mono tracking-tighter">{w.dni || ''}</span>
                             </div>
                           </div>
@@ -419,8 +308,9 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-stone-400">
                             <Calculator size={11} className="text-slate-300" />
-                            {s.numReservations} res · {s.numKilometers.toFixed(0)} km · {s.hoursWorked.toFixed(1)} h
+                            {s.numReservations} res · {s.numKilometers.toFixed(0)} km · {s.reservaHours.toFixed(1)} h
                             {s.extraHours > 0 && <span className="text-amber-600 dark:text-amber-400"> ({s.extraHours.toFixed(1)} extra)</span>}
+                            {s.manitasHours > 0 && <span> · {s.manitasHours.toFixed(1)} h manitas</span>}
                             {s.numLinenServices > 0 && <span> · {s.numLinenServices} sáb</span>}
                             {s.numIncidents > 0 && <span> · {s.numIncidents} inc</span>}
                           </div>
@@ -430,7 +320,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                         </td>
                         <td className="px-8 py-5 text-right">
                           <span className={`text-sm tabular-nums font-medium ${tienePendiente ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                            {fmtCurrency(w.owedMoney ?? 0)}
+                            {fmtCurrency(w.pending_balance)}
                           </span>
                         </td>
                         <td className="px-8 py-5 text-right">
@@ -472,7 +362,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                   <Wallet size={18} className="text-orange-600 dark:text-orange-400" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-medium text-slate-800 dark:text-stone-100">{selectedSummary.worker.fullName}</h2>
+                  <h2 className="text-sm font-medium text-slate-800 dark:text-stone-100">{selectedSummary.worker.full_name}</h2>
                   <p className="text-xs text-slate-400 dark:text-stone-500 capitalize">{fmtMonthYear(period)}</p>
                 </div>
               </div>
@@ -485,12 +375,13 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
               <section>
                 <h3 className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 mb-3">Actividad del mes</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <DetalleStat label="Reservas"         value={selectedSummary.numReservations} />
-                  <DetalleStat label="Kilómetros"       value={`${selectedSummary.numKilometers.toFixed(1)} km`} />
-                  <DetalleStat label="Horas trabajadas" value={`${selectedSummary.hoursWorked.toFixed(1)} h`} />
-                  <DetalleStat label="Horas extra"      value={`${selectedSummary.extraHours.toFixed(1)} h`} />
-                  <DetalleStat label="Incidencias"      value={selectedSummary.numIncidents} />
-                  <DetalleStat label="Sábanas/toallas"  value={selectedSummary.numLinenServices} />
+                  <DetalleStat label="Reservas"           value={selectedSummary.numReservations} />
+                  <DetalleStat label="Kilómetros"         value={`${selectedSummary.numKilometers.toFixed(1)} km`} />
+                  <DetalleStat label="Horas reserva"      value={`${selectedSummary.reservaHours.toFixed(1)} h`} />
+                  <DetalleStat label="Horas extra"        value={`${selectedSummary.extraHours.toFixed(1)} h`} />
+                  <DetalleStat label="Horas manitas"      value={`${selectedSummary.manitasHours.toFixed(1)} h`} />
+                  <DetalleStat label="Incidencias"        value={selectedSummary.numIncidents} />
+                  <DetalleStat label="Sábanas/toallas"    value={selectedSummary.numLinenServices} />
                 </div>
               </section>
 
@@ -498,32 +389,32 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                 <h3 className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 mb-3">Desglose económico</h3>
                 <div className="space-y-1">
                   <ExpandableDetalleLinea
-                    label={`Reservas (${selectedSummary.numReservations} × ${fmtCurrency(selectedSummary.worker.pagoPorReserva ?? 0)})`}
+                    label={`Reservas (${selectedSummary.numReservations} × ${fmtCurrency(selectedSummary.worker.pay_per_reservation)})`}
                     value={selectedSummary.montoReservas}
                     details={selectedDesglose?.reservas ?? []}
                   />
                   <ExpandableDetalleLinea
-                    label={`Horas extra reservas (${selectedSummary.extraHours.toFixed(1)} h × ${fmtCurrency(EXTRA_HOUR_RATE)})`}
+                    label={`Horas extra (${selectedSummary.extraHours.toFixed(1)} h × ${fmtCurrency(EXTRA_HOUR_RATE)})`}
                     value={selectedSummary.montoExtras}
                     details={selectedDesglose?.extras ?? []}
                   />
                   <ExpandableDetalleLinea
-                    label={`Horas inicial + manitas (${(selectedSummary.initialHours + selectedSummary.manitasHours).toFixed(1)} h × ${fmtCurrency(EXTRA_HOUR_RATE)})`}
-                    value={selectedSummary.montoInicialManitas}
-                    details={selectedDesglose?.horasInicialManitas ?? []}
+                    label={`Manitas (${selectedSummary.manitasHours.toFixed(1)} h × ${fmtCurrency(EXTRA_HOUR_RATE)})`}
+                    value={selectedSummary.montoManitas}
+                    details={selectedDesglose?.manitas ?? []}
                   />
                   <ExpandableDetalleLinea
-                    label={`Kilometraje (${selectedSummary.numKilometers.toFixed(1)} km × ${fmtCurrency(selectedSummary.worker.precioPorKm ?? 0)})`}
+                    label={`Kilometraje (${selectedSummary.numKilometers.toFixed(1)} km × ${fmtCurrency(selectedSummary.worker.price_per_km)})`}
                     value={selectedSummary.montoKm}
                     details={selectedDesglose?.km ?? []}
                   />
                   <ExpandableDetalleLinea
-                    label={`Sábanas/toallas (${selectedSummary.numLinenServices} × ${fmtCurrency(selectedSummary.worker.pagoPorServicioSabanas ?? 0)})`}
+                    label={`Sábanas/toallas (${selectedSummary.numLinenServices} × ${fmtCurrency(selectedSummary.worker.pay_per_linen_service)})`}
                     value={selectedSummary.montoSabanas}
                     details={selectedDesglose?.sabanas ?? []}
                   />
                   <ExpandableDetalleLinea
-                    label={`Incidencias (${selectedSummary.numIncidents} × ${fmtCurrency(selectedSummary.worker.pagoPorIncidencia ?? 0)})`}
+                    label={`Incidencias (${selectedSummary.numIncidents} × ${fmtCurrency(selectedSummary.worker.pay_per_incident)})`}
                     value={selectedSummary.montoIncidencias}
                     details={selectedDesglose?.incidencias ?? []}
                   />
@@ -539,7 +430,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-2xl p-4">
                     <span className="text-[10px] uppercase tracking-wider text-amber-600 dark:text-amber-400">Saldo pendiente</span>
-                    <p className="text-xl font-medium text-amber-700 dark:text-amber-300 tabular-nums mt-1">{fmtCurrency(selectedSummary.worker.owedMoney ?? 0)}</p>
+                    <p className="text-xl font-medium text-amber-700 dark:text-amber-300 tabular-nums mt-1">{fmtCurrency(selectedSummary.worker.pending_balance)}</p>
                   </div>
                   <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl p-4">
                     <span className="text-[10px] uppercase tracking-wider text-blue-600 dark:text-blue-400">Efectivo retenido (mes)</span>
@@ -552,13 +443,13 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
             {canEdit && (
               <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50">
                 {selectedSummary.total > 0 && (
-                  <button onClick={() => setItemModalOpen(true)}
+                  <button onClick={() => handleAddToPending(selectedSummary.workerId, selectedSummary.total)}
                     disabled={savingWorkerId === selectedSummary.workerId}
                     className="flex items-center gap-2 px-4 py-2 bg-stone-100 dark:bg-stone-800 text-slate-700 dark:text-stone-200 text-xs font-medium rounded-xl hover:bg-stone-200 dark:hover:bg-stone-700 transition-all disabled:opacity-50">
-                    <TrendingUp size={14} /> Añadir al pendiente
+                    Añadir total del mes al pendiente
                   </button>
                 )}
-                {(selectedSummary.worker.owedMoney ?? 0) > 0 && (
+                {selectedSummary.worker.pending_balance > 0 && (
                   <button onClick={() => handleMarcarPagado(selectedSummary.workerId)}
                     disabled={savingWorkerId === selectedSummary.workerId}
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-xs font-medium rounded-xl hover:bg-emerald-700 transition-all disabled:opacity-50">
@@ -569,21 +460,6 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
             )}
           </div>
         </div>
-      )}
-
-      {/* Selector granular de items (individual) */}
-      {selectedSummary && (
-        <ItemSelectorModal
-          isOpen={itemModalOpen}
-          mode="single"
-          workerName={selectedSummary.worker.fullName}
-          currentBalance={selectedSummary.worker.owedMoney ?? 0}
-          items={selectedWorkerItems}
-          initialPeriod="this"
-          preselectAll={true}
-          onClose={() => setItemModalOpen(false)}
-          onConfirm={handleSingleConfirm}
-        />
       )}
     </div>
   );

@@ -4,7 +4,6 @@ import WorkerCard from '../components/workers/WorkerCard';
 import WorkerModal from '../components/workers/WorkerModal';
 import WorkerProfile from '../components/workers/WorkerProfile';
 import WorkerFilterModal, { WorkerFilters } from '../components/workers/WorkerFilterModal';
-import CobrosBulkBar from '../components/pagos/CobrosBulkBar';
 import { appsScriptApi, activityLogApi } from '../services/api';
 import { Worker, User } from '../services/mockData';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -288,10 +287,6 @@ const Workers: React.FC<WorkersProps> = ({ user, userRole }) => {
                 <List size={14} />
               </button>
             </div>
-
-            {!isReadOnly && (
-              <CobrosBulkBar user={user} onAfterApply={fetchWorkers} />
-            )}
 
             {!isReadOnly && (
               <button
