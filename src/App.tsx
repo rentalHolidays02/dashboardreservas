@@ -27,6 +27,7 @@ import WorkerRecords from './pages/WorkerRecords';
 import WorkerSwipeShell from './components/workers/WorkerSwipeShell';
 import { User } from './services/mockData';
 import { Sparkles } from 'lucide-react';
+import SetPasswordModal from './components/auth/SetPasswordModal';
 
 const PlaceholderPage = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 space-y-4 animate-in fade-in duration-500">
@@ -143,6 +144,7 @@ function App() {
       <UndoToastProvider>
         <NavigationGuardProvider>
           <BrowserRouter>
+            {user && <SetPasswordModal />}
             {user && user.role !== 'trabajador' && <ChatBot />}
             <Routes>
               <Route
