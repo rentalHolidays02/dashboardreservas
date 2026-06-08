@@ -177,6 +177,7 @@ export const supabaseOperationsApi = {
     horas_extra?: string;
     justificacion_extra?: string;
     notas?: string;
+    created_at?: string;
   }): Promise<ServiceReportDB | null> => {
     const { data, error } = await supabase
       .from('service_reports')
@@ -230,6 +231,7 @@ export const supabaseOperationsApi = {
     observaciones?: string;
     firma_trabajador_url?: string | null;
     firma_huesped_url?: string | null;
+    created_at?: string;
   }): Promise<KeyDeliveryDB | null> => {
     const { data, error } = await supabase
       .from('key_deliveries')
@@ -270,6 +272,7 @@ export const supabaseOperationsApi = {
     accommodation_name: string;
     duracion?: string;
     detalles?: string;
+    created_at?: string;
   }): Promise<IncidentReportDB | null> => {
     const { data, error } = await supabase
       .from('incident_reports')

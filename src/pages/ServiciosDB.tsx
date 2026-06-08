@@ -58,6 +58,7 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
 
   const [workerId, setWorkerId] = useState(record?.worker_id ?? '');
   const [accommodationName, setAccommodationName] = useState(record?.accommodation_name ?? '');
+  const [fechaCreacion, setFechaCreacion] = useState(record?.created_at?.split('T')[0] ?? new Date().toISOString().split('T')[0]);
   const [horaEntrada, setHoraEntrada] = useState(record?.hora_entrada ?? '');
   const [horaSalida, setHoraSalida] = useState(record?.hora_salida ?? '');
   const [km, setKm] = useState(String(record?.km ?? 0));
@@ -144,6 +145,7 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
         horas_extra: isManitas ? '00:00' : ensureHHMM(horasExtra),
         justificacion_extra: isManitas ? '' : justificacionExtra,
         notas,
+        created_at: `${fechaCreacion}T${isNew ? new Date().toTimeString().split(' ')[0] : (record?.created_at?.split('T')[1] || '00:00:00')}`,
       };
 
       // 1) Crear o actualizar el servicio padre
@@ -287,6 +289,11 @@ const ServiceModal: React.FC<ModalProps> = ({ record, kind, workers, accommodati
             <datalist id="accommodations-list-servicios">
               {accommodations.map(a => <option key={a.id} value={a.name} />)}
             </datalist>
+          </div>
+
+          <div>
+            <label className={labelCls}>Fecha de Creación *</label>
+            <input type="date" value={fechaCreacion} onChange={e => setFechaCreacion(e.target.value)} className={inputCls} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
