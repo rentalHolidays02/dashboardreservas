@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Search, Trash2, Clock, CalendarDays, Loader2, Plus, Pencil, X, Wrench, ClipboardList } from 'lucide-react';
-import { supabaseOperationsApi, IncidentReportDB, WorkerOption, ServiceReportDB } from '../services/supabaseOperationsApi';
+import { AlertTriangle, Search, Trash2, Clock, CalendarDays, Loader2, Plus, Pencil, X, Wrench, ClipboardList, Key } from 'lucide-react';
+import { supabaseOperationsApi, IncidentReportDB, WorkerOption, ServiceReportDB, KeyDeliveryDB } from '../services/supabaseOperationsApi';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useAdminDraft } from '../utils/useAdminDraft';
 
@@ -253,6 +253,7 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
   const [workers, setWorkers] = useState<WorkerOption[]>([]);
   const [accommodations, setAccommodations] = useState<{ id: string, name: string }[]>([]);
   const [servicios, setServicios] = useState<ServiceReportDB[]>([]);
+  const [keyDeliveries, setKeyDeliveries] = useState<KeyDeliveryDB[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'connected' | 'unique'>('all');
@@ -261,6 +262,7 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<IncidentReportDB | null>(null);
   const [linkedServicePopup, setLinkedServicePopup] = useState<ServiceReportDB | null>(null);
+  const [linkedKeyDeliveryPopup, setLinkedKeyDeliveryPopup] = useState<KeyDeliveryDB | null>(null);
 
   const serviciosById = useMemo(() => {
     const m = new Map<string, ServiceReportDB>();
@@ -268,22 +270,32 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
     return m;
   }, [servicios]);
 
+  const keyDeliveriesByServiceId = useMemo(() => {
+    const m = new Map<string, KeyDeliveryDB>();
+    for (const delivery of keyDeliveries) {
+      if (delivery.parent_service_id) m.set(delivery.parent_service_id, delivery);
+    }
+    return m;
+  }, [keyDeliveries]);
+
   useEffect(() => {
     fetchAll();
   }, []);
 
   const fetchAll = async () => {
     setLoading(true);
-    const [data, wks, accs, srvs] = await Promise.all([
+    const [data, wks, accs, srvs, deliveries] = await Promise.all([
       supabaseOperationsApi.getIncidentReports(),
       supabaseOperationsApi.getWorkers(),
       supabaseOperationsApi.getAccommodations(),
       supabaseOperationsApi.getServiceReports(),
+      supabaseOperationsApi.getKeyDeliveries(),
     ]);
     setIncidencias(data);
     setWorkers(wks);
     setAccommodations(accs);
     setServicios(srvs);
+    setKeyDeliveries(deliveries);
     setLoading(false);
   };
 
@@ -309,6 +321,10 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
 
   const getLinkedService = (inc: IncidentReportDB): ServiceReportDB | null => {
     return inc.parent_service_id ? serviciosById.get(inc.parent_service_id) ?? null : null;
+  };
+
+  const getLinkedKeyDelivery = (inc: IncidentReportDB): KeyDeliveryDB | null => {
+    return inc.parent_service_id ? keyDeliveriesByServiceId.get(inc.parent_service_id) ?? null : null;
   };
 
   const isIncidentConnected = (inc: IncidentReportDB): boolean => {
@@ -414,17 +430,29 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span>{inc.accommodation_name || '—'}</span>
                       {linkedService && (
-                        <button
-                          onClick={e => { e.stopPropagation(); setLinkedServicePopup(linkedService); }}
-                          title={linkedService.kind === 'manitas' ? 'Manitas vinculado — ver detalles' : 'Limpieza reserva vinculada — ver detalles'}
-                          className={`inline-flex items-center justify-center p-1 rounded-md transition-colors ${
-                            linkedService.kind === 'manitas'
-                              ? 'bg-amber-50 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-400/20'
-                              : 'bg-emerald-50 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-400/20'
-                          }`}
-                        >
-                          {linkedService.kind === 'manitas' ? <Wrench size={11} /> : <ClipboardList size={11} />}
-                        </button>
+                        <>
+                          <button
+                            onClick={e => { e.stopPropagation(); setLinkedServicePopup(linkedService); }}
+                            title={linkedService.kind === 'manitas' ? 'Manitas vinculado — ver detalles' : 'Limpieza reserva vinculada — ver detalles'}
+                            className={`inline-flex items-center justify-center p-1 rounded-md transition-colors ${
+                              linkedService.kind === 'manitas'
+                                ? 'bg-amber-50 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-400/20'
+                                : 'bg-emerald-50 dark:bg-emerald-400/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-400/20'
+                            }`}
+                          >
+                            {linkedService.kind === 'manitas' ? <Wrench size={11} /> : <ClipboardList size={11} />}
+                          </button>
+                          {getLinkedKeyDelivery(inc) && (
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setLinkedKeyDeliveryPopup(getLinkedKeyDelivery(inc)); }}
+                              title="Entrega de llaves vinculada — ver detalles"
+                              className="inline-flex items-center justify-center p-1 rounded-md transition-colors bg-blue-50 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-400/20"
+                            >
+                              <Key size={12} />
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
@@ -476,7 +504,82 @@ const IncidenciasDB: React.FC<IncidenciasDBProps> = ({ userRole }) => {
       )}
 
       <LinkedServicePopup service={linkedServicePopup} onClose={() => setLinkedServicePopup(null)} />
+      <LinkedKeyDeliveryPopup delivery={linkedKeyDeliveryPopup} onClose={() => setLinkedKeyDeliveryPopup(null)} />
     </div>
+  );
+};
+
+const LinkedKeyDeliveryPopup: React.FC<{ delivery: KeyDeliveryDB | null; onClose: () => void }> = ({ delivery, onClose }) => {
+  if (!delivery) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-white dark:bg-stone-900 rounded-3xl shadow-2xl border border-white/60 dark:border-stone-800/50 animate-in zoom-in-95 duration-300">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-stone-800/60">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200">
+              <Key size={16} />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-slate-800 dark:text-stone-100">Entrega de llaves vinculada</h3>
+              <p className="text-[10px] text-slate-400">{delivery.accommodation_name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-stone-800/60">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 text-[11px]">
+          <div className="grid gap-3">
+            <div className="flex justify-between text-slate-500 dark:text-stone-400">
+              <span>Trabajador</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.worker_name}</span>
+            </div>
+            <div className="flex justify-between text-slate-500 dark:text-stone-400">
+              <span>Fecha</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{fmtDate(delivery.created_at)}</span>
+            </div>
+            <div className="flex justify-between text-slate-500 dark:text-stone-400">
+              <span>Cliente</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.nombre_cliente || '—'}</span>
+            </div>
+            <div className="flex justify-between text-slate-500 dark:text-stone-400">
+              <span>Reserva</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.fecha_entrada_reserva ? `${delivery.fecha_entrada_reserva.split('T')[0]} → ${delivery.fecha_salida_reserva?.split('T')[0] ?? '—'}` : '—'}</span>
+            </div>
+          </div>
+
+          <div className="grid gap-2 bg-stone-50 dark:bg-stone-800/40 rounded-2xl p-4 border border-stone-200 dark:border-stone-700">
+            <div className="flex justify-between text-[11px] text-slate-500 dark:text-stone-400">
+              <span>Fianza</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.fianza_monto_metodo || '—'}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-500 dark:text-stone-400">
+              <span>Pagado</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.cantidad_pagada_monto ? `${delivery.cantidad_pagada_monto.toFixed(2).replace('.', ',')} €` : '0,00 €'}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-500 dark:text-stone-400">
+              <span>Garantía</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.fianza_garantia_metodo || '—'}</span>
+            </div>
+            <div className="flex justify-between text-[11px] text-slate-500 dark:text-stone-400">
+              <span>Kms</span>
+              <span className="font-medium text-slate-700 dark:text-stone-200">{delivery.km || 0} km</span>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[11px] text-slate-500 mb-1">Observaciones</p>
+            <div className="bg-stone-50 dark:bg-stone-800/40 rounded-xl px-3 py-2 text-slate-700 dark:text-stone-200 whitespace-pre-wrap">
+              {delivery.observaciones || 'Sin observaciones registradas.'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 };
 
