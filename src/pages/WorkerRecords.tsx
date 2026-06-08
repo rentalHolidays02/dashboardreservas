@@ -6,7 +6,8 @@ import {
   listMyKeyDeliveries,
   listMyIncidentReports,
 } from '../services/reportsApi';
-import { computeCleanPay, computeHoursPay } from '../utils/payments';
+import { computeHoursPay } from '../utils/payments';
+import { hhmmToHours, hoursBetween, EXTRA_HOUR_RATE } from '../utils/paymentsSupabase';
 import { Search, ChevronDown, X } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import PullToRefreshIndicator from '../components/workers/PullToRefreshIndicator';
@@ -120,20 +121,20 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
         const unified: UnifiedRecord[] = [
           ...services.map((s): UnifiedRecord => {
             if (s.kind === 'reserva') {
-              const pay = computeCleanPay(
-                s.accommodationName,
-                s.horaEntrada || '',
-                s.horaSalida || '',
+              const hoursWorked = hoursBetween(s.horaEntrada || null, s.horaSalida || null);
+              const extraHours = hhmmToHours(s.horasExtra);
+              const earnings =
                 me.pagoPorReserva
-              );
+                + extraHours * EXTRA_HOUR_RATE
+                + s.km * me.precioPorKm;
               return {
                 id: s.id,
                 type: 'Normal',
                 date: s.createdAt,
                 accommodation: s.accommodationName,
                 kms: s.km,
-                hoursWorked: pay.hoursWorked,
-                earnings: pay.base + pay.extraPay + s.km * me.precioPorKm,
+                hoursWorked,
+                earnings,
                 observations: s.notas,
                 horaEntrada: s.horaEntrada || undefined,
                 horaSalida: s.horaSalida || undefined,

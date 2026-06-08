@@ -311,7 +311,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                             {s.numReservations} res · {s.numKilometers.toFixed(0)} km · {s.reservaHours.toFixed(1)} h
                             {s.extraHours > 0 && <span className="text-amber-600 dark:text-amber-400"> ({s.extraHours.toFixed(1)} extra)</span>}
                             {s.manitasHours > 0 && <span> · {s.manitasHours.toFixed(1)} h manitas</span>}
-                            {s.numLinenServices > 0 && <span> · {s.numLinenServices} sáb</span>}
+                            {s.numLinenServices > 0 && <span> · {s.numLinenServices} pers. sáb</span>}
                             {s.numIncidents > 0 && <span> · {s.numIncidents} inc</span>}
                           </div>
                         </td>
@@ -381,7 +381,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                   <DetalleStat label="Horas extra"        value={`${selectedSummary.extraHours.toFixed(1)} h`} />
                   <DetalleStat label="Horas manitas"      value={`${selectedSummary.manitasHours.toFixed(1)} h`} />
                   <DetalleStat label="Incidencias"        value={selectedSummary.numIncidents} />
-                  <DetalleStat label="Sábanas/toallas"    value={selectedSummary.numLinenServices} />
+                  <DetalleStat label="Personas con sábanas"  value={selectedSummary.numLinenServices} />
                 </div>
               </section>
 
@@ -409,7 +409,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                     details={selectedDesglose?.km ?? []}
                   />
                   <ExpandableDetalleLinea
-                    label={`Sábanas/toallas (${selectedSummary.numLinenServices} × ${fmtCurrency(selectedSummary.worker.pay_per_linen_service)})`}
+                    label={`Sábanas/toallas (${selectedSummary.numLinenServices} pers. × ${fmtCurrency(selectedSummary.worker.pay_per_linen_service)})`}
                     value={selectedSummary.montoSabanas}
                     details={selectedDesglose?.sabanas ?? []}
                   />

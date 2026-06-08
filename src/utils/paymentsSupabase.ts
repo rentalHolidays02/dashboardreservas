@@ -87,8 +87,10 @@ const toShortDate = (iso: string): string => (iso || '').slice(0, 10);
 const ofMonth = <T extends { created_at: string }>(rows: T[], ym: string): T[] =>
   rows.filter(r => yearMonthOf(r.created_at) === ym);
 
-// Cuenta sábanas/toallas entregadas en una key_delivery (si entregadas, 1 servicio).
-const linenServicesCount = (kd: KeyDeliveryDB): number => kd.sabanas_entregadas ? 1 : 0;
+// Personas con sábanas/toallas en una key_delivery. El pago se hace por persona,
+// no por entrega: rate × nº personas. Si no se entregaron, 0.
+const linenPersons = (kd: KeyDeliveryDB): number =>
+  kd.sabanas_entregadas ? (Number(kd.sabanas_personas) || 0) : 0;
 
 // Suma fianzas cobradas en efectivo (monto + garantía) de una entrega.
 const cashRetained = (kd: KeyDeliveryDB): number => {
@@ -123,7 +125,7 @@ export const computeMonthlySummaries = (
     const extraHours      = reservas.reduce((s, r) => s + hhmmToHours(r.horas_extra), 0);
     const manitasHours    = manitas.reduce((s, r) => s + hoursBetween(r.hora_entrada, r.hora_salida), 0);
     const numIncidents    = wInc.length;
-    const numLinenServices = wKd.reduce((s, k) => s + linenServicesCount(k), 0);
+    const numLinenServices = wKd.reduce((s, k) => s + linenPersons(k), 0);
     const efectivoRetenidoMes = wKd.reduce((s, k) => s + cashRetained(k), 0);
 
     const montoReservas    = numReservations * w.pay_per_reservation;
@@ -218,14 +220,17 @@ export const computeDesglose = (
     });
 
   const sabanas: DesgloseFila[] = kdM
-    .filter(k => k.sabanas_entregadas)
-    .map(k => ({
-      id: `${k.id}-sab`,
-      date: toShortDate(k.created_at),
-      concept: k.accommodation_name || 'Entrega',
-      sub: `${k.sabanas_personas ?? 0} pers.`,
-      monto: worker.pay_per_linen_service,
-    }));
+    .filter(k => k.sabanas_entregadas && (Number(k.sabanas_personas) || 0) > 0)
+    .map(k => {
+      const persons = Number(k.sabanas_personas) || 0;
+      return {
+        id: `${k.id}-sab`,
+        date: toShortDate(k.created_at),
+        concept: k.accommodation_name || 'Entrega',
+        sub: `${persons} pers. × ${worker.pay_per_linen_service}€`,
+        monto: Math.round(persons * worker.pay_per_linen_service * 100) / 100,
+      };
+    });
 
   const incidencias: DesgloseFila[] = incM.map(i => ({
     id: i.id,
