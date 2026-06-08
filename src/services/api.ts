@@ -771,7 +771,11 @@ export const appsScriptApi = {
 
   updateUserPassword: async (password: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      // Cambia password + marca metadata.password_set para que no salga otra vez el modal forzado.
+      const { error } = await supabase.auth.updateUser({
+        password,
+        data: { password_set: true },
+      });
       if (error) throw error;
       return { ok: true };
     } catch (error: any) {
@@ -914,15 +918,12 @@ export const appsScriptApi = {
   },
 
   deleteProfile: async (userId: string) => {
-    // .select() nos devuelve las filas borradas: si RLS impide el DELETE, llega [] sin error.
-    const { data, error } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', userId)
-      .select('id');
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error('No se borró ningún perfil. Probable RLS sin política DELETE en "profiles".');
+    // Usa el RPC `admin_delete_user` (SECURITY DEFINER en SQL, migración v17).
+    // La función corre como superuser y borra de auth.users; la FK CASCADE de v16
+    // limpia profiles automáticamente. No requiere service_role ni edge function.
+    const { error } = await supabase.rpc('admin_delete_user', { target_id: userId });
+    if (error) {
+      throw new Error(error.message || 'Error al borrar el usuario');
     }
   },
 

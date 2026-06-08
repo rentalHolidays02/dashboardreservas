@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useUndoToast } from '../context/UndoToastContext';
 import { appsScriptApi, activityLogApi } from '../services/api';
+import { supabase } from '../services/supabaseClient';
 import { User, Worker, User as AppUserType } from '../services/mockData';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -204,8 +205,16 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
   useEffect(() => {
     if (isNew && form.role === 'trabajador' && unassignedWorkers.length === 0) {
       setLoadingWorkers(true);
-      appsScriptApi.getWorkers()
-        .then(ws => setUnassignedWorkers(ws.filter(w => !w.profileId)))
+      // Un worker se considera disponible si su profileId está vacío O
+      // si apunta a un perfil que ya no existe (huérfano por borrado manual en Supabase).
+      Promise.all([
+        appsScriptApi.getWorkers(),
+        supabase.from('profiles').select('id'),
+      ])
+        .then(([ws, { data: profiles }]) => {
+          const validIds = new Set((profiles || []).map((p: { id: string }) => p.id));
+          setUnassignedWorkers(ws.filter(w => !w.profileId || !validIds.has(w.profileId)));
+        })
         .catch(() => setUnassignedWorkers([]))
         .finally(() => setLoadingWorkers(false));
     }
@@ -215,13 +224,15 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
     setAssignedWorkerId(workerId);
     const w = unassignedWorkers.find(x => x.id === workerId);
     if (w) {
+      // Sólo rellena con los datos del worker los campos que el admin tenga vacíos.
+      // Si ya hay algo escrito, se respeta para no sobrescribir cambios manuales.
       setForm(f => ({
         ...f,
-        name: w.fullName || f.name,
-        email: w.email || f.email,
-        telefono: w.telefono || f.telefono,
-        dni: w.dni || f.dni,
-        bank_account: w.iban || f.bank_account,
+        name: f.name || w.fullName || '',
+        email: f.email || w.email || '',
+        telefono: f.telefono || w.telefono || '',
+        dni: f.dni || w.dni || '',
+        bank_account: f.bank_account || w.iban || '',
       }));
     }
     setErrors(e => ({ ...e, assignedWorkerId: '' }));
