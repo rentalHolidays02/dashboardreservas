@@ -744,12 +744,13 @@ export const appsScriptApi = {
         console.warn('⚠️ [API] Fallo al consultar Google en getProfileByEmail');
       }
 
-      // 2. Fallback a Supabase
+      // 2. Fallback a Supabase. maybeSingle() devuelve null en vez de 406 si no hay perfil
+      // (caso normal durante la creación: aún no existe).
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', email)
-        .single();
+        .maybeSingle();
 
       if (profile) {
         return {
@@ -832,24 +833,26 @@ export const appsScriptApi = {
 
   inviteUser: async (email: string, userData: { name: string; role: string; telefono?: string; dni?: string; home_address?: string; bank_account?: string }): Promise<{ ok: boolean; id?: string; error?: string }> => {
     try {
-      // Apps Script Web App no permite controlar CORS headers en la respuesta.
-      // Enviamos vía POST con no-cors para asegurar que la petición llegue.
+      // Apps Script /exec responde con CORS para GET. Leemos la respuesta y devolvemos el id real
+      // (antes era 'temp-id-...' por no-cors, lo que rompía vincular trabajador + recargar lista).
       const url = new URL(INVITACION_APPS_SCRIPT_URL);
       url.searchParams.append('action', 'inviteUser');
       url.searchParams.append('email', email);
       url.searchParams.append('userData', JSON.stringify(userData));
 
-      await fetch(url.toString(), {
-        method: 'GET',
-        mode: 'no-cors'
-      });
-      
-      // Con no-cors no podemos leer la respuesta (ID), pero la invitación se envía.
-      // El perfil se creará/actualizará en el siguiente paso de handleSave.
-      return { ok: true, id: 'temp-id-' + Date.now() }; 
+      const response = await fetch(url.toString(), { method: 'GET' });
+      const data = await response.json().catch(() => null);
+
+      if (!data) {
+        return { ok: false, error: 'Respuesta vacía del servicio de invitación.' };
+      }
+      if (data.ok === false || data.error) {
+        return { ok: false, error: data.error || 'El servicio rechazó la invitación.' };
+      }
+      return { ok: true, id: data.id };
     } catch (error: any) {
       console.error('Error al invitar usuario:', error);
-      return { ok: false, error: String(error) };
+      return { ok: false, error: String(error?.message || error) };
     }
   },
 

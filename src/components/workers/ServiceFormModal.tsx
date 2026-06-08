@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { DuracionInput, formatBizumNumber, resolveAccommodationId } from './serviceFormHelpers';
+import { DuracionInput, formatBizumNumber, formatDuracionTotal, resolveAccommodationId } from './serviceFormHelpers';
 import {
   saveDraft,
   submitServiceReport,
@@ -91,8 +91,12 @@ const emptyForm: FormState = {
   inc_detalles: '',
 };
 
+// text-base (16px) evita el auto-zoom de iOS Safari al hacer focus en inputs.
+// min-w-0 + appearance-none: iOS Safari aplica un min-width nativo a type=time/datetime-local
+// que ignora width:100% si no anulamos el styling de UA con appearance:none.
+// min-h-[3.5rem] + leading-6: type=time vacío en iOS colapsa su alto sin esto.
 const inputCls =
-  'w-full rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 px-4 py-3 text-sm text-slate-800 dark:text-stone-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-stone-400/30 dark:focus:ring-stone-500/30 focus:border-stone-300 dark:focus:border-stone-600 transition-all';
+  'w-full min-w-0 min-h-[3.5rem] appearance-none rounded-xl bg-transparent border-[1.5px] border-stone-200 dark:border-stone-700/60 px-4 py-4 text-base leading-6 text-slate-800 dark:text-stone-100 placeholder:text-stone-300 dark:placeholder:text-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-100 transition-colors';
 
 const labelCls = 'block text-xs font-medium text-slate-600 dark:text-stone-300 mb-1.5';
 
@@ -108,7 +112,7 @@ const SiNoToggle: React.FC<{
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`px-4 py-2.5 rounded-2xl text-sm font-medium border transition-all active:scale-[0.98] ${
+          className={`w-full py-4 rounded-2xl text-sm font-medium border transition-all active:scale-[0.98] ${
             active
               ? 'bg-stone-900 text-white border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100 shadow-sm'
               : 'bg-stone-50 dark:bg-stone-800/50 text-slate-600 dark:text-stone-300 border-slate-100 dark:border-stone-700/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
@@ -133,7 +137,7 @@ const PagoSelector: React.FC<{
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`px-3 py-2.5 rounded-2xl text-xs font-medium border transition-all active:scale-[0.98] ${
+          className={`w-full py-4 rounded-2xl text-xs font-medium border transition-all active:scale-[0.98] ${
             active
               ? 'bg-stone-900 text-white border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100 shadow-sm'
               : 'bg-stone-50 dark:bg-stone-800/50 text-slate-600 dark:text-stone-300 border-slate-100 dark:border-stone-700/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
@@ -148,34 +152,41 @@ const PagoSelector: React.FC<{
 
 const SectionToggle: React.FC<{
   title: string;
-  subtitle: string;
+  subtitle?: string;
   enabled: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
 }> = ({ title, subtitle, enabled, onToggle, children }) => (
-  <div className={`rounded-3xl border transition-all overflow-hidden ${
-    enabled
-      ? 'border-stone-300 dark:border-stone-600 bg-stone-100/50 dark:bg-stone-800/50'
-      : 'border-slate-100 dark:border-stone-800/50 bg-stone-50/50 dark:bg-stone-800/30'
-  }`}>
-    <button
-      type="button"
-      onClick={onToggle}
-      className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:scale-[0.99] transition-transform"
+  <div className="space-y-4">
+    {/* Pill cabecera (siempre aislada del contenido). Mismo borde/curva que los inputs. */}
+    <div className={`rounded-xl border-[1.5px] bg-transparent transition-colors ${
+      enabled
+        ? 'border-stone-900 dark:border-stone-100'
+        : 'border-stone-200 dark:border-stone-700/60'
+    }`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-4 text-left active:scale-[0.99] transition-transform"
+      >
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-800 dark:text-stone-100">{title}</p>
+          {subtitle && <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{subtitle}</p>}
+        </div>
+        <div className={`w-10 h-6 rounded-full flex items-center transition-all ${enabled ? 'bg-stone-900 dark:bg-stone-100 justify-end' : 'bg-stone-300 dark:bg-stone-700 justify-start'}`}>
+          <div className="w-5 h-5 rounded-full bg-white dark:bg-stone-900 shadow mx-0.5" />
+        </div>
+      </button>
+    </div>
+    {/* Expansión suave (grid-rows trick). Children al mismo nivel visual que el resto del form. */}
+    <div
+      className="grid transition-[grid-template-rows,opacity] duration-[350ms] ease-in-out"
+      style={{ gridTemplateRows: enabled ? '1fr' : '0fr', opacity: enabled ? 1 : 0 }}
     >
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 dark:text-stone-100">{title}</p>
-        <p className="text-[11px] text-slate-400 dark:text-stone-500 truncate">{subtitle}</p>
+      <div className="overflow-hidden">
+        <div className="space-y-4">{children}</div>
       </div>
-      <div className={`w-10 h-6 rounded-full flex items-center transition-all ${enabled ? 'bg-stone-900 dark:bg-stone-100 justify-end' : 'bg-stone-300 dark:bg-stone-700 justify-start'}`}>
-        <div className="w-5 h-5 rounded-full bg-white dark:bg-stone-900 shadow mx-0.5" />
-      </div>
-    </button>
-    {enabled && (
-      <div className="px-4 pb-4 pt-1 space-y-4 border-t border-stone-200/70 dark:border-stone-700/40">
-        {children}
-      </div>
-    )}
+    </div>
   </div>
 );
 
@@ -242,6 +253,40 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   const [tipo, setTipo] = useState<ServiceType | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
+  // dirty: marca true cuando el usuario toca cualquier campo. Se resetea al abrir.
+  // En estado para que el footer (Guardar en borrador) reaccione.
+  const [dirty, setDirty] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  // Animación entrada/salida del popup de confirmación (replica el picker).
+  const [confirmRender, setConfirmRender] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  useEffect(() => {
+    if (confirmCloseOpen) {
+      setConfirmRender(true);
+      const id = requestAnimationFrame(() => setConfirmVisible(true));
+      return () => cancelAnimationFrame(id);
+    } else if (confirmRender) {
+      setConfirmVisible(false);
+      const t = window.setTimeout(() => setConfirmRender(false), 320);
+      return () => window.clearTimeout(t);
+    }
+  }, [confirmCloseOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Popup informativo tras guardar borrador.
+  const [draftSavedOpen, setDraftSavedOpen] = useState(false);
+  const [draftSavedRender, setDraftSavedRender] = useState(false);
+  const [draftSavedVisible, setDraftSavedVisible] = useState(false);
+  useEffect(() => {
+    if (draftSavedOpen) {
+      setDraftSavedRender(true);
+      const id = requestAnimationFrame(() => setDraftSavedVisible(true));
+      return () => cancelAnimationFrame(id);
+    } else if (draftSavedRender) {
+      setDraftSavedVisible(false);
+      const t = window.setTimeout(() => setDraftSavedRender(false), 320);
+      return () => window.clearTimeout(t);
+    }
+  }, [draftSavedOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Animación de entrada/salida (slide-up estilo bottom-sheet).
   const [render, setRender] = useState(isOpen);
@@ -268,6 +313,9 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       setTipo(null);
       setForm(emptyForm);
       setStatus(null);
+      setConfirmCloseOpen(false);
+      setDraftSavedOpen(false);
+      setDirty(false);
     } else if (draftPayload) {
       const { tipo: draftTipo, ...rest } = draftPayload;
       if (draftTipo) setTipo(draftTipo);
@@ -285,13 +333,16 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     }
   }, [isOpen, draftPayload, initialTipo]);
 
-  const setF = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+  const setF = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setDirty(true);
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ type: 'ok' | 'error'; message: string } | null>(null);
 
-  const hasAnyData = useMemo(() => tipo !== null, [tipo]);
+  // hasAnyData controla habilitar "Guardar en borrador". Sólo cuando el usuario ha tocado algo.
+  const hasAnyData = dirty;
 
   const horasExtraMin = parseHHMM(form.horasExtra);
   const requiresJustificacion = horasExtraMin > 0;
@@ -406,8 +457,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
       const { el_firmaTrabajador: _ft, el_firmaHuesped: _fh, ...rest } = form;
       await saveDraft('service', { tipo, ...rest }, draftId ?? undefined);
       localDrafts.clear('service');
-      setStatus({ type: 'ok', message: 'Borrador guardado.' });
-      setTimeout(onClose, 900);
+      // En lugar de cerrar directo: popup informativo. El usuario debe entender que NO se ha enviado.
+      setDraftSavedOpen(true);
     } catch (e: any) {
       setStatus({ type: 'error', message: e?.message || 'Error al guardar.' });
     } finally {
@@ -450,39 +501,33 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-end justify-center">
-      {/* Backdrop */}
+      {/* Backdrop (no click-to-close: la única salida es el botón Cancelar). */}
       <div
-        onClick={handleCancelOrClose}
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300"
         style={{ opacity: visible ? 1 : 0 }}
       />
 
-      {/* Sheet */}
+      {/* Sheet — bg ligeramente translúcido + backdrop-blur para suavizar el borde superior. */}
       <div
-        className="relative w-full sm:max-w-md h-[90vh] flex flex-col bg-white dark:bg-stone-900 rounded-t-3xl shadow-2xl border-t border-white/60 dark:border-stone-800/50 font-dm"
+        className="relative w-full sm:max-w-md h-[92vh] flex flex-col bg-white/95 dark:bg-stone-900/95 backdrop-blur-2xl rounded-t-3xl shadow-2xl border-t border-white/70 dark:border-stone-800/60 font-dm"
         style={{
           transform: visible ? 'translateY(0)' : 'translateY(100%)',
           transition: 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: 'transform',
         }}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-2 shrink-0">
-          <div className="h-1 w-10 rounded-full bg-stone-300 dark:bg-stone-700" />
-        </div>
-
-        {/* Header */}
-        <div className="px-6 pt-2 pb-4 shrink-0 font-dm">
-          <h2 className="text-base font-medium text-slate-800 dark:text-stone-100 tracking-tight">
-            Rellenar informe
-          </h2>
-          <p className="text-xs text-slate-400 dark:text-stone-500 font-light mt-0.5">
+        {/* Header — mismo estilo que el picker, más compacto. */}
+        <div className="px-6 pt-6 pb-6 text-center shrink-0">
+          <h2 className="text-2xl font-medium text-slate-800 dark:text-stone-100 font-dm tracking-tight leading-snug">
             {tipo === 'reserva' ? 'Limpieza de reserva' : tipo === 'manitas' ? 'Manitas' : ''}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-stone-400 font-light font-dm mt-2">
+            Rellena los datos del informe.
           </p>
         </div>
 
         {/* Scrollable */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-5">
           {tipo && (
             <>
               {/* Apartamento */}
@@ -497,143 +542,9 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 />
               </div>
 
-              {/* Horas entrada/salida */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>
-                    Hora entrada <span className="text-stone-400 dark:text-stone-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={form.horaEntrada}
-                    onChange={(e) => setF('horaEntrada', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>
-                    Hora salida <span className="text-stone-400 dark:text-stone-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={form.horaSalida}
-                    onChange={(e) => setF('horaSalida', e.target.value)}
-                    className={inputCls}
-                  />
-                </div>
-              </div>
-
-              {/* Reserva-only: horas extra debajo del rango */}
-              {tipo === 'reserva' && (
-                <>
-                  <div>
-                    <label className={labelCls}>
-                      Horas extra realizadas
-                    </label>
-                    <DuracionInput
-                      value={form.horasExtra}
-                      onChange={(v) => setF('horasExtra', v)}
-                    />
-                  </div>
-                  {requiresJustificacion && (
-                    <div>
-                      <label className={labelCls}>
-                        Justificación horas extra <span className="text-stone-400 dark:text-stone-500">*</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={form.justificacionExtra}
-                        onChange={(e) => setF('justificacionExtra', e.target.value)}
-                        className={inputCls}
-                        placeholder="Explica por qué hubo horas extra…"
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Km */}
-              <div>
-                <label className={labelCls}>Km ida y vuelta</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.1}
-                  value={form.km}
-                  onChange={(e) => setF('km', e.target.value)}
-                  className={inputCls}
-                  placeholder="0"
-                />
-                <p className="mt-1.5 text-[10px] text-slate-400 dark:text-stone-500">
-                  Sólo si has usado coche. Déjalo en 0 si has ido andando o en transporte público.
-                </p>
-              </div>
-
-              {/* Reserva-only: Recoge llaves, Sigue huésped */}
-              {tipo === 'reserva' && (
-                <>
-                  <div>
-                    <label className={labelCls}>¿Recoges las llaves?</label>
-                    <SiNoToggle
-                      value={form.recogeLlaves}
-                      onChange={(v) => setF('recogeLlaves', v)}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>¿Sigue el huésped tras checkout?</label>
-                    <SiNoToggle
-                      value={form.sigueHuesped}
-                      onChange={(v) => setF('sigueHuesped', v)}
-                    />
-                  </div>
-                  {form.sigueHuesped === 'Si' && (
-                    <div>
-                      <label className={labelCls}>
-                        Hora salida del huésped <span className="text-stone-400 dark:text-stone-500">*</span>
-                      </label>
-                      <input
-                        type="time"
-                        value={form.horaSalidaReserva}
-                        onChange={(e) => setF('horaSalidaReserva', e.target.value)}
-                        className={inputCls}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Observaciones (reserva) / Descripción (manitas) */}
-              {tipo === 'reserva' ? (
-                <div>
-                  <label className={labelCls}>Observaciones</label>
-                  <textarea
-                    rows={4}
-                    value={form.observaciones}
-                    onChange={(e) => setF('observaciones', e.target.value)}
-                    className={inputCls}
-                    placeholder="¿Algo especial que comentar?"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className={labelCls}>
-                    Descripción del trabajo <span className="text-stone-400 dark:text-stone-500">*</span>
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={form.descripcion}
-                    onChange={(e) => setF('descripcion', e.target.value)}
-                    className={inputCls}
-                    placeholder="Ej: cambié bombilla del baño, arreglé tirador persiana…"
-                  />
-                </div>
-              )}
-
-              {/* ─── Entrega de llaves (opcional) ─── */}
+              {/* ─── Entrega de llaves (opcional) — debajo de alojamiento ─── */}
               <SectionToggle
-                title="Entrega de llaves"
-                subtitle="Datos del check-in del huésped"
+                title="¿Entregas las llaves?"
                 enabled={form.incluyeEntregaLlaves}
                 onToggle={() => setF('incluyeEntregaLlaves', !form.incluyeEntregaLlaves)}
               >
@@ -650,7 +561,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <label className={labelCls}>
                       Entrada reserva <span className="text-stone-400 dark:text-stone-500">*</span>
                     </label>
@@ -663,7 +574,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       className={inputCls}
                     />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className={labelCls}>
                       Salida reserva <span className="text-stone-400 dark:text-stone-500">*</span>
                     </label>
@@ -795,10 +706,148 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 />
               </SectionToggle>
 
+              {/* Horas entrada/salida */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <label className={labelCls}>
+                    Hora entrada {tipo === 'reserva' ? 'limpieza' : 'manitas'} <span className="text-stone-400 dark:text-stone-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={form.horaEntrada}
+                    onChange={(e) => setF('horaEntrada', e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className={labelCls}>
+                    Hora salida {tipo === 'reserva' ? 'limpieza' : 'manitas'} <span className="text-stone-400 dark:text-stone-500">*</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={form.horaSalida}
+                    onChange={(e) => setF('horaSalida', e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              {/* Reserva-only: horas extra debajo del rango */}
+              {tipo === 'reserva' && (
+                <>
+                  <div>
+                    <div className="flex items-baseline justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-slate-600 dark:text-stone-300">
+                        Horas extra realizadas
+                      </label>
+                      <span className="text-[11px] text-slate-500 dark:text-stone-400">
+                        Total: <span className="font-medium text-slate-700 dark:text-stone-200">{formatDuracionTotal(form.horasExtra)}</span>
+                      </span>
+                    </div>
+                    <DuracionInput
+                      hideTotal
+                      value={form.horasExtra}
+                      onChange={(v) => setF('horasExtra', v)}
+                    />
+                  </div>
+                  {requiresJustificacion && (
+                    <div>
+                      <label className={labelCls}>
+                        Justificación horas extra <span className="text-stone-400 dark:text-stone-500">*</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={form.justificacionExtra}
+                        onChange={(e) => setF('justificacionExtra', e.target.value)}
+                        className={inputCls}
+                        placeholder="Explica por qué hubo horas extra…"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Km */}
+              <div>
+                <label className={labelCls}>Km ida y vuelta</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step={0.1}
+                  value={form.km}
+                  onChange={(e) => setF('km', e.target.value)}
+                  className={inputCls}
+                  placeholder="0"
+                />
+                <p className="mt-1.5 text-[10px] text-slate-400 dark:text-stone-500">
+                  Sólo si has usado coche. Déjalo en 0 si has ido andando o en transporte público.
+                </p>
+              </div>
+
+              {/* Reserva-only: Recoge llaves, Sigue huésped */}
+              {tipo === 'reserva' && (
+                <>
+                  <div>
+                    <label className={labelCls}>¿Recoges las llaves?</label>
+                    <SiNoToggle
+                      value={form.recogeLlaves}
+                      onChange={(v) => setF('recogeLlaves', v)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>¿Sigue el huésped tras checkout?</label>
+                    <SiNoToggle
+                      value={form.sigueHuesped}
+                      onChange={(v) => setF('sigueHuesped', v)}
+                    />
+                  </div>
+                  {form.sigueHuesped === 'Si' && (
+                    <div>
+                      <label className={labelCls}>
+                        Hora salida del huésped <span className="text-stone-400 dark:text-stone-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={form.horaSalidaReserva}
+                        onChange={(e) => setF('horaSalidaReserva', e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Observaciones (reserva) / Descripción (manitas) */}
+              {tipo === 'reserva' ? (
+                <div>
+                  <label className={labelCls}>Observaciones</label>
+                  <textarea
+                    rows={4}
+                    value={form.observaciones}
+                    onChange={(e) => setF('observaciones', e.target.value)}
+                    className={inputCls}
+                    placeholder="¿Algo especial que comentar?"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className={labelCls}>
+                    Descripción del trabajo <span className="text-stone-400 dark:text-stone-500">*</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={form.descripcion}
+                    onChange={(e) => setF('descripcion', e.target.value)}
+                    className={inputCls}
+                    placeholder="Ej: cambié bombilla del baño, arreglé tirador persiana…"
+                  />
+                </div>
+              )}
+
               {/* ─── Incidencia (opcional) ─── */}
               <SectionToggle
-                title="Reportar incidencia"
-                subtitle="Reporta una incidencia en el alojamiento"
+                title="¿Reportas una incidencia?"
                 enabled={form.incluyeIncidencia}
                 onToggle={() => setF('incluyeIncidencia', !form.incluyeIncidencia)}
               >
@@ -859,7 +908,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={handleCancel}
+                  onClick={() => {
+                    if (dirty) setConfirmCloseOpen(true);
+                    else handleCancel();
+                  }}
                   disabled={busy}
                   className="w-full py-4 rounded-2xl text-sm font-medium text-slate-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-800/60 hover:bg-stone-200 dark:hover:bg-stone-700/60 transition-colors disabled:opacity-50"
                 >
@@ -878,12 +930,108 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   {label}
                 </button>
               </div>
-              <p className="mt-2 text-[10px] text-center text-slate-400 dark:text-stone-500">
+              <p className="mt-2 text-[11px] text-center text-slate-400 dark:text-stone-500">
                 {helper}
               </p>
             </div>
           );
         })()}
+
+        {/* Popup confirmación al cancelar con cambios. Replica picker (slide-up + fade). */}
+        {confirmRender && (
+          <div className="absolute inset-0 z-10 flex items-end justify-center">
+            <div
+              onClick={() => setConfirmCloseOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300"
+              style={{ opacity: confirmVisible ? 1 : 0 }}
+            />
+            <div
+              className="relative w-full sm:max-w-md bg-white dark:bg-stone-900 rounded-t-3xl shadow-2xl border-t border-white/60 dark:border-stone-800/50 pb-[calc(env(safe-area-inset-bottom)+1rem)] font-dm"
+              style={{
+                transform: confirmVisible ? 'translateY(0)' : 'translateY(100%)',
+                transition: 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+                willChange: 'transform',
+              }}
+            >
+              <div className="px-6 pt-12 pb-14 text-center">
+                <h2 className="text-2xl font-medium text-slate-800 dark:text-stone-100 font-dm tracking-tight leading-snug">
+                  ¿Descartar los cambios?
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-stone-400 font-light font-dm mt-3">
+                  Puedes guardar lo que llevas como borrador y seguir luego.
+                </p>
+              </div>
+              <div className="px-6 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmCloseOpen(false);
+                    handleCancel();
+                  }}
+                  disabled={busy}
+                  className="w-full py-4 rounded-2xl text-sm font-medium text-slate-600 dark:text-stone-300 bg-stone-100 dark:bg-stone-800/60 hover:bg-stone-200 dark:hover:bg-stone-700/60 transition-colors disabled:opacity-50"
+                >
+                  Descartar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmCloseOpen(false);
+                    handleSaveDraft();
+                  }}
+                  disabled={busy}
+                  className="w-full py-4 rounded-2xl text-sm font-medium text-white bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 transition-colors disabled:opacity-50"
+                >
+                  Guardar borrador
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Popup informativo tras guardar borrador. Texto pensado para que cualquiera entienda
+            que el informe NO se ha enviado todavía. */}
+        {draftSavedRender && (
+          <div className="absolute inset-0 z-20 flex items-end justify-center">
+            <div
+              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300"
+              style={{ opacity: draftSavedVisible ? 1 : 0 }}
+            />
+            <div
+              className="relative w-full sm:max-w-md bg-white dark:bg-stone-900 rounded-t-3xl shadow-2xl border-t border-white/60 dark:border-stone-800/50 pb-[calc(env(safe-area-inset-bottom)+1rem)] font-dm"
+              style={{
+                transform: draftSavedVisible ? 'translateY(0)' : 'translateY(100%)',
+                transition: 'transform 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+                willChange: 'transform',
+              }}
+            >
+              <div className="px-6 pt-12 pb-10 text-center">
+                <h2 className="text-2xl font-medium text-slate-800 dark:text-stone-100 font-dm tracking-tight leading-snug">
+                  Atención: tu informe NO se ha enviado
+                </h2>
+                <p className="text-sm text-slate-600 dark:text-stone-300 font-light font-dm mt-4 leading-relaxed">
+                  Lo hemos guardado como <span className="font-medium text-slate-800 dark:text-stone-100">borrador</span> para que no pierdas lo que llevas escrito.
+                </p>
+                <p className="text-sm text-slate-600 dark:text-stone-300 font-light font-dm mt-3 leading-relaxed">
+                  Para enviarlo de verdad tienes que volver a abrirlo desde <span className="font-medium text-slate-800 dark:text-stone-100">"Mis borradores"</span>, rellenar los campos que faltan y pulsar <span className="font-medium text-slate-800 dark:text-stone-100">"Enviar informe"</span>.
+                </p>
+              </div>
+              <div className="px-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraftSavedOpen(false);
+                    // Espera al fin de la animación de salida antes de cerrar el form.
+                    window.setTimeout(onClose, 320);
+                  }}
+                  className="w-full py-4 rounded-2xl text-sm font-medium text-white bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white dark:text-stone-900 transition-colors"
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     document.body
