@@ -79,10 +79,28 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
     .join('')
     .toUpperCase() || 'U';
 
-  const handleSaveName = () => {
-    if (nameValue.trim()) {
-      setSavedName(nameValue.trim());
+  const handleSaveName = async () => {
+    const trimmed = nameValue.trim();
+    if (!trimmed || !user.id) return;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ full_name: trimmed })
+        .eq('id', user.id);
+      if (error) throw error;
+
+      setSavedName(trimmed);
       setEditingName(false);
+
+      // Persistir en localStorage + notificar a App para refrescar el header.
+      const saved = localStorage.getItem('rh_user');
+      if (saved) {
+        const next = { ...JSON.parse(saved), name: trimmed };
+        localStorage.setItem('rh_user', JSON.stringify(next));
+        window.dispatchEvent(new Event('rh-user-updated'));
+      }
+    } catch (e) {
+      console.error('Error al guardar nombre:', e);
     }
   };
 
@@ -158,6 +176,14 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
 
       setAvatarUrl(publicUrl);
+
+      // Persistir en localStorage + notificar a App para refrescar el avatar del header.
+      const saved = localStorage.getItem('rh_user');
+      if (saved) {
+        const next = { ...JSON.parse(saved), avatar_url: publicUrl };
+        localStorage.setItem('rh_user', JSON.stringify(next));
+        window.dispatchEvent(new Event('rh-user-updated'));
+      }
     } catch (err: any) {
       setAvatarError('No se pudo subir la imagen. Inténtalo de nuevo.');
       console.error('Avatar upload error:', err);
@@ -263,8 +289,12 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
               />
             </button>
 
-            {pwSection && (
-              <div className="px-4 pb-4 -mt-1 space-y-2.5">
+            <div
+              className={`grid transition-[grid-template-rows] duration-500 ${pwSection ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+              style={{ transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)' }}
+            >
+              <div className="overflow-hidden">
+              <div className="px-4 pb-4 space-y-2.5">
                 <div className="relative">
                   <input
                     type={showCurrentPw ? 'text' : 'password'}
@@ -322,7 +352,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                   <button
                     onClick={handleSavePassword}
                     disabled={pwLoading}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors active:scale-[0.98]"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-xl bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white text-white dark:text-stone-900 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors active:scale-[0.98]"
                   >
                     {pwLoading
                       ? <><Loader2 size={14} className="animate-spin" /> Guardando…</>
@@ -337,7 +367,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                   </button>
                 </div>
               </div>
-            )}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -361,7 +392,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                   </p>
                 </div>
               </div>
-              <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 shrink-0 ${theme === 'dark' ? 'bg-orange-500' : 'bg-stone-300 dark:bg-stone-700'}`}>
+              <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 shrink-0 ${theme === 'dark' ? 'bg-stone-300 dark:bg-stone-400' : 'bg-stone-300 dark:bg-stone-700'}`}>
                 <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-300 ${theme === 'dark' ? 'translate-x-5' : 'translate-x-0'}`} />
               </div>
             </button>

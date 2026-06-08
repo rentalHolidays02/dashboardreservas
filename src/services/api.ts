@@ -644,7 +644,7 @@ export const appsScriptApi = {
       // Usamos variables mutables para permitir el fallback a Google
       let { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role, phone')
+        .select('id, email, full_name, role, phone, avatar_url')
         .eq('id', sessionUser.id)
         .single();
 
@@ -707,7 +707,8 @@ export const appsScriptApi = {
         email: p.email || sessionUser.email,
         role: (p.role || 'viewer') as any,
         name: p.full_name || p.name || sessionUser.user_metadata?.full_name || 'Usuario',
-        telefono: p.phone || p.telefono || undefined
+        telefono: p.phone || p.telefono || undefined,
+        avatar_url: p.avatar_url || null
       };
       
       console.log('👤 [Login] Usuario autenticado:', finalUser.name, 'Rol:', finalUser.role);
@@ -749,14 +750,15 @@ export const appsScriptApi = {
         .select('*')
         .eq('email', email)
         .single();
-      
+
       if (profile) {
         return {
           id: profile.id,
           email: profile.email,
           role: profile.role,
           name: profile.full_name,
-          telefono: profile.phone
+          telefono: profile.phone,
+          avatar_url: profile.avatar_url || null
         } as User;
       }
       return null;

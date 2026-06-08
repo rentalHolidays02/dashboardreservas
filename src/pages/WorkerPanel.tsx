@@ -14,11 +14,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import ServiceFormModal from '../components/workers/ServiceFormModal';
+import ServiceTypePickerSheet, { type ServiceType } from '../components/workers/ServiceTypePickerSheet';
 import EntregaLlavesFormModal from '../components/workers/EntregaLlavesFormModal';
 import IncidenciaFormModal from '../components/workers/IncidenciaFormModal';
 import SugerenciaFormModal from '../components/sugerencias/SugerenciaFormModal';
+import PullToRefreshIndicator from '../components/workers/PullToRefreshIndicator';
 import { listDrafts, type DraftRow } from '../services/reportsApi';
 import { useWorkerMonthStats } from '../hooks/useWorkerMonthStats';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { formatName } from '../utils/formatters';
 
 interface WorkerPanelProps {
@@ -83,8 +86,10 @@ const getDraftMeta = (
 };
 
 const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
-  const { loading: statsLoading, stats, recentJobs, totalJobs } = useWorkerMonthStats(user);
+  const { loading: statsLoading, stats, recentJobs, totalJobs, refresh: refreshStats } = useWorkerMonthStats(user);
   const [isServiceFormOpen, setIsServiceFormOpen] = useState(false);
+  const [isServiceTypePickerOpen, setIsServiceTypePickerOpen] = useState(false);
+  const [pendingServiceTipo, setPendingServiceTipo] = useState<ServiceType | null>(null);
   const [isLlavesFormOpen, setIsLlavesFormOpen] = useState(false);
   const [isIncidenciaFormOpen, setIsIncidenciaFormOpen] = useState(false);
   const [isSugerenciaFormOpen, setIsSugerenciaFormOpen] = useState(false);
@@ -127,6 +132,23 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
     refreshDrafts();
   }, [refreshDrafts]);
 
+  const refreshAll = useCallback(async () => {
+    await Promise.all([refreshStats(), refreshDrafts()]);
+  }, [refreshStats, refreshDrafts]);
+
+  const { rootRef, pullY, refreshing, dragging } = usePullToRefresh(refreshAll);
+
+  // Al entrar en Inicio, forzar scroll al tope.
+  useEffect(() => {
+    let node: HTMLElement | null = rootRef.current?.parentElement ?? null;
+    while (node) {
+      const oy = getComputedStyle(node).overflowY;
+      if (oy === 'auto' || oy === 'scroll') { node.scrollTop = 0; break; }
+      node = node.parentElement;
+    }
+    window.scrollTo(0, 0);
+  }, [rootRef]);
+
   const handleCloseModal = (setter: (v: boolean) => void) => () => {
     setter(false);
     setEditingDraft(null);
@@ -147,9 +169,10 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
       iconWrap: 'bg-orange-100 dark:bg-orange-400/10',
       iconColor: 'text-orange-600 dark:text-orange-400',
       onClick: () => {
-        // Siempre formulario nuevo → los borradores se acumulan
+        // Selector previo de tipo (reserva / manitas) → al continuar abre form.
         setEditingDraft(null);
-        setIsServiceFormOpen(true);
+        setPendingServiceTipo(null);
+        setIsServiceTypePickerOpen(true);
       },
     },
     {
@@ -183,8 +206,17 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
   // Máscara de fade: sin fade en el lado donde no hay más scroll (inicio/fin).
   const carouselMask = `linear-gradient(to right, ${carEdges.atStart ? 'black' : 'transparent'} 0, black 28px, black calc(100% - 28px), ${carEdges.atEnd ? 'black' : 'transparent'} 100%)`;
 
+  const settling = !dragging && !refreshing;
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div ref={rootRef} className="relative animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <PullToRefreshIndicator pullY={pullY} refreshing={refreshing} dragging={dragging} />
+      <div
+        style={{
+          transform: `translateY(${pullY}px)`,
+          transition: settling ? 'transform 360ms cubic-bezier(0.22,1,0.36,1)' : 'none',
+        }}
+      >
       <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
       <header className="flex flex-col items-start text-left pt-2 pb-2 pr-8 font-dm">
         <h1 className="text-3xl font-medium tracking-tight leading-snug text-[#bfb9b7] dark:text-stone-500">
@@ -192,19 +224,25 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
             <>
               Este mes llevas{' '}
               <Briefcase size={26} strokeWidth={2.5} className="inline align-middle relative -top-[2px] text-orange-500 mr-1.5" />
-              <span className="text-stone-800 dark:text-stone-200">
-                {statsLoading || !stats ? '—' : stats.cleanCount} servicios
-              </span>{' '}
+              {statsLoading || !stats ? (
+                <span className="inline-block align-middle h-6 w-28 rounded-md bg-stone-200/70 dark:bg-stone-800/50 animate-pulse" />
+              ) : (
+                <span className="text-stone-800 dark:text-stone-200">{stats.cleanCount} servicios</span>
+              )}{' '}
               y{' '}
               <Clock size={26} strokeWidth={2.5} className="inline align-middle relative -top-[2px] text-sky-500 mr-1.5" />
-              <span className="text-stone-800 dark:text-stone-200">
-                {statsLoading || !stats ? '—' : stats.hoursWorked.toFixed(1).replace('.', ',')} horas
-              </span>{' '}
+              {statsLoading || !stats ? (
+                <span className="inline-block align-middle h-6 w-28 rounded-md bg-stone-200/70 dark:bg-stone-800/50 animate-pulse" />
+              ) : (
+                <span className="text-stone-800 dark:text-stone-200">{stats.hoursWorked.toFixed(1).replace('.', ',')} horas</span>
+              )}{' '}
               trabajadas. Tienes{' '}
               <Wallet size={26} strokeWidth={2.5} className="inline align-middle relative -top-[2px] text-violet-500 mr-1.5" />
-              <span className="text-stone-800 dark:text-stone-200">
-                {statsLoading || !stats ? '—' : stats.totalOwed.toFixed(2).replace('.', ',')} €
-              </span>{' '}
+              {statsLoading || !stats ? (
+                <span className="inline-block align-middle h-6 w-20 rounded-md bg-stone-200/70 dark:bg-stone-800/50 animate-pulse" />
+              ) : (
+                <span className="text-stone-800 dark:text-stone-200">{stats.totalOwed.toFixed(2).replace('.', ',')} €</span>
+              )}{' '}
               pendientes.
             </>
           ) : null}
@@ -303,7 +341,21 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
           )}
         </div>
         {statsLoading ? (
-          <p className="px-1 text-[11px] text-slate-400 dark:text-stone-500">Cargando…</p>
+          <div className="rounded-xl bg-stone-50/60 dark:bg-stone-800/25 border border-stone-200/70 dark:border-stone-700/50 divide-y divide-stone-200/60 dark:divide-stone-700/40">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="px-4 py-4 flex items-center gap-3">
+                <div className="shrink-0 w-[52px] h-[52px] flex flex-col items-center justify-center gap-1.5">
+                  <div className="h-4 w-6 rounded bg-stone-200/70 dark:bg-stone-800/50 animate-pulse" />
+                  <div className="h-2.5 w-7 rounded bg-stone-200/60 dark:bg-stone-800/40 animate-pulse" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-3.5 w-2/3 rounded bg-stone-200/70 dark:bg-stone-800/50 animate-pulse" />
+                  <div className="h-3 w-1/3 rounded bg-stone-200/60 dark:bg-stone-800/40 animate-pulse" />
+                </div>
+                <div className="shrink-0 h-4 w-14 rounded bg-stone-200/70 dark:bg-stone-800/50 animate-pulse" />
+              </div>
+            ))}
+          </div>
         ) : recentJobs.length > 0 ? (
           <>
             <div className="rounded-xl bg-stone-50/60 dark:bg-stone-800/25 border border-stone-200/70 dark:border-stone-700/50 divide-y divide-stone-200/60 dark:divide-stone-700/40">
@@ -359,12 +411,24 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
         </button>
       </div>
       </div>
+      </div>
 
+      <ServiceTypePickerSheet
+        isOpen={isServiceTypePickerOpen}
+        onClose={() => setIsServiceTypePickerOpen(false)}
+        onContinue={(tipo) => {
+          setPendingServiceTipo(tipo);
+          setIsServiceTypePickerOpen(false);
+          // Sale el picker y entra el form de forma seguida (sincronizado con su anim).
+          window.setTimeout(() => setIsServiceFormOpen(true), 320);
+        }}
+      />
       <ServiceFormModal
         isOpen={isServiceFormOpen}
         onClose={handleCloseModal(setIsServiceFormOpen)}
         draftId={draftIdFor('service')}
         draftPayload={draftPayloadFor('service')}
+        initialTipo={pendingServiceTipo}
       />
       <EntregaLlavesFormModal
         isOpen={isLlavesFormOpen}

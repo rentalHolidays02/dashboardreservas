@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { User } from '../services/mockData';
 import {
   getMyWorker,
@@ -44,21 +44,19 @@ export const useWorkerMonthStats = (_user: User) => {
   const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
   const [totalJobs, setTotalJobs] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [me, services, keys, incidents] = await Promise.all([
-          getMyWorker(),
-          listMyServiceReports(),
-          listMyKeyDeliveries(),
-          listMyIncidentReports(),
-        ]);
+  const fetchAll = useCallback(async () => {
+    try {
+      const [me, services, keys, incidents] = await Promise.all([
+        getMyWorker(),
+        listMyServiceReports(),
+        listMyKeyDeliveries(),
+        listMyIncidentReports(),
+      ]);
 
-        if (!me) {
-          if (!cancelled) { setStats(null); setRecentJobs([]); setTotalJobs(0); setLoading(false); }
-          return;
-        }
+      if (!me) {
+        setStats(null); setRecentJobs([]); setTotalJobs(0); setLoading(false);
+        return;
+      }
 
         const now = new Date();
 
@@ -144,23 +142,23 @@ export const useWorkerMonthStats = (_user: User) => {
           .filter((j): j is RecentJob => j !== null)
           .sort((a, b) => b.date.getTime() - a.date.getTime());
 
-        if (!cancelled) {
-          setStats({
-            totalOwed: Math.round(totalOwed * 100) / 100,
-            cleanCount,
-            hoursWorked: Math.round(hoursWorked * 100) / 100,
-            kms: Math.round(kms * 100) / 100,
-          });
-          setRecentJobs(jobs.slice(0, 3));
-          setTotalJobs(jobs.length);
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) { setStats(null); setRecentJobs([]); setTotalJobs(0); setLoading(false); }
-      }
-    })();
-    return () => { cancelled = true; };
+      setStats({
+        totalOwed: Math.round(totalOwed * 100) / 100,
+        cleanCount,
+        hoursWorked: Math.round(hoursWorked * 100) / 100,
+        kms: Math.round(kms * 100) / 100,
+      });
+      setRecentJobs(jobs.slice(0, 3));
+      setTotalJobs(jobs.length);
+      setLoading(false);
+    } catch {
+      setStats(null); setRecentJobs([]); setTotalJobs(0); setLoading(false);
+    }
   }, []);
 
-  return { loading, stats, recentJobs, totalJobs };
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  return { loading, stats, recentJobs, totalJobs, refresh: fetchAll };
 };

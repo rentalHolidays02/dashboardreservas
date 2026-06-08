@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import type { User } from '../services/mockData';
 import {
   getMyWorker,
@@ -9,8 +9,10 @@ import {
 import { computeCleanPay, computeHoursPay } from '../utils/payments';
 import { Search, ChevronDown, X } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import PullToRefreshIndicator from '../components/workers/PullToRefreshIndicator';
 import { formatName } from '../utils/formatters';
 import { useAnimatedNumber } from '../hooks/useAnimatedNumber';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 
 interface WorkerRecordsProps {
   user: User;
@@ -100,21 +102,20 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
   const [isRangePickerOpen, setIsRangePickerOpen] = useState(false);
   const [customDraft, setCustomDraft] = useState<DateRangeFilter>(() => computePresetRange('thisMonth'));
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [me, services, keys, incidents] = await Promise.all([
-          getMyWorker(),
-          listMyServiceReports(),
-          listMyKeyDeliveries(),
-          listMyIncidentReports(),
-        ]);
+  const fetchData = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) setLoading(true);
+    try {
+      const [me, services, keys, incidents] = await Promise.all([
+        getMyWorker(),
+        listMyServiceReports(),
+        listMyKeyDeliveries(),
+        listMyIncidentReports(),
+      ]);
 
-        if (!me) {
-          setRecords([]);
-          return;
-        }
+      if (!me) {
+        setRecords([]);
+        return;
+      }
 
         const unified: UnifiedRecord[] = [
           ...services.map((s): UnifiedRecord => {
@@ -180,15 +181,20 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
           })),
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-        setRecords(unified);
-      } catch (error) {
-        console.error('Error fetching records:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [user]);
+      setRecords(unified);
+    } catch (error) {
+      console.error('Error fetching records:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData(true);
+  }, [fetchData, user]);
+
+  const refreshAll = useCallback(() => fetchData(false), [fetchData]);
+  const { rootRef, pullY, refreshing, dragging } = usePullToRefresh(refreshAll);
 
   // Normaliza la fecha del registro a YYYY-MM-DD (soporta ISO y "D/M/YYYY").
   const toIsoKey = (raw: string): string => {
@@ -266,7 +272,8 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
 
   if (loading) {
     return (
-      <div className="animate-in fade-in duration-500">
+      <div ref={rootRef} className="relative animate-in fade-in duration-500">
+        <PullToRefreshIndicator pullY={pullY} refreshing={refreshing} dragging={dragging} />
         <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
           {/* Skeleton selector */}
           <div className="max-w-xl mx-auto lg:mx-0 pt-2">
@@ -334,8 +341,17 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
       : '—';
   };
 
+  const settling = !dragging && !refreshing;
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div ref={rootRef} className="relative animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <PullToRefreshIndicator pullY={pullY} refreshing={refreshing} dragging={dragging} />
+      <div
+        style={{
+          transform: `translateY(${pullY}px)`,
+          transition: settling ? 'transform 360ms cubic-bezier(0.22,1,0.36,1)' : 'none',
+        }}
+      >
       <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
 
         {/* ── Selector de rango — tipografía del greeting de Inicio ── */}
@@ -424,15 +440,6 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
 
         {/* ── Lista de registros ── */}
         <section className="max-w-xl mx-auto lg:mx-0 space-y-3 font-gsf">
-          <div className="flex items-center gap-2 px-1">
-            <h2 className="text-xs font-medium text-slate-500 dark:text-stone-400">Registros</h2>
-            {filteredRecords.length > 0 && (
-              <span className="ml-auto text-[11px] text-slate-400 dark:text-stone-500">
-                {filteredRecords.length}
-              </span>
-            )}
-          </div>
-
           {filteredRecords.length === 0 ? (
             <div className="px-4 py-6 rounded-xl border border-dashed border-stone-200/70 dark:border-stone-700/40 text-center">
               <p className="text-sm text-slate-400 dark:text-stone-500">
@@ -475,80 +482,90 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
                       </span>
                     </button>
 
-                    {isExpanded && (
-                      <div className="px-4 pb-4 -mt-1 space-y-2 font-gsf text-[12px]">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400 dark:text-stone-500">Fecha</span>
-                          <span className="text-slate-700 dark:text-stone-200 text-right">{fechaLarga(r.date)}</span>
-                        </div>
-
-                        {(r.type === 'Normal' || r.type === 'Manitas') && r.horaEntrada && r.horaSalida && (
+                    {/* Expansión: animación nativa via grid-template-rows 0fr→1fr + fade. */}
+                    <div
+                      className="grid transition-[grid-template-rows,opacity] duration-[400ms] ease-in-out"
+                      style={{
+                        gridTemplateRows: isExpanded ? '1fr' : '0fr',
+                        opacity: isExpanded ? 1 : 0,
+                      }}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="px-4 pb-4 -mt-1 space-y-2 font-gsf text-[12px]">
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-400 dark:text-stone-500">Horario</span>
-                            <span className="text-slate-700 dark:text-stone-200 tabular-nums">{r.horaEntrada} – {r.horaSalida}</span>
+                            <span className="text-slate-400 dark:text-stone-500">Fecha</span>
+                            <span className="text-slate-700 dark:text-stone-200 text-right">{fechaLarga(r.date)}</span>
                           </div>
-                        )}
 
-                        {r.type === 'Incidencia' && (
-                          <>
-                            {r.hoursWorked > 0 && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-400 dark:text-stone-500">Duración</span>
-                                <span className="text-slate-700 dark:text-stone-200 tabular-nums">
-                                  {r.hoursWorked.toFixed(1).replace('.', ',')} h
-                                </span>
-                              </div>
-                            )}
-                            {r.description && (
-                              <div className="space-y-1">
-                                <span className="text-slate-400 dark:text-stone-500">Descripción</span>
-                                <p className="text-slate-700 dark:text-stone-200 leading-relaxed">{r.description}</p>
-                              </div>
-                            )}
-                          </>
-                        )}
+                          {(r.type === 'Normal' || r.type === 'Manitas') && r.horaEntrada && r.horaSalida && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 dark:text-stone-500">Horario</span>
+                              <span className="text-slate-700 dark:text-stone-200 tabular-nums">{r.horaEntrada} – {r.horaSalida}</span>
+                            </div>
+                          )}
 
-                        {r.type === 'Llaves' && (
-                          <>
-                            {r.nombreCliente && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-400 dark:text-stone-500">Cliente</span>
-                                <span className="text-slate-700 dark:text-stone-200">{r.nombreCliente}</span>
-                              </div>
-                            )}
-                            {r.fechaEntrada && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-400 dark:text-stone-500">Entrada reserva</span>
-                                <span className="text-slate-700 dark:text-stone-200">
-                                  {new Date(r.fechaEntrada).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
-                                </span>
-                              </div>
-                            )}
-                            {r.fechaSalida && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-slate-400 dark:text-stone-500">Salida reserva</span>
-                                <span className="text-slate-700 dark:text-stone-200">
-                                  {new Date(r.fechaSalida).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
-                                </span>
-                              </div>
-                            )}
-                          </>
-                        )}
+                          {r.type === 'Incidencia' && (
+                            <>
+                              {r.hoursWorked > 0 && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 dark:text-stone-500">Duración</span>
+                                  <span className="text-slate-700 dark:text-stone-200 tabular-nums">
+                                    {r.hoursWorked.toFixed(1).replace('.', ',')} h
+                                  </span>
+                                </div>
+                              )}
+                              {r.description && (
+                                <div className="space-y-1">
+                                  <span className="text-slate-400 dark:text-stone-500">Descripción</span>
+                                  <p className="text-slate-700 dark:text-stone-200 leading-relaxed">{r.description}</p>
+                                </div>
+                              )}
+                            </>
+                          )}
 
-                        {r.observations && (
-                          <div className="space-y-1">
-                            <span className="text-slate-400 dark:text-stone-500">Observaciones</span>
-                            <p className="text-slate-700 dark:text-stone-200 leading-relaxed">{r.observations}</p>
-                          </div>
-                        )}
+                          {r.type === 'Llaves' && (
+                            <>
+                              {r.nombreCliente && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 dark:text-stone-500">Cliente</span>
+                                  <span className="text-slate-700 dark:text-stone-200">{r.nombreCliente}</span>
+                                </div>
+                              )}
+                              {r.fechaEntrada && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 dark:text-stone-500">Entrada reserva</span>
+                                  <span className="text-slate-700 dark:text-stone-200">
+                                    {new Date(r.fechaEntrada).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                  </span>
+                                </div>
+                              )}
+                              {r.fechaSalida && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-slate-400 dark:text-stone-500">Salida reserva</span>
+                                  <span className="text-slate-700 dark:text-stone-200">
+                                    {new Date(r.fechaSalida).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                  </span>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {r.observations && (
+                            <div className="space-y-1">
+                              <span className="text-slate-400 dark:text-stone-500">Observaciones</span>
+                              <p className="text-slate-700 dark:text-stone-200 leading-relaxed">{r.observations}</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 );
               })}
             </div>
           )}
         </section>
+      </div>
       </div>
 
       {/* ── Picker de rango (modal) ── */}

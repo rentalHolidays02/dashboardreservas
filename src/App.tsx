@@ -92,6 +92,32 @@ function App() {
     verifyProfile();
   }, [user]);
 
+  // Backfill avatar_url para sesiones existentes en localStorage que no lo incluyen.
+  useEffect(() => {
+    if (!user?.id || user.avatar_url !== undefined) return;
+    (async () => {
+      const { supabase } = await import('./services/supabaseClient');
+      const { data } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', user.id!)
+        .single();
+      const next = { ...user, avatar_url: data?.avatar_url || null };
+      setUser(next);
+      localStorage.setItem('rh_user', JSON.stringify(next));
+    })();
+  }, [user?.id]);
+
+  // Refrescar usuario tras cambios desde Profile (ej. cambio de avatar).
+  useEffect(() => {
+    const onUserUpdated = () => {
+      const saved = localStorage.getItem('rh_user');
+      if (saved) setUser(JSON.parse(saved));
+    };
+    window.addEventListener('rh-user-updated', onUserUpdated);
+    return () => window.removeEventListener('rh-user-updated', onUserUpdated);
+  }, []);
+
   // Registro de actividad (Última conexión)
   useEffect(() => {
     if (user && user.id) {

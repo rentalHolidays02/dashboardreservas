@@ -131,7 +131,7 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
       {/* Fondo con mask de fade — sólo el bg, los hijos no */}
       <div
         aria-hidden
-        className="absolute top-0 left-0 right-0 z-30 pointer-events-none bg-white dark:bg-stone-950"
+        className="absolute top-0 left-0 right-0 z-30 pointer-events-none bg-mobile-app"
         style={{
           height: 'calc(env(safe-area-inset-top) + 5.5rem)',
           maskImage: 'linear-gradient(to bottom, black 0, black 20%, transparent 75%)',
@@ -154,13 +154,23 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
         <button
           onClick={() => scrollToPane(2)}
           aria-label="Perfil"
-          className={`rounded-full border text-slate-700 dark:text-stone-200 active:scale-95 transition p-2 origin-center ${headerAnimClass} ${
+          className={`rounded-full border text-slate-700 dark:text-stone-200 active:scale-95 transition origin-center overflow-hidden ${headerAnimClass} ${
+            user.avatar_url ? 'p-0' : 'p-2'
+          } ${
             index === 2
               ? 'bg-stone-100 dark:bg-stone-800/60 border-stone-200/70 dark:border-stone-700/50'
               : 'bg-transparent border-transparent'
           }`}
         >
-          <UserIcon size={16} />
+          {user.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt=""
+              className="w-8 h-8 object-cover rounded-full"
+            />
+          ) : (
+            <UserIcon size={16} />
+          )}
         </button>
       </div>
 
@@ -172,19 +182,19 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
       >
         <div
           ref={pane0Ref}
-          className="w-full shrink-0 snap-center snap-always overflow-y-auto no-scrollbar h-full bg-white dark:bg-stone-950 pt-[calc(env(safe-area-inset-top)+3.5rem)]"
+          className="w-full shrink-0 snap-center snap-always overflow-y-auto no-scrollbar h-full bg-mobile-app pt-[calc(env(safe-area-inset-top)+3.5rem)]"
         >
           <WorkerPanel user={user} />
         </div>
         <div
           ref={pane1Ref}
-          className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden no-scrollbar h-full pt-[calc(env(safe-area-inset-top)+3.5rem)]"
+          className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden no-scrollbar h-full bg-mobile-app pt-[calc(env(safe-area-inset-top)+3.5rem)]"
         >
           <WorkerRecords user={user} />
         </div>
         <div
           ref={pane2Ref}
-          className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden no-scrollbar h-full pt-[calc(env(safe-area-inset-top)+3.5rem)]"
+          className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden no-scrollbar h-full bg-mobile-app pt-[calc(env(safe-area-inset-top)+3.5rem)]"
         >
           <Profile user={user} onLogout={onLogout} />
         </div>

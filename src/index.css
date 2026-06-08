@@ -172,7 +172,14 @@ html.dark *::-webkit-scrollbar-thumb:hover {
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 420ms;
   --app-bg: linear-gradient(135deg, #F5F4F2 0%, #F7F5F0 100%);
+  /* Negro de móvil: fondo común de las pestañas del trabajador (Inicio/Historial/Perfil),
+     del overlay del header y del body en dark mode. Tono unificado. */
+  --mobile-black: #1c1a18;
 }
+
+/* Fondo común mobile (pestañas + overlay header) — evita el override global de bg-white. */
+.bg-mobile-app { background-color: #ffffff; }
+html.dark .bg-mobile-app { background-color: var(--mobile-black) !important; }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────────
    Timing strategy (sequential, not simultaneous):
@@ -278,7 +285,7 @@ body {
   body { background: #ffffff !important; background-attachment: initial !important; }
 }
 @media (max-width: 1279px) {
-  html.dark body { background: #0c0a09 !important; }
+  html.dark body { background: var(--mobile-black) !important; }
 }
 
 
