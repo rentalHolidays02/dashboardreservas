@@ -72,6 +72,7 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
   const [workerId, setWorkerId] = useState(record?.worker_id ?? '');
   const [accommodationName, setAccommodationName] = useState(record?.accommodation_name ?? '');
   const [nombreCliente, setNombreCliente] = useState(record?.nombre_cliente ?? '');
+  const [fechaCreacion, setFechaCreacion] = useState(record?.created_at?.split('T')[0] ?? new Date().toISOString().split('T')[0]);
   const [fechaEntrada, setFechaEntrada] = useState(record?.fecha_entrada_reserva?.split('T')[0] ?? '');
   const [fechaSalida, setFechaSalida] = useState(record?.fecha_salida_reserva?.split('T')[0] ?? '');
   const [sabanasEntregadas, setSabanasEntregadas] = useState(record?.sabanas_entregadas ?? false);
@@ -115,6 +116,7 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
         observaciones,
         firma_trabajador_url: firmaTrabajador || null,
         firma_huesped_url: firmaHuesped || null,
+        created_at: `${fechaCreacion}T${isNew ? new Date().toTimeString().split(' ')[0] : (record?.created_at?.split('T')[1] || '00:00:00')}`,
       };
 
       if (isNew) {
@@ -161,6 +163,11 @@ const KeyDeliveryModal: React.FC<ModalProps> = ({ record, workers, accommodation
             <datalist id="accommodations-list-llaves">
               {accommodations.map(a => <option key={a.id} value={a.name} />)}
             </datalist>
+          </div>
+
+          <div>
+            <label className={labelCls}>Fecha de Creación *</label>
+            <input type="date" value={fechaCreacion} onChange={e => setFechaCreacion(e.target.value)} className={inputCls} />
           </div>
 
           <div>

@@ -50,6 +50,7 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
   const isNew = !record;
   const [workerId, setWorkerId] = useState(record?.worker_id ?? '');
   const [accommodationName, setAccommodationName] = useState(record?.accommodation_name ?? '');
+  const [fechaCreacion, setFechaCreacion] = useState(record?.created_at?.split('T')[0] ?? new Date().toISOString().split('T')[0]);
   const [duracion, setDuracion] = useState(record?.duracion ?? '00:00');
   const [detalles, setDetalles] = useState(record?.detalles ?? '');
   const [saving, setSaving] = useState(false);
@@ -80,6 +81,7 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
           accommodation_name: accommodationName.trim(),
           duracion: finalDuracion,
           detalles,
+          created_at: `${fechaCreacion}T${new Date().toTimeString().split(' ')[0]}`,
         });
         if (!created) { setError('Error al crear la incidencia.'); return; }
         clearDraft();
@@ -89,9 +91,10 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
           accommodation_name: accommodationName.trim(),
           duracion: finalDuracion,
           detalles,
+          created_at: `${fechaCreacion}T${record?.created_at?.split('T')[1] || '00:00:00'}`,
         });
         if (!ok) { setError('Error al guardar los cambios.'); return; }
-        onSave({ ...record!, accommodation_name: accommodationName.trim(), duracion: finalDuracion, detalles });
+        onSave({ ...record!, accommodation_name: accommodationName.trim(), duracion: finalDuracion, detalles, created_at: `${fechaCreacion}T${record?.created_at?.split('T')[1] || '00:00:00'}` });
       }
       onClose();
     } finally {
@@ -137,6 +140,11 @@ const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, 
             <datalist id="accommodations-list">
               {accommodations.map(a => <option key={a.id} value={a.name} />)}
             </datalist>
+          </div>
+
+          <div>
+            <label className={labelCls}>Fecha de Creación *</label>
+            <input type="date" value={fechaCreacion} onChange={e => setFechaCreacion(e.target.value)} className={inputCls} />
           </div>
 
           <div>
