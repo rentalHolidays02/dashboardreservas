@@ -45,7 +45,7 @@ interface ModalProps {
   onSave: (updated: IncidentReportDB) => void;
   onCreate: (created: IncidentReportDB) => void;
 }
- 
+  
 const IncidentModal: React.FC<ModalProps> = ({ record, workers, accommodations, onClose, onSave, onCreate }) => {
   const isNew = !record;
   const [workerId, setWorkerId] = useState(record?.worker_id ?? '');
