@@ -296,6 +296,7 @@ export interface MyWorkerRow {
   id: string;
   fullName: string;
   pagoPorReserva: number;
+  pagoPorReservaAdicional: number;
   precioPorKm: number;
   pagoPorServicioSabanas: number;
   pagoPorIncidencia: number;
@@ -307,7 +308,7 @@ export const getMyWorker = async (): Promise<MyWorkerRow | null> => {
   if (!auth.user) return null;
   const { data, error } = await supabase
     .from('workers')
-    .select('id, full_name, pay_per_reservation, price_per_km, pay_per_linen_service, pay_per_incident')
+    .select('id, full_name, pay_per_reservation, pay_per_extra_reservation, price_per_km, pay_per_linen_service, pay_per_incident')
     .eq('profile_id', auth.user.id)
     .maybeSingle();
   if (error || !data) return null;
@@ -315,6 +316,7 @@ export const getMyWorker = async (): Promise<MyWorkerRow | null> => {
     id: data.id,
     fullName: data.full_name,
     pagoPorReserva: Number(data.pay_per_reservation || 0),
+    pagoPorReservaAdicional: Number(data.pay_per_extra_reservation || 0),
     precioPorKm: Number(data.price_per_km || 0),
     pagoPorServicioSabanas: Number(data.pay_per_linen_service || 0),
     pagoPorIncidencia: Number(data.pay_per_incident || 0),
