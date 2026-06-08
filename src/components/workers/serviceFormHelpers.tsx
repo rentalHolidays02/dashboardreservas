@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 
 export type SiNo = 'Si' | 'No';
 export type MetodoPago = 'Efectivo' | 'Tarjeta' | 'Bizum';
 
+// text-base (16px) evita el auto-zoom de iOS Safari. min-w-0 + appearance-none anulan el
+// min-width nativo de type=time/datetime-local que rompe los grids 50/50 en iPhone.
+// min-h-[3.5rem] + leading-6: type=time vacío en iOS colapsa su alto sin esto.
 export const inputCls =
-  'w-full rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-slate-100 dark:border-stone-700/50 px-4 py-3 text-sm text-slate-800 dark:text-stone-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300 transition-all';
+  'w-full min-w-0 min-h-[3.5rem] appearance-none rounded-xl bg-transparent border-[1.5px] border-stone-200 dark:border-stone-700/60 px-4 py-4 text-base leading-6 text-slate-800 dark:text-stone-100 placeholder:text-stone-300 dark:placeholder:text-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-100 transition-colors';
 
 export const labelCls =
   'block text-xs font-medium text-slate-600 dark:text-stone-300 mb-1.5';
@@ -32,7 +34,8 @@ export const DuracionInput: React.FC<{
   value: string;             // "HH:MM" o "0" o ""
   onChange: (v: string) => void;
   maxHours?: number;         // tope opcional (por defecto 23)
-}> = ({ value, onChange, maxHours = 23 }) => {
+  hideTotal?: boolean;       // si true, no pinta el "Total: …" interno (se renderiza fuera)
+}> = ({ value, onChange, maxHours = 23, hideTotal }) => {
   const total = parseHHMM(value);
   const h = Math.floor(total / 60);
   const m = total % 60;
@@ -78,13 +81,24 @@ export const DuracionInput: React.FC<{
           <p className="mt-1 text-[10px] text-center text-slate-400 dark:text-stone-500">Minutos</p>
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-center text-slate-500 dark:text-stone-400">
-        Total: <span className="font-medium text-slate-700 dark:text-stone-200">
-          {total === 0 ? '—' : `${h}h ${String(m).padStart(2, '0')}min`}
-        </span>
-      </p>
+      {!hideTotal && (
+        <p className="mt-2 text-[11px] text-center text-slate-500 dark:text-stone-400">
+          Total: <span className="font-medium text-slate-700 dark:text-stone-200">
+            {total === 0 ? '—' : `${h}h ${String(m).padStart(2, '0')}min`}
+          </span>
+        </p>
+      )}
     </div>
   );
+};
+
+// Formatea total HH:MM → "Xh YYmin" para mostrar fuera del DuracionInput.
+export const formatDuracionTotal = (raw: string): string => {
+  const total = parseHHMM(raw);
+  if (total === 0) return '—';
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}h ${String(m).padStart(2, '0')}min`;
 };
 
 // Formato móvil español 3-2-2-2 → "612 34 56 78"
@@ -121,9 +135,9 @@ export const SiNoToggle: React.FC<{
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`px-4 py-2.5 rounded-2xl text-sm font-medium border transition-all active:scale-[0.98] ${
+          className={`w-full py-4 rounded-2xl text-sm font-medium border transition-all active:scale-[0.98] ${
             active
-              ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+              ? 'bg-stone-900 text-white border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100 shadow-sm'
               : 'bg-stone-50 dark:bg-stone-800/50 text-slate-600 dark:text-stone-300 border-slate-100 dark:border-stone-700/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
           }`}
         >
@@ -146,9 +160,9 @@ export const PagoSelector: React.FC<{
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`px-3 py-2.5 rounded-2xl text-xs font-medium border transition-all active:scale-[0.98] ${
+          className={`w-full py-4 rounded-2xl text-xs font-medium border transition-all active:scale-[0.98] ${
             active
-              ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+              ? 'bg-stone-900 text-white border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100 shadow-sm'
               : 'bg-stone-50 dark:bg-stone-800/50 text-slate-600 dark:text-stone-300 border-slate-100 dark:border-stone-700/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
           }`}
         >
@@ -185,7 +199,6 @@ export const ApartamentoAutocomplete: React.FC<{
 
   return (
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-4" />
       <input
         type="text"
         value={value}
@@ -193,11 +206,11 @@ export const ApartamentoAutocomplete: React.FC<{
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 150)}
         placeholder="Buscar alojamiento..."
-        className={`${inputCls} pl-10`}
+        className={inputCls}
         autoComplete="off"
       />
       {focused && matches.length > 0 && (
-        <div className="absolute z-10 mt-1 w-full rounded-2xl bg-white dark:bg-stone-900 border border-slate-100 dark:border-stone-700/50 shadow-lg overflow-hidden">
+        <div className="absolute z-10 mt-1 w-full rounded-xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700/60 shadow-lg overflow-hidden">
           <ul className="max-h-72 overflow-y-auto overscroll-contain">
             {matches.map((m) => (
               <li
@@ -207,13 +220,13 @@ export const ApartamentoAutocomplete: React.FC<{
                   onChange(m.name);
                   setFocused(false);
                 }}
-                className="px-4 py-2.5 text-sm text-slate-700 dark:text-stone-200 hover:bg-orange-50 dark:hover:bg-orange-400/10 cursor-pointer truncate"
+                className="px-4 py-3 text-sm text-slate-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800/60 cursor-pointer truncate"
               >
                 {m.name}
               </li>
             ))}
           </ul>
-          <div className="px-4 py-2 text-[10px] text-slate-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800/40 border-t border-slate-100 dark:border-stone-800/60">
+          <div className="px-4 py-2 text-[10px] text-slate-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800/40 border-t border-stone-200/70 dark:border-stone-700/50">
             {matches.length} {matches.length === 1 ? 'alojamiento' : 'alojamientos'} · desplaza para ver más
           </div>
         </div>
