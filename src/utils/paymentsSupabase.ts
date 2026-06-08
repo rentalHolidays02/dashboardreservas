@@ -13,6 +13,15 @@ import type {
 
 export const EXTRA_HOUR_RATE = 10; // €/h fijos para horas extra y manitas
 
+// Prefijos de alojamiento que cobran "reserva adicional" además de la reserva base.
+const EXTRA_RESERVATION_PREFIXES = ['CHALET', 'VILLA', 'ADOSADO', 'BUNGALOW'];
+
+export const isExtraReservationAccommodation = (name: string | null | undefined): boolean => {
+  if (!name) return false;
+  const n = String(name).toUpperCase().trim();
+  return EXTRA_RESERVATION_PREFIXES.some(p => n.startsWith(p));
+};
+
 // Extrae YYYY-MM de un ISO o timestamp string.
 export const yearMonthOf = (iso: string | null | undefined): string | null => {
   if (!iso) return null;
@@ -46,6 +55,7 @@ export interface MonthlySummary {
   worker: WorkerPayments;
   // Cantidades
   numReservations: number;
+  numExtraReservations: number;   // reservas en CHALET/VILLA/ADOSADO/BUNGALOW
   numKilometers: number;
   reservaHours: number;
   extraHours: number;       // horas_extra de los servicios reserva
@@ -54,6 +64,7 @@ export interface MonthlySummary {
   numLinenServices: number;
   // Importes
   montoReservas: number;
+  montoExtraReservas: number;
   montoExtras: number;
   montoManitas: number;
   montoKm: number;
@@ -74,6 +85,7 @@ export interface DesgloseFila {
 
 export interface DesgloseDetalle {
   reservas: DesgloseFila[];
+  extraReservas: DesgloseFila[];
   extras: DesgloseFila[];
   manitas: DesgloseFila[];
   km: DesgloseFila[];
@@ -120,6 +132,7 @@ export const computeMonthlySummaries = (
     const manitas  = wSrv.filter(s => s.kind === 'manitas');
 
     const numReservations = reservas.length;
+    const numExtraReservations = reservas.filter(r => isExtraReservationAccommodation(r.accommodation_name)).length;
     const numKilometers   = wSrv.reduce((s, r) => s + (Number(r.km) || 0), 0);
     const reservaHours    = reservas.reduce((s, r) => s + hoursBetween(r.hora_entrada, r.hora_salida), 0);
     const extraHours      = reservas.reduce((s, r) => s + hhmmToHours(r.horas_extra), 0);
@@ -128,19 +141,21 @@ export const computeMonthlySummaries = (
     const numLinenServices = wKd.reduce((s, k) => s + linenPersons(k), 0);
     const efectivoRetenidoMes = wKd.reduce((s, k) => s + cashRetained(k), 0);
 
-    const montoReservas    = numReservations * w.pay_per_reservation;
-    const montoExtras      = extraHours * EXTRA_HOUR_RATE;
-    const montoManitas     = manitasHours * EXTRA_HOUR_RATE;
-    const montoKm          = numKilometers * w.price_per_km;
-    const montoIncidencias = numIncidents * w.pay_per_incident;
-    const montoSabanas     = numLinenServices * w.pay_per_linen_service;
+    const montoReservas      = numReservations * w.pay_per_reservation;
+    const montoExtraReservas = numExtraReservations * w.pay_per_extra_reservation;
+    const montoExtras        = extraHours * EXTRA_HOUR_RATE;
+    const montoManitas       = manitasHours * EXTRA_HOUR_RATE;
+    const montoKm            = numKilometers * w.price_per_km;
+    const montoIncidencias   = numIncidents * w.pay_per_incident;
+    const montoSabanas       = numLinenServices * w.pay_per_linen_service;
 
-    const total = montoReservas + montoExtras + montoManitas + montoKm + montoIncidencias + montoSabanas;
+    const total = montoReservas + montoExtraReservas + montoExtras + montoManitas + montoKm + montoIncidencias + montoSabanas;
 
     return {
       workerId: w.id,
       worker: w,
       numReservations,
+      numExtraReservations,
       numKilometers: Math.round(numKilometers * 100) / 100,
       reservaHours: Math.round(reservaHours * 100) / 100,
       extraHours: Math.round(extraHours * 100) / 100,
@@ -148,6 +163,7 @@ export const computeMonthlySummaries = (
       numIncidents,
       numLinenServices,
       montoReservas: Math.round(montoReservas * 100) / 100,
+      montoExtraReservas: Math.round(montoExtraReservas * 100) / 100,
       montoExtras: Math.round(montoExtras * 100) / 100,
       montoManitas: Math.round(montoManitas * 100) / 100,
       montoKm: Math.round(montoKm * 100) / 100,
@@ -174,10 +190,19 @@ export const computeDesglose = (
   const reservas: DesgloseFila[] = srvM
     .filter(s => s.kind === 'reserva')
     .map(s => ({
-      id: s.id,
+      id: `${s.id}-res`,
       date: toShortDate(s.created_at),
       concept: s.accommodation_name || 'Reserva',
       monto: worker.pay_per_reservation,
+    }));
+
+  const extraReservas: DesgloseFila[] = srvM
+    .filter(s => s.kind === 'reserva' && isExtraReservationAccommodation(s.accommodation_name))
+    .map(s => ({
+      id: `${s.id}-extra-res`,
+      date: toShortDate(s.created_at),
+      concept: s.accommodation_name || 'Reserva',
+      monto: worker.pay_per_extra_reservation,
     }));
 
   const extras: DesgloseFila[] = srvM
@@ -240,5 +265,5 @@ export const computeDesglose = (
     monto: worker.pay_per_incident,
   }));
 
-  return { reservas, extras, manitas, km, sabanas, incidencias };
+  return { reservas, extraReservas, extras, manitas, km, sabanas, incidencias };
 };

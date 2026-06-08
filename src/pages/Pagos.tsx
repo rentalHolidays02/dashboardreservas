@@ -308,7 +308,9 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                         <td className="px-8 py-5">
                           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-stone-400">
                             <Calculator size={11} className="text-slate-300" />
-                            {s.numReservations} res · {s.numKilometers.toFixed(0)} km · {s.reservaHours.toFixed(1)} h
+                            {s.numReservations} res
+                            {s.numExtraReservations > 0 && <span className="text-amber-600 dark:text-amber-400"> ({s.numExtraReservations} adic.)</span>}
+                            <span> · {s.numKilometers.toFixed(0)} km · {s.reservaHours.toFixed(1)} h</span>
                             {s.extraHours > 0 && <span className="text-amber-600 dark:text-amber-400"> ({s.extraHours.toFixed(1)} extra)</span>}
                             {s.manitasHours > 0 && <span> · {s.manitasHours.toFixed(1)} h manitas</span>}
                             {s.numLinenServices > 0 && <span> · {s.numLinenServices} pers. sáb</span>}
@@ -376,6 +378,7 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                 <h3 className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-stone-500 mb-3">Actividad del mes</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <DetalleStat label="Reservas"           value={selectedSummary.numReservations} />
+                  <DetalleStat label="Reservas adicional" value={selectedSummary.numExtraReservations} />
                   <DetalleStat label="Kilómetros"         value={`${selectedSummary.numKilometers.toFixed(1)} km`} />
                   <DetalleStat label="Horas reserva"      value={`${selectedSummary.reservaHours.toFixed(1)} h`} />
                   <DetalleStat label="Horas extra"        value={`${selectedSummary.extraHours.toFixed(1)} h`} />
@@ -392,6 +395,11 @@ const Pagos: React.FC<PagosProps> = ({ user, userRole }) => {
                     label={`Reservas (${selectedSummary.numReservations} × ${fmtCurrency(selectedSummary.worker.pay_per_reservation)})`}
                     value={selectedSummary.montoReservas}
                     details={selectedDesglose?.reservas ?? []}
+                  />
+                  <ExpandableDetalleLinea
+                    label={`Reservas adicional (${selectedSummary.numExtraReservations} × ${fmtCurrency(selectedSummary.worker.pay_per_extra_reservation)})`}
+                    value={selectedSummary.montoExtraReservas}
+                    details={selectedDesglose?.extraReservas ?? []}
                   />
                   <ExpandableDetalleLinea
                     label={`Horas extra (${selectedSummary.extraHours.toFixed(1)} h × ${fmtCurrency(EXTRA_HOUR_RATE)})`}

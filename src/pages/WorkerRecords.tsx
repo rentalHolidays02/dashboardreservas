@@ -7,7 +7,7 @@ import {
   listMyIncidentReports,
 } from '../services/reportsApi';
 import { computeHoursPay } from '../utils/payments';
-import { hhmmToHours, hoursBetween, EXTRA_HOUR_RATE } from '../utils/paymentsSupabase';
+import { hhmmToHours, hoursBetween, EXTRA_HOUR_RATE, isExtraReservationAccommodation } from '../utils/paymentsSupabase';
 import { Search, ChevronDown, X } from 'lucide-react';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import PullToRefreshIndicator from '../components/workers/PullToRefreshIndicator';
@@ -123,8 +123,12 @@ const WorkerRecords: React.FC<WorkerRecordsProps> = ({ user }) => {
             if (s.kind === 'reserva') {
               const hoursWorked = hoursBetween(s.horaEntrada || null, s.horaSalida || null);
               const extraHours = hhmmToHours(s.horasExtra);
+              const extraReserva = isExtraReservationAccommodation(s.accommodationName)
+                ? me.pagoPorReservaAdicional
+                : 0;
               const earnings =
                 me.pagoPorReserva
+                + extraReserva
                 + extraHours * EXTRA_HOUR_RATE
                 + s.km * me.precioPorKm;
               return {
