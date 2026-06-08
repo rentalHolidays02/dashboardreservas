@@ -21,7 +21,18 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
   const [hasContent, setHasContent] = useState(() => isDisplayableSignature(value));
   const [imgError, setImgError] = useState(false);
   const [imgSrc, setImgSrc] = useState(() => (isDisplayableSignature(value) ? value!.trim() : ''));
+  // Bloqueo en edición: si el componente recibe una firma ya guardada al montarse,
+  // la mostramos como imagen y bloqueamos el lienzo hasta que el usuario pulse "Limpiar".
+  const [locked, setLocked] = useState(() => !readOnly && isDisplayableSignature(value));
+  const [lockMsgVisible, setLockMsgVisible] = useState(false);
+  const lockMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
+
+  const showLockedMsg = () => {
+    setLockMsgVisible(true);
+    if (lockMsgTimer.current) clearTimeout(lockMsgTimer.current);
+    lockMsgTimer.current = setTimeout(() => setLockMsgVisible(false), 2500);
+  };
 
   const displayUrl = isDisplayableSignature(value) ? value!.trim() : '';
 
@@ -46,6 +57,8 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     const img = new Image();
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       setHasContent(true);
       loadedExternalIntoCanvas.current = false;
@@ -56,6 +69,15 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     };
     img.src = value;
   }, [value, readOnly]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, []);
 
   const getPos = useCallback(
     (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
@@ -74,6 +96,12 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
 
   const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
     if (readOnly) return;
+    if (locked) {
+      // Firma ya guardada — bloqueada hasta que se pulse "Limpiar".
+      e.preventDefault();
+      showLockedMsg();
+      return;
+    }
     e.preventDefault();
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -125,8 +153,11 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
 
   const clear = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    if (canvas) {
+      canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    setLocked(false);              // desbloquea para permitir dibujar uno nuevo
+    setLockMsgVisible(false);
     setHasContent(false);
     onChange('');
   };
@@ -152,8 +183,8 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
       </div>
 
       <div
-        style={{ touchAction: 'none' }}
-        className={`relative rounded-xl overflow-hidden border-2 bg-white dark:bg-stone-950 transition-colors
+        style={{ touchAction: 'none', backgroundColor: '#ffffff' }}
+        className={`relative rounded-xl overflow-hidden border-2 transition-colors
           ${readOnly
             ? 'border-stone-200/60 dark:border-stone-700/50'
             : drawing
@@ -161,13 +192,15 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
               : 'border-dashed border-orange-300/70 dark:border-orange-800/50 hover:border-orange-400 dark:hover:border-orange-600'
           }`}
       >
-        {readOnly && imgSrc && !imgError ? (
+        {(readOnly || locked) && imgSrc && !imgError ? (
           <img
             src={imgSrc}
             alt={label}
             referrerPolicy="no-referrer"
-            className="w-full block object-contain bg-white dark:bg-stone-950"
-            style={{ height: 110 }}
+            onClick={locked && !readOnly ? showLockedMsg : undefined}
+            onTouchStart={locked && !readOnly ? (e) => { e.preventDefault(); showLockedMsg(); } : undefined}
+            className={`w-full block object-contain ${locked && !readOnly ? 'cursor-not-allowed' : ''}`}
+            style={{ height: 110, backgroundColor: '#ffffff' }}
             onLoad={() => setHasContent(true)}
             onError={() => {
               const id = imgSrc.match(/(?:id=|\/d\/)([a-zA-Z0-9_-]+)/)?.[1];
@@ -186,7 +219,7 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
             width={600}
             height={180}
             className={`w-full block ${readOnly ? 'cursor-default' : 'cursor-crosshair'}`}
-            style={{ height: 110 }}
+            style={{ height: 110, backgroundColor: '#ffffff' }}
             onMouseDown={startDraw}
             onMouseMove={draw}
             onMouseUp={stopDraw}
@@ -196,9 +229,14 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
             onTouchEnd={stopDraw}
           />
         )}
+        {lockMsgVisible && (
+          <div className="absolute inset-x-2 bottom-2 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 text-[10px] text-center shadow font-medium animate-in fade-in slide-in-from-bottom-1 duration-200">
+            No se puede editar la firma. Pulsa "Limpiar" para hacer una nueva.
+          </div>
+        )}
         {showPlaceholder && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-[11px] text-slate-300 dark:text-stone-700">
+            <p className="text-[11px] text-slate-300 dark:text-slate-400">
               {readOnly
                 ? imgError
                   ? 'No se pudo cargar la firma'

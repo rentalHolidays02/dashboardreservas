@@ -891,17 +891,23 @@ export const appsScriptApi = {
   },
 
   updateProfile: async (userId: string, profileData: Partial<User>) => {
-    const { error } = await supabase
-      .from('profiles')
-      .upsert({
+    // Invocamos la edge function `update-user-profile`. Esta sincroniza el email
+    // en `auth.users` (que requiere service_role) además de actualizar `profiles`.
+    // Hacer sólo la upsert de profile rompía el login al cambiar email desde el panel.
+    const { data, error } = await supabase.functions.invoke('update-user-profile', {
+      body: {
         id: userId,
         email: profileData.email,
-        full_name: profileData.name,
+        name: profileData.name,
         role: profileData.role,
         phone: profileData.telefono,
-      });
-
-    if (error) throw error;
+      },
+    });
+    if (error) {
+      // El cuerpo de error de funciones suele venir en `data.error`
+      const msg = (data as any)?.error || error.message || 'Error al actualizar el perfil';
+      throw new Error(msg);
+    }
   },
 
   deleteProfile: async (userId: string) => {
@@ -934,15 +940,16 @@ export const appsScriptApi = {
   // de recuperación en el hash. Login.tsx detecta `type=recovery` y abre el flujo de nueva contraseña.
   // Esta URL DEBE estar en la whitelist de Dashboard → Authentication → URL Configuration → Redirect URLs.
   resendInvitation: async (email: string): Promise<{ ok: boolean; error?: string }> => {
-    const redirectTo = import.meta.env.VITE_AUTH_REDIRECT_URL || 'https://base-datos-pagos-rh.vercel.app/';
-    const [otpRes, resetRes] = await Promise.all([
-      supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } }),
-      supabase.auth.resetPasswordForEmail(email, { redirectTo }),
-    ]);
-    const errors = [otpRes.error?.message, resetRes.error?.message].filter(Boolean) as string[];
-    // Si al menos uno se envió, lo damos por bueno.
-    if (errors.length === 2) return { ok: false, error: errors.join(' | ') };
-    return { ok: true, error: errors[0] };
+    // redirectTo debe apuntar a /login para que el hash con el token llegue al componente correcto
+    const baseUrl = import.meta.env.VITE_AUTH_REDIRECT_URL
+      ? import.meta.env.VITE_AUTH_REDIRECT_URL.replace(/\/$/, '') + '/login'
+      : 'https://base-datos-pagos-rh.vercel.app/login';
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: baseUrl });
+    if (error) {
+      console.error('Error al enviar correo de recuperación:', error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
   },
 
   // Desvincula cualquier trabajador apuntando a este perfil (evita violar la FK al borrar el perfil).

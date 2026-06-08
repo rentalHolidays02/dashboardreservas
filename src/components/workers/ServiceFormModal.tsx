@@ -658,6 +658,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       type="datetime-local"
                       value={form.el_fechaEntradaReserva}
                       onChange={(e) => setF('el_fechaEntradaReserva', e.target.value)}
+                      min="1900-01-01T00:00"
+                      max="9999-12-31T23:59"
                       className={inputCls}
                     />
                   </div>
@@ -669,6 +671,8 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       type="datetime-local"
                       value={form.el_fechaSalidaReserva}
                       onChange={(e) => setF('el_fechaSalidaReserva', e.target.value)}
+                      min="1900-01-01T00:00"
+                      max="9999-12-31T23:59"
                       className={inputCls}
                     />
                   </div>

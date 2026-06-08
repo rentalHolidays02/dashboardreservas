@@ -179,8 +179,8 @@ export const ApartamentoAutocomplete: React.FC<{
   const [focused, setFocused] = useState(false);
   const matches = useMemo(() => {
     const q = value.trim().toLowerCase();
-    if (!q) return options.slice(0, 8);
-    return options.filter((o) => o.name.toLowerCase().includes(q)).slice(0, 8);
+    if (!q) return options;
+    return options.filter((o) => o.name.toLowerCase().includes(q));
   }, [value, options]);
 
   return (
@@ -197,21 +197,26 @@ export const ApartamentoAutocomplete: React.FC<{
         autoComplete="off"
       />
       {focused && matches.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-2xl bg-white dark:bg-stone-900 border border-slate-100 dark:border-stone-700/50 shadow-lg">
-          {matches.map((m) => (
-            <li
-              key={m.id}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(m.name);
-                setFocused(false);
-              }}
-              className="px-4 py-2.5 text-sm text-slate-700 dark:text-stone-200 hover:bg-orange-50 dark:hover:bg-orange-400/10 cursor-pointer truncate"
-            >
-              {m.name}
-            </li>
-          ))}
-        </ul>
+        <div className="absolute z-10 mt-1 w-full rounded-2xl bg-white dark:bg-stone-900 border border-slate-100 dark:border-stone-700/50 shadow-lg overflow-hidden">
+          <ul className="max-h-72 overflow-y-auto overscroll-contain">
+            {matches.map((m) => (
+              <li
+                key={m.id}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(m.name);
+                  setFocused(false);
+                }}
+                className="px-4 py-2.5 text-sm text-slate-700 dark:text-stone-200 hover:bg-orange-50 dark:hover:bg-orange-400/10 cursor-pointer truncate"
+              >
+                {m.name}
+              </li>
+            ))}
+          </ul>
+          <div className="px-4 py-2 text-[10px] text-slate-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800/40 border-t border-slate-100 dark:border-stone-800/60">
+            {matches.length} {matches.length === 1 ? 'alojamiento' : 'alojamientos'} · desplaza para ver más
+          </div>
+        </div>
       )}
     </div>
   );
