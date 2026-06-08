@@ -11,6 +11,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { aggregateDailyData } from '../utils/analytics';
 import { computeWorkerEarningsInRange } from '../utils/payments';
 
+
 const Analisis: React.FC = () => {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [checkIns, setCheckIns] = useState<CheckInOut[]>([]);
