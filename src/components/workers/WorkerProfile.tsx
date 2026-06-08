@@ -15,7 +15,6 @@ import { appsScriptApi, PaymentAction } from '../../services/api';
 import AccommodationAssignmentModal from './AccommodationAssignmentModal';
 import AccommodationDetailModal from '../accommodations/AccommodationDetailModal';
 import AccommodationCard from '../accommodations/AccommodationCard';
-import CobrosBulkBar from '../pagos/CobrosBulkBar';
 import { computeWorkerSeries, WorkerMetric } from '../../utils/payments';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigationGuard } from '../../context/NavigationGuardContext';
@@ -711,9 +710,6 @@ const WorkerProfile: React.FC<WorkerProfileProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
-            {!isEditing && (
-              <CobrosBulkBar workerId={worker.id} />
-            )}
             {isEditing ? (
               <>
                 <button

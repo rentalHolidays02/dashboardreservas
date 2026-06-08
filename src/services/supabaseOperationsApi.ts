@@ -6,6 +6,22 @@ export interface WorkerOption {
   phone: string;
 }
 
+export interface WorkerPayments {
+  id: string;
+  full_name: string;
+  phone: string;
+  dni: string | null;
+  photo_url: string | null;
+  active: boolean;
+  pay_per_reservation: number;
+  pay_per_extra_reservation: number;
+  pay_per_linen_service: number;
+  pay_per_incident: number;
+  price_per_km: number;
+  pending_balance: number;
+  retained_cash: number;
+}
+
 export interface ServiceReportDB {
   id: string;
   worker_id: string;
@@ -81,6 +97,44 @@ export const supabaseOperationsApi = {
       .order('full_name');
     if (error) { console.error('Error fetching workers:', error); return []; }
     return data;
+  },
+
+  getWorkersPayments: async (): Promise<WorkerPayments[]> => {
+    const { data, error } = await supabase
+      .from('workers')
+      .select('id, full_name, phone, dni, photo_url, active, pay_per_reservation, pay_per_extra_reservation, pay_per_linen_service, pay_per_incident, price_per_km, pending_balance, retained_cash')
+      .order('full_name');
+    if (error) { console.error('Error fetching workers payments:', error); return []; }
+    return (data ?? []).map((w: any) => ({
+      id: w.id,
+      full_name: w.full_name,
+      phone: w.phone ?? '',
+      dni: w.dni ?? null,
+      photo_url: w.photo_url ?? null,
+      active: w.active ?? true,
+      pay_per_reservation: Number(w.pay_per_reservation) || 0,
+      pay_per_extra_reservation: Number(w.pay_per_extra_reservation) || 0,
+      pay_per_linen_service: Number(w.pay_per_linen_service) || 0,
+      pay_per_incident: Number(w.pay_per_incident) || 0,
+      price_per_km: Number(w.price_per_km) || 0,
+      pending_balance: Number(w.pending_balance) || 0,
+      retained_cash: Number(w.retained_cash) || 0,
+    }));
+  },
+
+  markWorkerAsPaid: async (workerId: string): Promise<boolean> => {
+    const { error } = await supabase.from('workers').update({ pending_balance: 0 }).eq('id', workerId);
+    if (error) { console.error('Error marking worker as paid:', error); return false; }
+    return true;
+  },
+
+  addToWorkerBalance: async (workerId: string, amount: number): Promise<boolean> => {
+    const { data: current, error: e1 } = await supabase.from('workers').select('pending_balance').eq('id', workerId).single();
+    if (e1) { console.error('Error reading balance:', e1); return false; }
+    const next = Math.round(((Number(current?.pending_balance) || 0) + amount) * 100) / 100;
+    const { error } = await supabase.from('workers').update({ pending_balance: next }).eq('id', workerId);
+    if (error) { console.error('Error updating balance:', error); return false; }
+    return true;
   },
 
   // ── Accommodations ───────────────────────────────────────
