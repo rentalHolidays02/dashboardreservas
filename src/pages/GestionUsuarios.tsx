@@ -768,10 +768,12 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         } as any);
 
         if (!inviteResult.ok) {
-          throw new Error('No se pudo enviar la invitación. ' + (inviteResult.error || ''));
+          throw new Error('No se pudo crear el usuario. ' + (inviteResult.error || ''));
         }
 
-        // Log action: Crear/Invitar usuario
+        const newProfileId = inviteResult.id;
+
+        // Log action: Crear usuario
         await activityLogApi.log(
           user.id || null,
           user.name || 'Usuario',
@@ -779,30 +781,20 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
           'crear_usuario'
         );
 
-        showToast('Invitación enviada con éxito');
+        showToast(`Usuario creado. Contraseña por defecto: Rentalholidas0211`);
 
         // 2. Si es trabajador, vincular su ficha con la cuenta recién creada.
-        if (u.role === 'trabajador' && u.assignedWorkerId) {
-          // El perfil lo crea Apps Script de forma asíncrona; reintentamos resolver su id por email.
-          let profile = null;
-          for (let i = 0; i < 3 && !profile; i++) {
-            await new Promise(r => setTimeout(r, 1500));
-            profile = await appsScriptApi.getProfileByEmail(u.email).catch(() => null);
-          }
-          if (profile?.id) {
-            try {
-              await appsScriptApi.linkWorkerProfile(u.assignedWorkerId, profile.id);
-              await appsScriptApi.updateSensitiveData(profile.id, {
-                dni: u.dni,
-                home_address: u.home_address,
-                bank_account: u.bank_account,
-              });
-            } catch (linkErr) {
-              console.error('Error al vincular trabajador con la cuenta:', linkErr);
-              showToast('Cuenta creada, pero falló el vínculo con el trabajador.');
-            }
-          } else {
-            showToast('Cuenta creada, pero aún no se pudo vincular al trabajador.');
+        if (u.role === 'trabajador' && u.assignedWorkerId && newProfileId) {
+          try {
+            await appsScriptApi.linkWorkerProfile(u.assignedWorkerId, newProfileId);
+            await appsScriptApi.updateSensitiveData(newProfileId, {
+              dni: u.dni,
+              home_address: u.home_address,
+              bank_account: u.bank_account,
+            });
+          } catch (linkErr) {
+            console.error('Error al vincular trabajador con la cuenta:', linkErr);
+            showToast('Cuenta creada, pero falló el vínculo con el trabajador.');
           }
         }
 
@@ -810,7 +802,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         setTimeout(() => {
           loadUsers();
           setModalUser(undefined);
-        }, 1500);
+        }, 800);
 
         return;
       }

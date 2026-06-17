@@ -832,23 +832,31 @@ export const appsScriptApi = {
 
   inviteUser: async (email: string, userData: { name: string; role: string; telefono?: string; dni?: string; home_address?: string; bank_account?: string }): Promise<{ ok: boolean; id?: string; error?: string }> => {
     try {
-      // Apps Script Web App no permite controlar CORS headers en la respuesta.
-      // Enviamos vía POST con no-cors para asegurar que la petición llegue.
-      const url = new URL(INVITACION_APPS_SCRIPT_URL);
-      url.searchParams.append('action', 'inviteUser');
-      url.searchParams.append('email', email);
-      url.searchParams.append('userData', JSON.stringify(userData));
-
-      await fetch(url.toString(), {
-        method: 'GET',
-        mode: 'no-cors'
+      // Crear usuario directamente con contraseña por defecto vía Edge Function.
+      // Usa service_role internamente para crear auth.users + profiles.
+      const { data, error } = await supabase.functions.invoke('create-user-with-password', {
+        body: {
+          email,
+          userData: {
+            full_name: (userData as any).full_name || userData.name,
+            role: userData.role,
+            phone: userData.telefono || '',
+          },
+        },
       });
-      
-      // Con no-cors no podemos leer la respuesta (ID), pero la invitación se envía.
-      // El perfil se creará/actualizará en el siguiente paso de handleSave.
-      return { ok: true, id: 'temp-id-' + Date.now() }; 
+
+      if (error) {
+        const msg = (data as any)?.error || error.message || 'Error al crear el usuario';
+        return { ok: false, error: msg };
+      }
+
+      if (data && !data.ok) {
+        return { ok: false, error: data.error || 'Error desconocido al crear el usuario' };
+      }
+
+      return { ok: true, id: data?.id };
     } catch (error: any) {
-      console.error('Error al invitar usuario:', error);
+      console.error('Error al crear usuario:', error);
       return { ok: false, error: String(error) };
     }
   },

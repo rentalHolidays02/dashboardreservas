@@ -27,6 +27,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [authFlow, setAuthFlow] = useState<'login' | 'invite' | 'recovery'>('login');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const isSubmittingLogin = React.useRef(false);
 
 
 
@@ -40,6 +44,25 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     const setup = async () => {
       const { supabase } = await import('../services/supabaseClient');
+      const isRecovery = sessionStorage.getItem('is_recovery') === 'true';
+      const isInvite = sessionStorage.getItem('is_invite') === 'true';
+
+      // Comprobar si venimos de un flujo guardado antes del montaje del componente
+      if (isRecovery) {
+        if (isMounted) {
+          setAuthFlow('recovery');
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.email) setSessionEmail(session.user.email);
+          sessionStorage.removeItem('is_recovery');
+        }
+      } else if (isInvite) {
+        if (isMounted) {
+          setAuthFlow('invite');
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user?.email) setSessionEmail(session.user.email);
+          sessionStorage.removeItem('is_invite');
+        }
+      }
 
       const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (!isMounted) return;
@@ -50,6 +73,23 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           if (session?.user?.email) setSessionEmail(session.user.email);
 
         } else if (event === 'SIGNED_IN' && session?.user) {
+          // Si es un inicio de sesión manual desde el formulario de login, ignorar el evento de autologin asíncrono
+          if (isSubmittingLogin.current) {
+            return;
+          }
+
+          // Si estamos en un flujo de recuperación o invitación, evitamos el auto-login silencioso
+          if (isRecovery || sessionStorage.getItem('is_recovery') === 'true') {
+            setAuthFlow('recovery');
+            if (session.user.email) setSessionEmail(session.user.email);
+            return;
+          }
+          if (isInvite || sessionStorage.getItem('is_invite') === 'true') {
+            setAuthFlow('invite');
+            if (session.user.email) setSessionEmail(session.user.email);
+            return;
+          }
+
           // El usuario viene de un magic link o invitación
           // Si ya existe perfil válido en la BD, hacemos auto-login silencioso
           try {
@@ -82,9 +122,39 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   }, []);
 
 
+  const handleForgotPassword = async () => {
+    if (!email || !email.includes('@')) {
+      setForgotError('Introduce tu correo electrónico en el campo superior primero.');
+      setForgotSuccess(false);
+      return;
+    }
+    setForgotLoading(true);
+    setForgotError('');
+    setForgotSuccess(false);
+    try {
+      const { supabase } = await import('../services/supabaseClient');
+      const redirectUrl = window.location.origin + window.location.pathname;
+      const { error: sbError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+      if (sbError) {
+        console.error('Error de Supabase resetPasswordForEmail:', sbError);
+        setForgotError(`Error: ${sbError.message}`);
+      } else {
+        setForgotSuccess(true);
+      }
+    } catch (err) {
+      console.error('Error al conectar:', err);
+      setForgotError('Error al conectar con el servidor.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    isSubmittingLogin.current = true;
     setError('');
 
     if (password.length < 8) {
@@ -110,6 +180,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         const res = await appsScriptApi.updateUserPassword(password);
         if (res.ok) {
+          sessionStorage.removeItem('is_recovery');
+          sessionStorage.removeItem('is_invite');
           // Una vez actualizada, intentamos obtener el perfil para entrar
           const { data: { user } } = await (await import('../services/supabaseClient')).supabase.auth.getUser();
           if (user && user.email) {
@@ -143,6 +215,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       setError('Hubo un error al intentar procesar la solicitud.');
     } finally {
       setLoading(false);
+      isSubmittingLogin.current = false;
     }
   };
 
@@ -176,10 +249,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {/* Logo */}
             <div className="relative z-10">
               <div className="w-12 h-12 flex items-center justify-center overflow-hidden">
-                <img 
-                  src="/faviconRH.png" 
-                  alt="Logo" 
-                  className="w-12 h-12 object-contain mix-blend-multiply" 
+                <img
+                  src="/faviconRH.png"
+                  alt="Logo"
+                  className="w-12 h-12 object-contain mix-blend-multiply"
                   style={{ filter: 'contrast(1.2) brightness(1.1)' }}
                 />
               </div>
@@ -217,10 +290,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {/* Mobile logo */}
             <div className="flex lg:hidden items-center gap-2 mb-8">
               <div className="w-9 h-9 flex items-center justify-center overflow-hidden">
-                <img 
-                  src="/faviconRH.png" 
-                  alt="RH Logo" 
-                  className="w-9 h-9 object-contain mix-blend-multiply dark:mix-blend-screen" 
+                <img
+                  src="/faviconRH.png"
+                  alt="RH Logo"
+                  className="w-9 h-9 object-contain mix-blend-multiply dark:mix-blend-screen"
                   style={{ filter: 'contrast(1.2) brightness(1.1)' }}
                 />
               </div>
@@ -310,6 +383,47 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 </div>
               </div>
 
+              {/* ¿Olvidaste tu contraseña? — solo en login normal */}
+              {authFlow === 'login' && (
+                <div className="space-y-2.5">
+                  {!forgotSuccess && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        id="btn-forgot-password"
+                        disabled={forgotLoading}
+                        onClick={handleForgotPassword}
+                        className="text-xs text-orange-500 hover:text-orange-600 dark:text-orange-400 hover:underline transition-colors disabled:opacity-60 flex items-center gap-1"
+                      >
+                        {forgotLoading ? (
+                          <>
+                            <Loader2 className="animate-spin" size={12} />
+                            <span>Enviando enlace...</span>
+                          </>
+                        ) : (
+                          '¿Olvidaste tu contraseña?'
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {forgotSuccess && (
+                    <div className="p-3 rounded-xl border border-green-200 dark:border-green-800/40 bg-green-50/60 dark:bg-green-950/20 text-center">
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-300">📬 ¡Correo enviado!</p>
+                      <p className="text-[11px] text-slate-600 dark:text-stone-400 mt-0.5">
+                        Revisa la bandeja de entrada de tu correo para restablecer tu contraseña.
+                      </p>
+                    </div>
+                  )}
+
+                  {forgotError && (
+                    <div className="p-3 rounded-xl border border-red-200 dark:border-red-800/40 bg-red-50/60 dark:bg-red-950/20 text-center">
+                      <p className="text-xs font-medium text-red-600 dark:text-red-400">{forgotError}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Confirm Password (en invitación y recuperación) */}
               {authFlow !== 'login' && (
                 <div className="space-y-1.5">
@@ -366,7 +480,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-normal py-3.5 rounded-xl transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:translate-y-0 flex items-center justify-center gap-2 soft-shadow shadow-orange-200/60 dark:shadow-orange-900/30 text-sm mt-2"
+                className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-normal py-3.5 rounded-xl transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:translate-y-0 flex items-center justify-center gap-2 soft-shadow shadow-orange-200/60 dark:shadow-orange-900/30 text-sm mt-6"
               >
                 {loading ? (
                   <>
