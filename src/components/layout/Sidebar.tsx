@@ -14,6 +14,7 @@ import {
   KeyRound,
   TrendingUp,
   Sparkles,
+  LogOut,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -260,38 +261,49 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
 
-          {/* Profile link */}
-          <Link
-            to="/perfil"
-            onClick={(e) => {
-              e.preventDefault();
-              requestNavigate(() => {
-                navigate('/perfil');
-                if (window.innerWidth < 1280) onClose();
-              });
-            }}
-            title={collapsed ? 'Mi perfil' : undefined}
-            className={`flex items-center h-12 w-full gap-3 pl-2 pr-3 mb-2 rounded-xl transition-all cursor-pointer
-              ${collapsed ? '' : 'bg-white/20 dark:bg-stone-800/40 border border-white/40 dark:border-stone-700/40'}
-              hover:bg-black/5 dark:hover:bg-black/20`}
-          >
-            <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-[10px] font-medium soft-shadow overflow-hidden">
-              {(user.name || 'U')
-                .split(' ')
-                .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''))
-                .filter(Boolean)
-                .slice(0, 2)
-                .map((w) => w[0])
-                .join('')
-                .toUpperCase() || 'U'}
-            </div>
-            <div className="sidebar-fade min-w-0">
-              <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight truncate max-w-[120px]">
-                {user.name}
-              </p>
-              <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">Ver perfil</p>
-            </div>
-          </Link>
+          {/* Profile link + logout */}
+          <div className={`flex items-center gap-1 mb-2 ${collapsed ? 'justify-center' : ''}`}>
+            <Link
+              to="/perfil"
+              onClick={(e) => {
+                e.preventDefault();
+                requestNavigate(() => {
+                  navigate('/perfil');
+                  if (window.innerWidth < 1280) onClose();
+                });
+              }}
+              title={collapsed ? 'Mi perfil' : undefined}
+              className={`flex items-center h-12 gap-3 pl-2 pr-3 rounded-xl transition-all cursor-pointer min-w-0
+                ${collapsed ? 'w-12 justify-center' : 'flex-1 bg-white/20 dark:bg-stone-800/40 border border-white/40 dark:border-stone-700/40'}
+                hover:bg-black/5 dark:hover:bg-black/20`}
+            >
+              <div className="shrink-0 w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-700 text-[10px] font-medium soft-shadow overflow-hidden">
+                {(user.name || 'U')
+                  .split(' ')
+                  .map((w) => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''))
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((w) => w[0])
+                  .join('')
+                  .toUpperCase() || 'U'}
+              </div>
+              {!collapsed && (
+                <div className="min-w-0">
+                  <p className="text-sm tracking-tight text-slate-800 dark:text-stone-200 whitespace-nowrap leading-tight truncate max-w-[120px]">
+                    {user.name}
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-stone-500 capitalize leading-tight">Ver perfil</p>
+                </div>
+              )}
+            </Link>
+            <button
+              onClick={() => requestNavigate(onLogout)}
+              title="Cerrar sesión"
+              className="shrink-0 w-10 h-12 flex items-center justify-center rounded-xl text-slate-400 dark:text-stone-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
 
         </div>
       </div>

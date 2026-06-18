@@ -869,7 +869,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         'eliminar_usuario'
       );
 
-      showToast('Usuario eliminado del sistema (auth.users NO; necesita Apps Script)');
+      showToast('Usuario eliminado correctamente');
       // 3. Recargar desde Supabase para reflejar el estado real, no un filter optimista.
       await loadUsers();
     } catch (error: any) {

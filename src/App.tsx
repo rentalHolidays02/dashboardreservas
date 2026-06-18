@@ -144,7 +144,7 @@ function App() {
       <UndoToastProvider>
         <NavigationGuardProvider>
           <BrowserRouter>
-            {user && <SetPasswordModal />}
+            <SetPasswordModal />
             {user && user.role !== 'trabajador' && <ChatBot />}
             <Routes>
               <Route

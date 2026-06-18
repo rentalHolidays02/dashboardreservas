@@ -34,31 +34,69 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Crear cliente admin con service_role (disponible automáticamente en Edge Functions)
+    // Crear cliente admin con service_role
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // 1. Crear usuario en auth.users con la contraseña por defecto
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: DEFAULT_PASSWORD,
-      email_confirm: true, // Sin necesidad de confirmar email
-      user_metadata: { full_name },
-    })
-
-    if (authError) {
+    // Verificar que el caller es admin
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ ok: false, error: authError.message }),
+        JSON.stringify({ ok: false, error: 'No autorizado' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user: callerUser }, error: callerError } = await supabaseAdmin.auth.getUser(token)
+    if (callerError || !callerUser) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Token inválido' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+    const { data: callerProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', callerUser.id)
+      .single()
+    if (callerProfile?.role !== 'admin') {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'Solo los administradores pueden crear usuarios' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // 1. Invitar al usuario — esto dispara el template de email "Invite user"
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+      email,
+      {
+        data: { full_name, password_set: false },
+        redirectTo: Deno.env.get('SITE_URL') ?? 'https://basedatospagosrh.vercel.app',
+      }
+    )
+
+    if (inviteError) {
+      return new Response(
+        JSON.stringify({ ok: false, error: inviteError.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const userId = authData.user.id
+    const userId = inviteData.user.id
 
-    // 2. Crear perfil en la tabla `profiles`
+    // 2. Establecer contraseña por defecto para que pueda entrar sin esperar el link
+    const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: DEFAULT_PASSWORD,
+      email_confirm: true,
+    })
+    if (pwError) {
+      console.error('Error al establecer contraseña:', pwError)
+    }
+
+    // 3. Crear perfil en la tabla `profiles`
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({

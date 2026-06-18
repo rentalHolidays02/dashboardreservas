@@ -842,11 +842,9 @@ export const appsScriptApi = {
       const { data, error } = await supabase.functions.invoke('create-user-with-password', {
         body: {
           email,
-          userData: {
-            full_name: (userData as any).full_name || userData.name,
-            role: userData.role,
-            phone: userData.telefono || '',
-          },
+          full_name: (userData as any).full_name || userData.name,
+          role: userData.role,
+          phone: userData.telefono || '',
         },
       });
 
