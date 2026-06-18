@@ -837,26 +837,32 @@ export const appsScriptApi = {
 
   inviteUser: async (email: string, userData: { name: string; role: string; telefono?: string; dni?: string; home_address?: string; bank_account?: string }): Promise<{ ok: boolean; id?: string; error?: string }> => {
     try {
-      // Apps Script /exec responde con CORS para GET. Leemos la respuesta y devolvemos el id real
-      // (antes era 'temp-id-...' por no-cors, lo que rompía vincular trabajador + recargar lista).
-      const url = new URL(INVITACION_APPS_SCRIPT_URL);
-      url.searchParams.append('action', 'inviteUser');
-      url.searchParams.append('email', email);
-      url.searchParams.append('userData', JSON.stringify(userData));
+      // Crear usuario directamente con contraseña por defecto vía Edge Function.
+      // Usa service_role internamente para crear auth.users + profiles.
+      const { data, error } = await supabase.functions.invoke('create-user-with-password', {
+        body: {
+          email,
+          userData: {
+            full_name: (userData as any).full_name || userData.name,
+            role: userData.role,
+            phone: userData.telefono || '',
+          },
+        },
+      });
 
-      const response = await fetch(url.toString(), { method: 'GET' });
-      const data = await response.json().catch(() => null);
+      if (error) {
+        const msg = (data as any)?.error || error.message || 'Error al crear el usuario';
+        return { ok: false, error: msg };
+      }
 
-      if (!data) {
-        return { ok: false, error: 'Respuesta vacía del servicio de invitación.' };
+      if (data && !data.ok) {
+        return { ok: false, error: data.error || 'Error desconocido al crear el usuario' };
       }
-      if (data.ok === false || data.error) {
-        return { ok: false, error: data.error || 'El servicio rechazó la invitación.' };
-      }
-      return { ok: true, id: data.id };
+
+      return { ok: true, id: data?.id };
     } catch (error: any) {
-      console.error('Error al invitar usuario:', error);
-      return { ok: false, error: String(error?.message || error) };
+      console.error('Error al crear usuario:', error);
+      return { ok: false, error: String(error) };
     }
   },
 
