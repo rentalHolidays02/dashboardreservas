@@ -29,8 +29,10 @@ const SetPasswordModal: React.FC = () => {
         if (mounted) setNeeded(false);
         return;
       }
-      const passwordSet = !!u.user_metadata?.password_set;
-      if (mounted) setNeeded(!passwordSet);
+      // Solo mostrar si password_set es explícitamente false (usuarios nuevos creados por admin)
+      // undefined = usuario existente anterior al flujo → no mostrar
+      const needsSetup = u.user_metadata?.password_set === false;
+      if (mounted) setNeeded(needsSetup);
     };
 
     check();
