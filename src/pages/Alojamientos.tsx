@@ -335,17 +335,17 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
             />
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            {/* Ordenar */}
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setIsSortModalOpen(true)}
-                className="flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 transition-all active:scale-[0.98] hover:bg-white/80 dark:hover:bg-stone-800/60"
+                className="flex items-center justify-center gap-2 px-3 md:px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal text-slate-600 dark:text-stone-400 transition-all active:scale-[0.98] hover:bg-white/80 dark:hover:bg-stone-800/60"
               >
                 <ArrowUpDown size={12} className="text-orange-500" />
-                <span>Ordenar</span>
+                <span className="hidden md:inline">Ordenar</span>
               </button>
-
-              <AccommodationSortModal 
+              <AccommodationSortModal
                 isOpen={isSortModalOpen}
                 onClose={() => setIsSortModalOpen(false)}
                 sortConfig={sortConfig}
@@ -353,30 +353,28 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
               />
             </div>
 
+            {/* Filtro */}
             <div className="relative flex-1 md:flex-none">
-              <button 
+              <button
                 onClick={() => setIsFilterModalOpen(true)}
-                className={`w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all active:scale-[0.98] relative ${
+                className={`w-full flex items-center justify-center gap-2 px-3 md:px-6 py-2.5 bg-white dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-xl text-xs font-normal transition-all active:scale-[0.98] relative ${
                   activeFiltersCount > 0 ? 'text-orange-600 dark:text-orange-400 font-medium bg-white/90 dark:bg-stone-800/90' : 'text-orange-500/80 dark:text-orange-500/70 hover:text-orange-500 dark:hover:text-orange-400 hover:bg-white/80 dark:hover:bg-stone-800/60'
                 }`}
               >
                 <Filter size={12} className="text-orange-500" />
-                <span>Filtro</span>
+                <span className="hidden md:inline">Filtro</span>
                 {activeFiltersCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-600 text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50">
                     {activeFiltersCount}
                   </span>
                 )}
               </button>
-
               <AccommodationFilterModal
                 isOpen={isFilterModalOpen}
                 onClose={() => setIsFilterModalOpen(false)}
                 filters={filters}
                 availableCities={availableCities}
-                onApply={(newFilters) => {
-                  setFilters(newFilters);
-                }}
+                onApply={(newFilters) => { setFilters(newFilters); }}
                 pageSize={pageSize}
                 pageSizeOptions={PAGE_SIZE_OPTIONS}
                 onPageSizeChange={handleSetPageSize}
@@ -388,29 +386,22 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
               <button
                 onClick={() => handleSetViewMode('grid')}
                 title="Vista en cuadrícula"
-                className={`p-1.5 rounded-lg transition-all ${
-                  viewMode === 'grid'
-                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
-                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
-                }`}
+                className={`p-1.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'}`}
               >
                 <LayoutGrid size={14} />
               </button>
               <button
                 onClick={() => handleSetViewMode('table')}
                 title="Vista en lista"
-                className={`p-1.5 rounded-lg transition-all ${
-                  viewMode === 'table'
-                    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'
-                    : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'
-                }`}
+                className={`p-1.5 rounded-lg transition-all ${viewMode === 'table' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'text-slate-400 dark:text-stone-500 hover:text-slate-600 dark:hover:text-stone-300'}`}
               >
                 <List size={14} />
               </button>
             </div>
 
             {!isReadOnly && (
-              <div className="flex items-center gap-2">
+              <>
+                {/* Sync */}
                 <button
                   onClick={handleSync}
                   disabled={isSyncing || loading}
@@ -420,14 +411,15 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                   <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
                 </button>
 
+                {/* Nuevo Alojamiento — solo visible en desktop */}
                 <button
                   onClick={handleAddClick}
-                  className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
+                  className="hidden md:flex items-center justify-center gap-2 px-6 py-2.5 bg-orange-600 dark:bg-orange-600/90 hover:bg-orange-700 dark:hover:bg-orange-500 text-white rounded-xl text-xs font-medium transition-all shadow-lg shadow-orange-600/10 active:scale-[0.98]"
                 >
                   <Plus size={14} />
                   <span>Nuevo Alojamiento</span>
                 </button>
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -684,6 +676,17 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
         onManageWorkers={() => setIsWorkerModalOpen(true)}
         isReadOnly={isReadOnly}
       />
+
+      {/* FAB móvil — Nuevo Alojamiento */}
+      {!isReadOnly && (
+        <button
+          onClick={handleAddClick}
+          className="md:hidden fixed bottom-6 right-6 z-50 flex items-center gap-2 pl-4 pr-5 py-3.5 bg-orange-600 hover:bg-orange-700 text-white rounded-2xl text-sm font-medium shadow-xl shadow-orange-600/30 active:scale-95 transition-all"
+        >
+          <Plus size={16} />
+          Nuevo
+        </button>
+      )}
 
       {/* Modal de selección de trabajadores (Asignación Inversa) */}
       <WorkerSelectionModal
