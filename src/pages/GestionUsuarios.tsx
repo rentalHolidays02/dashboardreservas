@@ -616,7 +616,7 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
   const isWorking = user.onlineStatus === 'working';
 
   return (
-    <li className="group grid grid-cols-[2fr_1fr_1fr_120px] gap-4 items-center px-8 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
+    <li className="group grid grid-cols-[minmax(0,1fr)_100px] sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_100px] md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_120px] gap-4 items-center px-5 sm:px-8 py-4 hover:bg-stone-100/50 dark:hover:bg-stone-700/30 transition-colors">
 
       {/* Nombre */}
       <div className="flex items-center gap-3 min-w-0">
@@ -631,7 +631,10 @@ const UserRow: React.FC<UserRowProps> = ({ user, onEdit, onDelete, onPassword, o
           <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-white dark:border-stone-900 ${onlineDot}`} />
         </div>
         <div className="min-w-0">
-          <p className="text-sm text-slate-800 dark:text-stone-200 truncate">{user.name}</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-sm text-slate-800 dark:text-stone-200 truncate">{user.name}</p>
+            <span className={`sm:hidden flex-shrink-0 text-[10px] ${roleColor}`}>{roleLabel}</span>
+          </div>
           <p className="text-xs text-slate-400 dark:text-stone-500 truncate">{user.email}</p>
           {/* Mobile presence */}
           <div className="flex items-center gap-1.5 mt-0.5 md:hidden">
@@ -1002,7 +1005,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
       <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden mb-4">
 
         {/* Column headers */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_120px] gap-4 px-8 py-3 border-b border-stone-100 dark:border-stone-800">
+        <div className="grid grid-cols-[minmax(0,1fr)_100px] sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_100px] md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_120px] gap-4 px-5 sm:px-8 py-3 border-b border-stone-100 dark:border-stone-800">
           <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
           <span className="text-xs text-slate-400 dark:text-stone-500 hidden sm:block">Rol</span>
           <span className="text-xs text-slate-400 dark:text-stone-500 hidden md:block">Actividad</span>
