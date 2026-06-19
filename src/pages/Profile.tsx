@@ -105,10 +105,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
       setEditingName(false);
 
       // Persistir en localStorage + notificar a App para refrescar el header.
-      const saved = localStorage.getItem('rh_user');
+      const saved = sessionStorage.getItem('rh_user');
       if (saved) {
         const next = { ...JSON.parse(saved), name: trimmed };
-        localStorage.setItem('rh_user', JSON.stringify(next));
+        sessionStorage.setItem('rh_user', JSON.stringify(next));
         window.dispatchEvent(new Event('rh-user-updated'));
       }
     } catch (e) {
@@ -190,10 +190,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
       setAvatarUrl(publicUrl);
 
       // Persistir en localStorage + notificar a App para refrescar el avatar del header.
-      const saved = localStorage.getItem('rh_user');
+      const saved = sessionStorage.getItem('rh_user');
       if (saved) {
         const next = { ...JSON.parse(saved), avatar_url: publicUrl };
-        localStorage.setItem('rh_user', JSON.stringify(next));
+        sessionStorage.setItem('rh_user', JSON.stringify(next));
         window.dispatchEvent(new Event('rh-user-updated'));
       }
     } catch (err: any) {

@@ -12,7 +12,10 @@ interface WorkersTableProps {
   userRole?: User['role'];
 }
 
-const COL_WORKERS = 'grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px]';
+// minmax(0,…) permite que cada columna encoja por debajo del ancho mínimo de su
+// contenido (cabeceras largas como "Alojamientos"); sin esto el grid desborda y
+// genera scroll horizontal en pantallas estrechas.
+const COL_WORKERS = 'grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_80px]';
 
 type SortKey = 'none' | 'owed_asc' | 'owed_desc' | 'cleans_desc' | 'kms_desc';
 
@@ -146,7 +149,8 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
         </div>
       </div>
 
-      <div className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex flex-col">
+      {/* Tabla completa — solo en pantallas medianas o más anchas */}
+      <div className="hidden md:flex bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden flex-col">
         <div className={`grid ${COL_WORKERS} gap-4 px-8 py-6 border-b border-stone-100 dark:border-stone-800`}>
           <span className="text-xs text-slate-400 dark:text-stone-500">Nombre</span>
           <span className="text-xs text-slate-400 dark:text-stone-500">Alojamientos</span>
@@ -239,6 +243,61 @@ const WorkersTable: React.FC<WorkersTableProps> = ({ workers, selectedWorker, on
           })}
         </ul>
       </div>
+
+      {/* Vista móvil — tarjetas de 2 líneas, sin scroll horizontal */}
+      <ul className="md:hidden bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden divide-y divide-stone-100 dark:divide-stone-800">
+        {filtered.length === 0 ? (
+          <li className="px-5 py-6 flex items-center justify-center">
+            <span className="text-xs text-slate-400 dark:text-stone-500">Sin resultados</span>
+          </li>
+        ) : filtered.map((worker) => {
+          const isSelected = selectedWorker?.id === worker.id;
+          const formattedName = formatName(worker.fullName);
+          return (
+            <li
+              key={worker.id}
+              onClick={() => handleRowClick(worker)}
+              className={`px-5 py-4 cursor-pointer transition-colors ${
+                isSelected ? 'bg-stone-100/70 dark:bg-stone-700/40' : 'active:bg-stone-100/50 dark:active:bg-stone-700/30'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full flex-shrink-0 overflow-hidden soft-shadow bg-white dark:bg-stone-800">
+                    {worker.photo ? (
+                      <img src={worker.photo} alt={formattedName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="w-full h-full flex items-center justify-center text-xs text-slate-500 dark:text-stone-400">
+                        {formattedName.charAt(0)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <p className={`text-sm truncate ${isSelected ? 'text-orange-500' : 'text-slate-800 dark:text-stone-200'}`}>
+                      {formattedName}
+                    </p>
+                    {!worker.profileId && (
+                      <AlertTriangle size={12} className="text-amber-500 flex-shrink-0" />
+                    )}
+                  </div>
+                </div>
+                <p className={`text-sm tabular-nums flex-shrink-0 ${worker.owedMoney > 0 ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-500 dark:text-stone-400'}`}>
+                  {worker.owedMoney.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-2 pl-11">
+                <div className="min-w-0">
+                  <AccommodationTags items={worker.accommodations} />
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0 text-[11px] text-slate-500 dark:text-stone-400 tabular-nums">
+                  <span>{worker.cleansCountMonth} <span className="text-slate-400 dark:text-stone-500">limp.</span></span>
+                  <span>{worker.kmsMonth} <span className="text-slate-400 dark:text-stone-500">km</span></span>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       <div className="px-1 mt-2">
         <span className="text-xs text-slate-400 dark:text-stone-500">{filtered.length} de {workers.length} trabajadores</span>

@@ -4,6 +4,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Evita scroll horizontal fantasma: tooltips (whitespace-nowrap) y drawers
+   posicionados en absolute/fixed pueden extender el ancho de scroll de la
+   página más allá del viewport en pantallas estrechas. El layout principal
+   gestiona su propio scroll vertical, así que clipar la X a nivel de página
+   es seguro y elimina la barra horizontal sobrante. */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 /* Overrides explícitos con comillas — garantiza match en browsers que parseen estrictos */
 .font-dm  { font-family: "DM Sans", sans-serif !important; }
 .font-gsf { font-family: "Google Sans Flex", sans-serif !important; }

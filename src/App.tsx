@@ -44,18 +44,18 @@ const PlaceholderPage = ({ title }: { title: string }) => (
 
 function App() {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('rh_user');
+    const saved = sessionStorage.getItem('rh_user');
     return saved ? JSON.parse(saved) : null;
   });
 
   const handleLoginSuccess = (userData: User) => {
     setUser(userData);
-    localStorage.setItem('rh_user', JSON.stringify(userData));
+    sessionStorage.setItem('rh_user', JSON.stringify(userData));
   };
 
   const handleLogout = async () => {
     setUser(null);
-    localStorage.removeItem('rh_user');
+    sessionStorage.removeItem('rh_user');
     // Importante: Cerrar también la sesión real de Supabase para evitar cruce de cuentas
     const { supabase } = await import('./services/supabaseClient');
     await supabase.auth.signOut();
@@ -65,7 +65,7 @@ function App() {
     if (user) {
       const updatedUser = { ...user, role: newRole };
       setUser(updatedUser);
-      localStorage.setItem('rh_user', JSON.stringify(updatedUser));
+      sessionStorage.setItem('rh_user', JSON.stringify(updatedUser));
     }
   };
 
@@ -109,14 +109,14 @@ function App() {
         .single();
       const next = { ...user, avatar_url: data?.avatar_url || null };
       setUser(next);
-      localStorage.setItem('rh_user', JSON.stringify(next));
+      sessionStorage.setItem('rh_user', JSON.stringify(next));
     })();
   }, [user?.id]);
 
   // Refrescar usuario tras cambios desde Profile (ej. cambio de avatar).
   useEffect(() => {
     const onUserUpdated = () => {
-      const saved = localStorage.getItem('rh_user');
+      const saved = sessionStorage.getItem('rh_user');
       if (saved) setUser(JSON.parse(saved));
     };
     window.addEventListener('rh-user-updated', onUserUpdated);

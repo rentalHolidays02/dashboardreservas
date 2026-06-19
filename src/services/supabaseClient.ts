@@ -12,6 +12,11 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // Guardar la sesión en sessionStorage (no localStorage): sobrevive a
+    // recargas (F5) dentro de la misma pestaña, pero se borra al cerrar la
+    // pestaña/navegador. Más seguro: al cerrar, hay que volver a iniciar sesión.
+    // Nota: sessionStorage es por pestaña → cada pestaña nueva pide login.
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
     // Sustituye el Web Lock global del navegador (navigatorLock) por un lock
     // pass-through. El navigatorLock provoca un deadlock: signInWithPassword
     // recibe el token (HTTP 200) pero su promesa JS nunca resuelve porque el
