@@ -7,5 +7,18 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: false,
-  }
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'recharts',
+      'leaflet',
+      'lucide-react',
+      'jspdf',
+      'jspdf-autotable',
+      '@supabase/supabase-js',
+    ],
+  },
 })

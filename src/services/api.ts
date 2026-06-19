@@ -641,64 +641,23 @@ export const appsScriptApi = {
       const sessionUser = authData.user;
       if (!sessionUser) return null;
 
-      // Usamos variables mutables para permitir el fallback a Google
-      let { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('id, email, full_name, role, phone, avatar_url')
         .eq('id', sessionUser.id)
         .single();
 
-      if (profileError || !profile || profile.role === 'viewer') {
-        console.warn('Perfil no encontrado, RLS bloqueado o rol de visualizador detectado. Verificando con el puente de Google...');
-        try {
-          const url = new URL(INVITACION_APPS_SCRIPT_URL);
-          url.searchParams.append('action', 'getProfile');
-          url.searchParams.append('email', sessionUser.email || '');
-
-          const response = await fetch(url.toString(), { method: 'GET' });
-          const data = await response.json();
-          
-          console.log('🔍 [Login] Respuesta completa de Google:', JSON.stringify(data));
-
-          if (data.ok && data.profile) {
-            const googleProfile = data.profile;
-            console.info('✅ [Login] Perfil encontrado en Google:', googleProfile.full_name, 'Rol:', googleProfile.role);
-            
-            // Sincronizar con Supabase usando el ID real
-            const { error: upsertError } = await supabase
-              .from('profiles')
-              .upsert({
-                id: sessionUser.id,
-                email: sessionUser.email,
-                full_name: googleProfile.full_name || googleProfile.nombre || googleProfile.name,
-                role: googleProfile.role || googleProfile.rol || 'viewer',
-                phone: googleProfile.phone || googleProfile.telefono || googleProfile.phone_number
-              });
-
-            if (!upsertError) {
-              console.info('✨ [Login] Perfil sincronizado con Supabase.');
-              profile = { ...googleProfile, id: sessionUser.id };
-            } else {
-              console.error('❌ [Login] Error al sincronizar:', upsertError.message);
-              profile = { ...googleProfile, id: sessionUser.id };
-            }
-            profileError = null;
-          } else {
-            console.warn('⚠️ [Login] Google no encontró el perfil o devolvió error:', data.error);
-          }
-        } catch (gasError) {
-          console.error('❌ [Login] Fallo crítico en el puente de Google:', gasError);
-        }
-
-        if (!profile) {
-          console.warn('🚩 [Login] Fallback final a metadatos de Auth.');
-          return {
-            id: sessionUser.id,
-            email: sessionUser.email || '',
-            role: 'viewer',
-            name: sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || 'Usuario'
-          };
-        }
+      if (profileError || !profile) {
+        // Sin perfil en Supabase → acceso de solo lectura (viewer).
+        // El puente a Google Apps Script se eliminó: no contenía perfiles
+        // y solo añadía latencia (cold start) al login.
+        console.warn('🚩 [Login] Perfil no encontrado en Supabase. Fallback a viewer.');
+        return {
+          id: sessionUser.id,
+          email: sessionUser.email || '',
+          role: 'viewer',
+          name: sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || 'Usuario'
+        };
       }
 
       const p = profile as any;
@@ -2023,17 +1982,24 @@ export const appsScriptApi = {
     });
 
     try {
-      const { data, error } = await supabase
-        .from('accommodations')
-        .select('*')
-        .order('name', { ascending: true });
+      // Caché TTL + deduplicación de peticiones en vuelo: varios componentes
+      // (Dashboard, Workers, etc.) piden alojamientos al montar a la vez. Sin
+      // esto, cada uno lanza una query de ~4MB (image_url en base64) por
+      // separado. Con el caché compartido solo se descarga una vez por TTL.
+      const accommodations = await withSheetsCache('accommodations', async () => {
+        const { data, error } = await supabase
+          .from('accommodations')
+          .select('*')
+          .order('name', { ascending: true });
 
-      if (error) {
-        console.error('❌ Error de Supabase al leer alojamientos:', error);
-        throw error;
-      }
+        if (error) {
+          console.error('❌ Error de Supabase al leer alojamientos:', error);
+          throw error;
+        }
 
-      const accommodations = (data || []).map(mapDbRow);
+        return (data || []).map(mapDbRow);
+      });
+
       saveAccommodations(accommodations);
       return accommodations;
     } catch (err) {
@@ -2078,6 +2044,7 @@ export const appsScriptApi = {
       a.id === accommodationData.id ? { ...accommodationData } : a
     );
     saveAccommodations(updated);
+    invalidateSheetsCache('accommodations');
     return accommodationData;
   },
 
@@ -2118,6 +2085,7 @@ export const appsScriptApi = {
       };
       currentAccommodations = [newAccommodation, ...currentAccommodations];
       saveAccommodations(currentAccommodations);
+      invalidateSheetsCache('accommodations');
       return newAccommodation;
     } catch (error) {
       console.error('Error adding accommodation to Supabase:', error);
@@ -2136,6 +2104,7 @@ export const appsScriptApi = {
 
       const updated = currentAccommodations.filter(a => a.id !== id);
       saveAccommodations(updated);
+      invalidateSheetsCache('accommodations');
       return true;
     } catch (error) {
       console.error('Error deleting accommodation from Supabase:', error);
@@ -2164,6 +2133,7 @@ export const appsScriptApi = {
 
       const updated = [accommodation, ...currentAccommodations.filter(a => a.id !== accommodation.id)];
       saveAccommodations(updated);
+      invalidateSheetsCache('accommodations');
     } catch (error) {
       console.error('Error restoring accommodation in Supabase:', error);
       throw error;
