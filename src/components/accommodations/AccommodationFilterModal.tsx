@@ -12,14 +12,20 @@ interface AccommodationFilterModalProps {
   filters: AccommodationFilters;
   onApply: (filters: AccommodationFilters) => void;
   availableCities: string[];
+  pageSize: number;
+  pageSizeOptions: number[];
+  onPageSizeChange: (size: number) => void;
 }
 
-const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  filters, 
+const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({
+  isOpen,
+  onClose,
+  filters,
   onApply,
-  availableCities
+  availableCities,
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange
 }) => {
   const updateFilters = (updates: Partial<AccommodationFilters>) => {
     onApply({ ...filters, ...updates });
@@ -42,11 +48,13 @@ const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({
         onClick={onClose}
       />
 
-      {/* Popover Content */}
-      <div className={`absolute top-full right-0 mt-3 z-[110] bg-white/90 dark:bg-stone-900/95 backdrop-blur-xl w-[320px] rounded-2xl overflow-hidden border border-white/60 dark:border-stone-800/50 soft-shadow transition-all duration-300 ease-out origin-top-right ${
-        isOpen 
-          ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' 
-          : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'
+      {/* Contenido — modal centrado en móvil, popover bajo el botón en desktop */}
+      <div className={`z-[110] bg-white/90 dark:bg-stone-900/95 backdrop-blur-xl border border-white/60 dark:border-stone-800/50 soft-shadow rounded-2xl transition-all duration-300 ease-out
+        fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[340px] max-h-[85vh] overflow-y-auto overflow-x-hidden origin-center
+        md:absolute md:left-auto md:right-0 md:top-full md:bottom-auto md:translate-x-0 md:translate-y-0 md:mt-3 md:w-[320px] md:max-h-none md:overflow-hidden md:origin-top-right ${
+        isOpen
+          ? 'opacity-100 scale-100 pointer-events-auto'
+          : 'opacity-0 scale-95 pointer-events-none'
       }`}>
         
         {/* Header */}
@@ -106,6 +114,31 @@ const AccommodationFilterModal: React.FC<AccommodationFilterModalProps> = ({
                     }`}
                   >
                     <span className="capitalize">{status === 'all' ? 'Todos los estados' : status === 'active' ? 'Activo' : 'Inactivo'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="h-px bg-stone-100 dark:bg-stone-800/50" />
+
+          {/* Section 3: Por página */}
+          <div className="space-y-3">
+            <p className="text-[11px] font-normal text-slate-400 dark:text-stone-500 uppercase tracking-widest text-left">Por página</p>
+            <div className="grid grid-cols-4 gap-2">
+              {pageSizeOptions.map(n => {
+                const isActive = pageSize === n;
+                return (
+                  <button
+                    key={n}
+                    onClick={() => onPageSizeChange(n)}
+                    className={`px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-center active:scale-[0.98] border tabular-nums ${
+                      isActive
+                        ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800/50 font-normal'
+                        : 'bg-white dark:bg-stone-800 text-slate-500 dark:text-stone-400 border-stone-100 dark:border-stone-700/50 hover:bg-stone-50 dark:hover:bg-stone-700/50'
+                    }`}
+                  >
+                    {n}
                   </button>
                 );
               })}

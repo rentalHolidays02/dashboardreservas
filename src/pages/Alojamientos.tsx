@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users, ArrowUpDown, ChevronUp, ChevronDown, Pencil } from 'lucide-react';
+import { Search, Plus, Filter, Loader2, Home, RefreshCw, LayoutGrid, List, Users, ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import AccommodationCard from '../components/accommodations/AccommodationCard';
 import AccommodationModal from '../components/accommodations/AccommodationModal';
 import AccommodationDetailModal from '../components/accommodations/AccommodationDetailModal';
@@ -15,6 +15,8 @@ import defaultAccImage from '../assets/default_accommodation.png';
 interface AlojamientosProps {
   userRole?: 'admin' | 'editor' | 'viewer' | 'trabajador';
 }
+
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 20];
 
 const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   const isReadOnly = userRole === 'viewer';
@@ -36,6 +38,18 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   );
   const [isSortModalOpen, setIsSortModalOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<AccommodationSortConfig>({ field: 'name', direction: 'asc' });
+
+  // Paginación
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('accommodations_pageSize'));
+    return PAGE_SIZE_OPTIONS.includes(saved) ? saved : 10;
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const handleSetPageSize = (n: number) => {
+    setPageSize(n);
+    localStorage.setItem('accommodations_pageSize', String(n));
+  };
 
   const handleSetViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
@@ -264,6 +278,38 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
       });
   }, [accommodations, searchTerm, filters, sortConfig]);
 
+  // --- Paginación ---
+  const totalPages = Math.max(1, Math.ceil(filteredAccommodations.length / pageSize));
+  // Página efectiva acotada por si la lista encoge (filtros, borrado).
+  const page = Math.min(currentPage, totalPages);
+
+  // Volver a la primera página al cambiar filtros, orden o tamaño.
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters, sortConfig, pageSize]);
+
+  const pageItems = React.useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredAccommodations.slice(start, start + pageSize);
+  }, [filteredAccommodations, page, pageSize]);
+
+  const rangeStart = filteredAccommodations.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, filteredAccommodations.length);
+
+  const pageNumbers = React.useMemo<(number | '…')[]>(() => {
+    const pages: (number | '…')[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (page > 3) pages.push('…');
+      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+      if (page < totalPages - 2) pages.push('…');
+      pages.push(totalPages);
+    }
+    return pages;
+  }, [totalPages, page]);
+
   if (loading && accommodations.length === 0) {
     return <LoadingSpinner message="Sincronizando base de alojamientos..." />;
   }
@@ -323,7 +369,7 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                 )}
               </button>
 
-              <AccommodationFilterModal 
+              <AccommodationFilterModal
                 isOpen={isFilterModalOpen}
                 onClose={() => setIsFilterModalOpen(false)}
                 filters={filters}
@@ -331,6 +377,9 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
                 onApply={(newFilters) => {
                   setFilters(newFilters);
                 }}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageSizeChange={handleSetPageSize}
               />
             </div>
 
@@ -395,9 +444,10 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
 
       {/* Accommodations — grid or table */}
       {filteredAccommodations.length > 0 ? (
-        viewMode === 'grid' ? (
+        <>
+        {viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-6 gap-y-10 p-1">
-            {filteredAccommodations.map(acc => {
+            {pageItems.map(acc => {
               const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
               return (
                 <div
@@ -468,7 +518,7 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
               <span className="text-[10px] font-medium text-slate-400 dark:text-stone-500 uppercase tracking-wider">Estado</span>
             </div>
             <ul className="divide-y divide-stone-100 dark:divide-stone-800">
-              {filteredAccommodations.map(acc => {
+              {pageItems.map(acc => {
                 const assignedCount = workers.filter(w => w.accommodations?.includes(acc.name)).length;
                 const toTC = (s: string) => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
                 return (
@@ -554,7 +604,50 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
               })}
             </ul>
           </div>
-        )
+        )}
+
+        {/* Paginación */}
+        <div className="flex items-center justify-end gap-4 px-1 pt-4">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400 dark:text-stone-500 tabular-nums">
+              {rangeStart}–{rangeEnd} de {filteredAccommodations.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                disabled={page <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                className="p-1.5 rounded-md text-slate-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Página anterior"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              {pageNumbers.map((p, i) => p === '…' ? (
+                <span key={`ellipsis-${i}`} className="px-1 text-xs text-slate-300 dark:text-stone-600 select-none">…</span>
+              ) : (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className={`min-w-[2rem] px-2 py-1 text-xs rounded-md transition-colors tabular-nums ${
+                    page === p
+                      ? 'bg-orange-500 text-white font-medium'
+                      : 'text-slate-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                className="p-1.5 rounded-md text-slate-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                aria-label="Página siguiente"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+        </>
       ) : (
         <div className="bg-white dark:bg-stone-900 border border-stone-100 dark:border-stone-800 rounded-2xl p-12 flex flex-col items-center justify-center gap-4">
           <div className="w-12 h-12 bg-stone-50 dark:bg-stone-800 rounded-xl flex items-center justify-center text-slate-300 dark:text-stone-600">
