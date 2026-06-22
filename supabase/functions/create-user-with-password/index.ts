@@ -1,13 +1,3 @@
-// ============================================================
-// EDGE FUNCTION: create-user-with-password
-// ============================================================
-// Copia este código en Supabase Dashboard:
-//   Edge Functions → New Function → Nombre: "create-user-with-password"
-//
-// La función crea un usuario en auth.users con contraseña fija
-// y luego crea su perfil en la tabla `profiles`.
-// ============================================================
-
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const DEFAULT_PASSWORD = 'Rentalholidays0211'
@@ -18,14 +8,13 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req: Request) => {
-  // Preflight CORS
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     const body = await req.json()
-    const { email, full_name, role, phone, dni, home_address, bank_account } = body
+    const { email, full_name, role, phone } = body
 
     if (!email || !full_name || !role) {
       return new Response(
@@ -34,7 +23,6 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // Crear cliente admin con service_role
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -69,7 +57,7 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // 1. Invitar al usuario — esto dispara el template de email "Invite user"
+    // 1. Invitar — si ya existe en auth.users (huérfano), reutilizarlo
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
@@ -80,10 +68,6 @@ Deno.serve(async (req: Request) => {
 
     let userId: string
     if (inviteError) {
-      // Caso típico: el email ya existe en auth.users sin perfil (huérfano de un
-      // borrado previo — borrar usuario quita el perfil pero no el auth.users).
-      // Reutilizamos ese usuario y le re-creamos el perfil en vez de fallar.
-      // ponytail: listUsers pagina; perPage 1000 cubre esta org. Si crece, getUserByEmail.
       const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
       const existing = list?.users.find((u: { email?: string | null }) => u.email?.toLowerCase() === email.toLowerCase())
       if (!existing) {
@@ -97,29 +81,20 @@ Deno.serve(async (req: Request) => {
       userId = inviteData.user.id
     }
 
-    // 2. Establecer contraseña por defecto para que pueda entrar sin esperar el link
+    // 2. Contraseña por defecto
     const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
       password: DEFAULT_PASSWORD,
       email_confirm: true,
     })
-    if (pwError) {
-      console.error('Error al establecer contraseña:', pwError)
-    }
+    if (pwError) console.error('Error al establecer contraseña:', pwError)
 
-    // 3. Crear perfil en la tabla `profiles`
+    // 3. Perfil
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .upsert({
-        id: userId,
-        email,
-        full_name,
-        role,
-        phone: phone || null,
-      })
+      .upsert({ id: userId, email, full_name, role, phone: phone || null })
 
     if (profileError) {
       console.error('Error al crear perfil:', profileError)
-      // El usuario auth se creó; devolvemos OK con advertencia
       return new Response(
         JSON.stringify({ ok: true, id: userId, warning: 'Perfil no creado: ' + profileError.message }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

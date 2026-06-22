@@ -46,6 +46,8 @@ const Sugerencias: React.FC = () => {
 
   const fetchSuggestions = async () => {
     setLoading(true);
+    // Migración única Sheets -> Supabase (idempotente: se omite sola si ya hay datos).
+    await appsScriptApi.migrateSuggestionsFromSheets().catch(e => console.error('migrateSuggestions:', e));
     const data = await appsScriptApi.getSuggestions();
     setSuggestions(data);
     setLoading(false);

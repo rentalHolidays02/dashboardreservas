@@ -33,7 +33,6 @@ const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para in
 const WORKERS_RANGE = "'informacion operarios'!A:Z";
 const INVITACION_APPS_SCRIPT_URL = import.meta.env.VITE_SUPABASE_INVITACION_APPS_SCRIPT_URL || '';
 const CLEANS_APPS_SCRIPT_URL = import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL || '';
-const WORKERS_APPS_SCRIPT_URL = import.meta.env.VITE_WORKERS_APPS_SCRIPT_URL || '';
 const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || '';
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
 const INCIDENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_APPS_SCRIPT_URL || '';
@@ -42,7 +41,6 @@ const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:U";
 const FIRMAS_ENTREGA_BUCKET = 'firmas-entrega';
 const ENTREGA_LLAVES_APPS_SCRIPT_URL = import.meta.env.VITE_ENTREGA_LLAVES_APPS_SCRIPT_URL || '';
 const SUGERENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || '';
-const FEEDBACK_APPS_SCRIPT_URL = import.meta.env.VITE_FEEDBACK_APPS_SCRIPT_URL || '';
 const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL || '';
 const PDF_FOLDER_ID = import.meta.env.VITE_PDF_FOLDER_ID || '';
 
@@ -133,24 +131,6 @@ async function uploadEntregaFirmaIfNeeded(
   return `${data.publicUrl}?t=${Date.now()}`;
 }
 // --- Fin cache ---
-
-type AppsScriptJsonResponse = { ok: boolean; error?: string; [k: string]: any };
-
-const postToCleansScript = async (payload: Record<string, any>): Promise<AppsScriptJsonResponse> => {
-  try {
-    // Apps Script Web App no permite controlar CORS headers en la respuesta (TextOutput no soporta setHeader),
-    // así que desde localhost el navegador bloqueará leer la respuesta. Enviamos fire-and-forget con no-cors.
-    await fetch(CLEANS_APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
-    });
-    return { ok: true };
-  } catch (error: any) {
-    return { ok: false, error: String(error?.message || error) };
-  }
-};
 
 export type CleansFetchStatus = 'ok' | 'empty' | 'error';
 export type CleansFetchResult<T> = { records: T[]; status: CleansFetchStatus; error?: string };
@@ -534,11 +514,8 @@ type CleanSheetType = 'normal' | 'initial' | 'handyman';
 
 
 
-const getCleanSheetName = (type: CleanSheetType): string => {
-  if (type === 'normal') return 'Checkout_Limpieza_Normal';
-  if (type === 'initial') return 'Checkout_Limpieza_Inicial';
-  return 'Checkout_Manitas';
-};
+const cleansCacheKey = (type: CleanSheetType): string =>
+  type === 'normal' ? 'normalCleans' : type === 'initial' ? 'initialCleans' : 'handymanRecords';
 
 const getCheckinSheetName = (type: string): string => {
   if (type === 'normal') return 'Checkin_Limpieza_Normal';
@@ -559,69 +536,96 @@ const parseRowIndexFromId = (id: string): number => {
   return rowIndex;
 };
 
-const cleanRecordToPayload = (type: CleanSheetType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Record<string, any> => {
-  const ensureKm = (v: any) => {
-    const val = String(v || '').trim();
-    if (val === '' || isNaN(parseFloat(val))) return '0';
-    return val;
-  };
-  const toSiNo = (v: any) => v ? 'Sí' : 'No';
 
+// ============================================================
+// CLEANS: mapeo fila Supabase <-> record de dominio
+// ============================================================
+const rowToNormalClean = (r: any): NormalCleanRecord => ({
+  id: r.id, telefono: r.telefono || '', nombre: r.nombre || '', apellidos: r.apellidos || '',
+  checkinFecha: r.checkin_fecha || '', checkinUbicacion: r.checkin_ubicacion || '',
+  checkoutFecha: r.checkout_fecha || '', checkoutUbicacion: r.checkout_ubicacion || '',
+  apartamento: r.apartamento || '', horaEntrada: r.hora_entrada || '', horaSalida: r.hora_salida || '',
+  sigueHuesped: !!r.sigue_huesped, fechaSalidaReserva: r.fecha_salida_reserva || '',
+  recogeLlaves: !!r.recoge_llaves, km: Number(r.km || 0), observaciones: r.observaciones || '',
+  checked: !!r.checked,
+});
+const rowToInitialClean = (r: any): InitialCleanRecord => ({
+  id: r.id, telefono: r.telefono || '', nombre: r.nombre || '', apellidos: r.apellidos || '',
+  checkinFecha: r.checkin_fecha || '', checkinUbicacion: r.checkin_ubicacion || '',
+  checkoutFecha: r.checkout_fecha || '', checkoutUbicacion: r.checkout_ubicacion || '',
+  apartamento: r.apartamento || '', horaEntrada: r.hora_entrada || '', horaSalida: r.hora_salida || '',
+  km: Number(r.km || 0), observaciones: r.observaciones || '', checked: !!r.checked,
+});
+const rowToHandyman = (r: any): HandymanRecord => ({
+  id: r.id, telefono: r.telefono || '', nombre: r.nombre || '', apellidos: r.apellidos || '',
+  fechaLlegada: r.checkin_fecha || '', ubicacionInicio: r.checkin_ubicacion || '',
+  fechaFin: r.checkout_fecha || '', ubicacionFin: r.checkout_ubicacion || '',
+  alojamiento: r.apartamento || '', horaInicioTarea: r.hora_entrada || '', horaFinTarea: r.hora_salida || '',
+  cantidadMinutos: Number(r.km || 0), observacionesTarea: r.observaciones || '',
+  estadoCompletado: r.checked ? 'Completado' : 'Pendiente',
+});
+
+const cleanRecordToRow = (type: CleanSheetType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Record<string, any> => {
   if (type === 'normal') {
-    const data = record as NormalCleanRecord;
+    const d = record as NormalCleanRecord;
     return {
-      Telefono: data.telefono,
-      Nombre: data.nombre,
-      Apellidos: data.apellidos,
-      'Checkin Fecha Trabajador': data.checkinFecha,
-      'Checkin Ubicacion Trabajador': data.checkinUbicacion,
-      'Checkout Fecha Trabajador': data.checkoutFecha,
-      'Checkout Ubicacion Trabajador': data.checkoutUbicacion,
-      Apartamento: data.apartamento,
-      'Hora Limpieza Entrada': data.horaEntrada,
-      'Hora Limpieza Salida': data.horaSalida,
-      'Sigue Huesped': toSiNo(data.sigueHuesped),
-      'Fecha Salida Reserva': data.fechaSalidaReserva,
-      'Recoge Llaves': toSiNo(data.recogeLlaves),
-      Km: ensureKm(data.km),
-      Observaciones: data.observaciones,
-      Checked: data.checked,
+      type: 'normal', telefono: d.telefono, nombre: d.nombre, apellidos: d.apellidos,
+      checkin_fecha: d.checkinFecha, checkin_ubicacion: d.checkinUbicacion,
+      checkout_fecha: d.checkoutFecha, checkout_ubicacion: d.checkoutUbicacion,
+      apartamento: d.apartamento, hora_entrada: d.horaEntrada, hora_salida: d.horaSalida,
+      sigue_huesped: !!d.sigueHuesped, fecha_salida_reserva: d.fechaSalidaReserva,
+      recoge_llaves: !!d.recogeLlaves, km: Number(d.km || 0), observaciones: d.observaciones, checked: !!d.checked,
     };
   }
   if (type === 'initial') {
-    const data = record as InitialCleanRecord;
+    const d = record as InitialCleanRecord;
     return {
-      Telefono: data.telefono,
-      Nombre: data.nombre,
-      Apellidos: data.apellidos,
-      'Checkin Fecha Trabajador': data.checkinFecha,
-      'Checkin Ubicacion Trabajador': data.checkinUbicacion,
-      'Checkout Fecha Trabajador': data.checkoutFecha,
-      'Checkout Ubicacion Trabajador': data.checkoutUbicacion,
-      Apartamento: data.apartamento,
-      'Hora Limpieza Entrada': data.horaEntrada,
-      'Hora Limpieza Salida': data.horaSalida,
-      Km: ensureKm(data.km),
-      Observaciones: data.observaciones,
-      Checked: data.checked,
+      type: 'initial', telefono: d.telefono, nombre: d.nombre, apellidos: d.apellidos,
+      checkin_fecha: d.checkinFecha, checkin_ubicacion: d.checkinUbicacion,
+      checkout_fecha: d.checkoutFecha, checkout_ubicacion: d.checkoutUbicacion,
+      apartamento: d.apartamento, hora_entrada: d.horaEntrada, hora_salida: d.horaSalida,
+      km: Number(d.km || 0), observaciones: d.observaciones, checked: !!d.checked,
     };
   }
-  const data = record as HandymanRecord;
+  const d = record as HandymanRecord;
   return {
-    Telefono: data.telefono,
-    Nombre: data.nombre,
-    Apellidos: data.apellidos,
-    'Checkin Fecha Trabajador': data.fechaLlegada,
-    'Checkin Ubicacion Trabajador': data.ubicacionInicio,
-    'Checkout Fecha Trabajador': data.fechaFin,
-    'Checkout Ubicacion Trabajador': data.ubicacionFin,
-    Apartamento: data.alojamiento,
-    'Hora Reparacion Entrada': data.horaInicioTarea,
-    'Hora Reparacion Salida': data.horaFinTarea,
-    Km: ensureKm(data.cantidadMinutos),
-    Observaciones: data.observacionesTarea,
-    Checked: data.estadoCompletado === 'Completado',
+    type: 'handyman', telefono: d.telefono, nombre: d.nombre, apellidos: d.apellidos,
+    checkin_fecha: d.fechaLlegada, checkin_ubicacion: d.ubicacionInicio,
+    checkout_fecha: d.fechaFin, checkout_ubicacion: d.ubicacionFin,
+    apartamento: d.alojamiento, hora_entrada: d.horaInicioTarea, hora_salida: d.horaFinTarea,
+    km: Number(d.cantidadMinutos || 0), observaciones: d.observacionesTarea,
+    checked: d.estadoCompletado === 'Completado',
   };
+};
+
+const rowToSuggestion = (r: any): Suggestion => ({
+  id: r.id,
+  subject: r.subject || '',
+  from: r.from_text || '',
+  date: r.created_at,
+  snippet: r.snippet || (r.body ? String(r.body).slice(0, 140) : ''),
+  body: r.body || '',
+  isRead: !!r.is_read,
+  isStarred: !!r.is_starred,
+  category: r.category || undefined,
+});
+
+// Lectores de los Sheets viejos — solo para la migración única a Supabase.
+const sheetReadCleans = async (sheetName: string, range: string, mapRow: (getVal: (h: string) => any, index: number) => any): Promise<any[]> => {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/${sheetName}!${range}?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
+  const response = await fetchWithRetry(url);
+  if (!response.ok) throw new Error(`Error leyendo ${sheetName}: ${response.statusText}`);
+  const data = await response.json();
+  if (!data.values || data.values.length <= 1) return [];
+  const headers = data.values[0] as string[];
+  return data.values.slice(1).map((row: any[], index: number) => {
+    const getVal = (headerName: string) => {
+      const norm = normalizeHeader(headerName);
+      const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
+      return idx !== -1 ? row[idx] : undefined;
+    };
+    return mapRow(getVal, index);
+  }).filter((r: any) => r !== null);
 };
 
 export const appsScriptApi = {
@@ -680,31 +684,9 @@ export const appsScriptApi = {
 
   getProfileByEmail: async (email: string): Promise<User | null> => {
     try {
-      console.log('🔍 [API] Buscando perfil por email:', email);
-      
-      // 1. Intentar Google primero (es nuestra fuente de verdad para roles heredados)
-      try {
-        const url = new URL(INVITACION_APPS_SCRIPT_URL);
-        url.searchParams.append('action', 'getProfile');
-        url.searchParams.append('email', email);
-        const response = await fetch(url.toString(), { method: 'GET' });
-        const data = await response.json();
-        if (data.ok && data.profile) {
-          console.log('✅ [API] Perfil recuperado de Google');
-          return {
-            id: data.profile.id,
-            email: data.profile.email,
-            role: data.profile.role || data.profile.rol || 'viewer',
-            name: data.profile.full_name || data.profile.nombre || data.profile.name,
-            telefono: data.profile.phone || data.profile.telefono || data.profile.phone_number
-          };
-        }
-      } catch (e) {
-        console.warn('⚠️ [API] Fallo al consultar Google en getProfileByEmail');
-      }
-
-      // 2. Fallback a Supabase. maybeSingle() devuelve null en vez de 406 si no hay perfil
-      // (caso normal durante la creación: aún no existe).
+      // Solo Supabase (la consulta a Apps Script se eliminó: cold start de 3-8s
+      // que ralentizaba cada verificación de login). maybeSingle() devuelve null
+      // en vez de 406 si no hay perfil (caso normal durante la creación).
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -1252,75 +1234,9 @@ export const appsScriptApi = {
     }
   },
 
-  // --- Helper para formatear el teléfono como quiere el Excel ---
-  formatPhoneForExcel: (phone: string = ''): string => {
-    let cleaned = phone.replace(/\s+/g, '').replace(/'/g, '');
-    if (!cleaned) return '';
-    if (!cleaned.startsWith('+')) cleaned = '+34' + cleaned;
-    const prefix = cleaned.slice(0, 3);
-    const rest = cleaned.slice(3);
-    const formatted = `${prefix} ${rest.slice(0,3)} ${rest.slice(3,5)} ${rest.slice(5,7)} ${rest.slice(7,9)}`.trim();
-    return `'${formatted}`;
-  },
-
-  // --- Helper para buscar el ID real del Excel por Teléfono en tiempo real ---
-  getExcelIdByPhone: async (phone: string): Promise<string | null> => {
-    if (!phone) return null;
-    try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) return null;
-      const data = await response.json();
-      if (!data.values || data.values.length === 0) return null;
-      
-      const headers = data.values[0] || [];
-      const movilIdx = headers.findIndex((h: string) => String(h).toUpperCase().includes('MOVIL'));
-      if (movilIdx === -1) return null;
-      
-      const searchPhone = phone.replace(/\s+/g, '').replace(/'/g, '');
-      
-      for (let i = 1; i < data.values.length; i++) {
-        const cellPhone = String(data.values[i][movilIdx] || '').replace(/\s+/g, '').replace(/'/g, '');
-        if (cellPhone === searchPhone) {
-           return `real_worker_${i + 1}`; // i=1 es la fila 2 del excel
-        }
-      }
-      return null;
-    } catch (e) {
-      console.error('Error buscando ID en Excel:', e);
-      return null;
-    }
-  },
-
   updateWorker: async (workerData: Worker): Promise<Worker> => {
     try {
-      // 1. IMPORTANTE: Buscar en el Excel usando el teléfono ORIGINAL (por si lo acaba de cambiar)
-      const originalWorker = currentWorkers.find(w => w.id === workerData.id);
-      const searchPhone = originalWorker?.telefono || workerData.telefono;
-      
-      let targetExcelId = await appsScriptApi.getExcelIdByPhone(searchPhone || '');
-      
-      const excelPhone = appsScriptApi.formatPhoneForExcel(workerData.telefono);
-      
-      // 2. Escritura en Excel
-      const payload = {
-        ...workerData,
-        id: targetExcelId || '', // Si es un update, debería tener targetExcelId
-        OPERARIO: workerData.fullName,
-        MOVIL: excelPhone,
-        telefono: excelPhone,
-        Telefono: excelPhone,
-        action: 'update'
-      };
-      
-      fetch(WORKERS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-
-      // 3. Escritura en Supabase
+      // Escritura en Supabase (fuente única tras migración desde Apps Script)
       const { error } = await supabase
         .from('workers')
         .update({
@@ -1370,39 +1286,13 @@ export const appsScriptApi = {
 
   addWorker: async (workerData: Omit<Worker, 'id'>): Promise<Worker> => {
     try {
-      // 1. OBLIGATORIO: Revisar el Excel en tiempo real para evitar duplicados absolutos
-      const existingExcelId = await appsScriptApi.getExcelIdByPhone(workerData.telefono || '');
-      
-      if (existingExcelId) {
-        console.warn('El trabajador ya existe en el Excel con este teléfono. Transformando en UPDATE...');
-        // Buscar el UUID correspondiente en BD para poder hacer el update
-        const existingBD = currentWorkers.find(w => w.telefono === workerData.telefono);
-        if (existingBD) {
-           return appsScriptApi.updateWorker({ ...workerData, id: existingBD.id, excelId: existingExcelId } as Worker);
-        }
+      // Dedupe por teléfono (columna UNIQUE en Supabase): si existe, es un update.
+      const existingBD = currentWorkers.find(w => w.telefono === workerData.telefono);
+      if (existingBD) {
+        return appsScriptApi.updateWorker({ ...workerData, id: existingBD.id } as Worker);
       }
 
-      const excelPhone = appsScriptApi.formatPhoneForExcel(workerData.telefono);
-
-      // 2. Escritura en Excel (Como no existe, enviamos string vacío para que el Script haga AppendRow)
-      const payload = {
-        ...workerData,
-        id: '', 
-        OPERARIO: workerData.fullName,
-        MOVIL: excelPhone,
-        telefono: excelPhone,
-        Telefono: excelPhone,
-        action: 'add'
-      };
-
-      fetch(WORKERS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-
-      // 3. Escritura en Supabase
+      // Escritura en Supabase
       const { data, error } = await supabase
         .from('workers')
         .insert([{
@@ -1447,22 +1337,6 @@ export const appsScriptApi = {
 
   deleteWorker: async (id: string): Promise<boolean> => {
     try {
-      const workerToDelete = currentWorkers.find(w => w.id === id);
-      
-      // Encontrar la fila exacta en Excel usando el teléfono ANTES de borrarlo
-      const targetExcelId = await appsScriptApi.getExcelIdByPhone(workerToDelete?.telefono || '');
-      
-      // Enviar delete al Apps Script usando el ID de fila
-      fetch(WORKERS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ 
-          id: targetExcelId, 
-          action: 'delete' 
-        })
-      });
-
       const { error } = await supabase
         .from('workers')
         .delete()
@@ -1481,20 +1355,6 @@ export const appsScriptApi = {
 
   restoreWorker: async (worker: Worker): Promise<void> => {
     try {
-      // Restaurar en Excel
-      const payload = {
-        ...worker,
-        OPERARIO: worker.fullName,
-        MOVIL: `'${worker.telefono}`,
-        action: 'restore',
-      };
-      fetch(WORKERS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload),
-      });
-
       const { error } = await supabase
         .from('workers')
         .insert([{
@@ -1613,18 +1473,42 @@ export const appsScriptApi = {
     }
   },
 
+  // Migración única: copia las sugerencias del Sheet viejo a la tabla `suggestions`.
+  // Idempotente: se omite si la tabla ya tiene filas.
+  migrateSuggestionsFromSheets: async (): Promise<{ inserted: number; skipped: boolean }> => {
+    const { count } = await supabase.from('suggestions').select('id', { count: 'exact', head: true });
+    if ((count ?? 0) > 0) return { inserted: 0, skipped: true };
+    if (!SUGERENCIAS_APPS_SCRIPT_URL) return { inserted: 0, skipped: false };
+
+    const response = await fetch(`${SUGERENCIAS_APPS_SCRIPT_URL}?action=listSuggestions&limit=1000`);
+    if (!response.ok) return { inserted: 0, skipped: false };
+    const data = await response.json();
+    const olds: Suggestion[] = data?.ok ? (data.suggestions || []) : [];
+    if (olds.length === 0) return { inserted: 0, skipped: false };
+
+    const rows = olds.map(s => ({
+      subject: s.subject || '',
+      from_text: s.from || '',
+      email: s.from?.includes('<') ? (s.from.match(/<([^>]+)>/)?.[1] || '') : '',
+      category: s.category || 'otro',
+      body: s.body || '',
+      snippet: s.snippet || '',
+      is_read: !!s.isRead,
+      is_starred: !!s.isStarred,
+      created_at: s.date || new Date().toISOString(),
+    }));
+    const { error } = await supabase.from('suggestions').insert(rows);
+    if (error) throw error;
+    console.log(`[migrateSuggestions] Insertadas ${rows.length} sugerencias.`);
+    return { inserted: rows.length, skipped: false };
+  },
+
   getSuggestions: async (limit = 40): Promise<Suggestion[]> => {
     try {
-      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=listSuggestions&limit=${limit}`;
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error('Error al obtener sugerencias');
-      }
-
-      const data = await response.json();
-      if (data.ok) return data.suggestions;
-      return [];
+      const { data, error } = await supabase
+        .from('suggestions').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (error) throw error;
+      return (data || []).map(rowToSuggestion);
     } catch (error) {
       console.error('[API Sugerencias] Error:', error);
       return [];
@@ -1632,92 +1516,61 @@ export const appsScriptApi = {
   },
 
   markSuggestionAsRead: async (id: string): Promise<boolean> => {
-    try {
-      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=markAsRead&id=${id}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      return data.ok;
-    } catch (error) {
-      console.error('Error marking as read:', error);
-      return false;
-    }
+    const { error } = await supabase.from('suggestions').update({ is_read: true }).eq('id', id);
+    if (error) { console.error('Error marking as read:', error); return false; }
+    return true;
   },
 
   markSuggestionAsUnread: async (id: string): Promise<boolean> => {
-    try {
-      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=markAsUnread&id=${id}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      return data.ok;
-    } catch (error) {
-      console.error('Error marking as unread:', error);
-      return false;
-    }
+    const { error } = await supabase.from('suggestions').update({ is_read: false }).eq('id', id);
+    if (error) { console.error('Error marking as unread:', error); return false; }
+    return true;
   },
 
   starSuggestion: async (id: string): Promise<boolean> => {
-    try {
-      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=star&id=${id}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      return data.ok;
-    } catch (error) {
-      console.error('Error starring suggestion:', error);
-      return false;
-    }
+    const { error } = await supabase.from('suggestions').update({ is_starred: true }).eq('id', id);
+    if (error) { console.error('Error starring suggestion:', error); return false; }
+    return true;
   },
 
   unstarSuggestion: async (id: string): Promise<boolean> => {
-    try {
-      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=unstar&id=${id}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      return data.ok;
-    } catch (error) {
-      console.error('Error unstarring suggestion:', error);
-      return false;
-    }
+    const { error } = await supabase.from('suggestions').update({ is_starred: false }).eq('id', id);
+    if (error) { console.error('Error unstarring suggestion:', error); return false; }
+    return true;
   },
 
   deleteSuggestion: async (id: string): Promise<boolean> => {
-    try {
-      const url = `${SUGERENCIAS_APPS_SCRIPT_URL}?action=delete&id=${id}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      return data.ok;
-    } catch (error) {
-      console.error('Error deleting suggestion:', error);
-      return false;
-    }
+    const { error } = await supabase.from('suggestions').delete().eq('id', id);
+    if (error) { console.error('Error deleting suggestion:', error); return false; }
+    return true;
   },
 
+  // ponytail: la respuesta se guarda en la columna `reply`; el envío de email al
+  // usuario (que hacía Apps Script con MailApp) se pierde. Reañadir con una Edge
+  // Function + proveedor de email si se necesita notificar de vuelta.
   replySuggestion: async (id: string, body: string): Promise<boolean> => {
-    try {
-      await fetch(SUGERENCIAS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'reply', id, body })
-      });
-      return true;
-    } catch (error) {
-      console.error('Error replying to suggestion:', error);
-      return false;
-    }
+    const { error } = await supabase.from('suggestions').update({ reply: body, is_read: true }).eq('id', id);
+    if (error) { console.error('Error replying to suggestion:', error); return false; }
+    return true;
   },
 
   sendAppFeedback: async (payload: AppFeedbackPayload): Promise<boolean> => {
     try {
-      if (!FEEDBACK_APPS_SCRIPT_URL) {
-        console.error('[API Feedback] VITE_FEEDBACK_APPS_SCRIPT_URL no configurada');
-        return false;
-      }
-      await fetch(FEEDBACK_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'submitFeedback', ...payload }),
-      });
+      const nombreCompleto = `${payload.nombre} ${payload.apellidos}`.trim();
+      const subjectByTipo = payload.tipo === 'fallo' ? 'Problema reportado'
+        : payload.tipo === 'sugerencia' ? 'Sugerencia' : 'Mensaje';
+      const { error } = await supabase.from('suggestions').insert([{
+        subject: subjectByTipo,
+        from_text: payload.email ? `${nombreCompleto} <${payload.email}>` : nombreCompleto,
+        email: payload.email || '',
+        telefono: payload.telefono || '',
+        category: payload.tipo,
+        body: payload.descripcion,
+        snippet: payload.descripcion.slice(0, 140),
+        is_read: false,
+        is_starred: false,
+      }]);
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('[API Feedback] Error enviando sugerencia:', error);
@@ -2142,65 +1995,13 @@ export const appsScriptApi = {
 
   getNormalCleansResult: async (): Promise<CleansFetchResult<NormalCleanRecord>> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
-      const response = await fetchWithRetry(url);
-
-      if (!response.ok) {
-        throw new Error(`Error fetching normal cleans: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (!data.values || data.values.length <= 1) {
-        return { records: [], status: 'empty' };
-      }
-
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      const records: NormalCleanRecord[] = rows
-        .map((row: any[], index: number): NormalCleanRecord | null => {
-          const getVal = (headerName: string) => {
-            const norm = normalizeHeader(headerName);
-            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-            return idx !== -1 ? row[idx] : undefined;
-          };
-
-          const nombre = String(getVal('Nombre') || '');
-          const apellidos = String(getVal('Apellidos') || '');
-          if (!nombre && !apellidos) return null;
-
-          return {
-            id: `nc_${index + 2}`,
-            telefono: String(getVal('Telefono') || ''),
-            nombre,
-            apellidos,
-            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador')),
-            checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador')),
-            checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
-            apartamento: String(getVal('Apartamento') || ''),
-            horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
-            horaSalida: String(getVal('Hora Limpieza Salida') || ''),
-            sigueHuesped: parseBool(getVal('Sigue Huesped')),
-            // Mantener como texto: en el sheet puede venir como "DD/MM/YYYY HH:mm" o "HH:mm, DD/MM/YYYY"
-            // y no queremos perderlo por parseos.
-            fechaSalidaReserva: String(
-              getVal('Fecha Salida Reserva') ||
-              getVal('FECHA SALIDA RESERVA') ||
-              getVal('FECHA SALIDA RE') ||
-              ''
-            ).trim(),
-            recogeLlaves: parseBool(getVal('Recoge Llaves')),
-            km: parseExcelNumber(getVal('Km')),
-            observaciones: String(getVal('Observaciones') || ''),
-            checked: parseBool(getVal('Checked')),
-          };
-        })
-        .filter((r: NormalCleanRecord | null): r is NormalCleanRecord => r !== null);
-
+      const { data, error } = await supabase
+        .from('cleans').select('*').eq('type', 'normal').order('created_at', { ascending: true });
+      if (error) throw error;
+      const records = (data || []).map(rowToNormalClean);
       return { records, status: records.length ? 'ok' : 'empty' };
     } catch (error) {
-      console.error('Error fetching normal cleans from Sheets:', error);
+      console.error('Error fetching normal cleans from Supabase:', error);
       return { records: [], status: 'error', error: String((error as any)?.message || error) };
     }
   },
@@ -2212,23 +2013,88 @@ export const appsScriptApi = {
     });
   },
 
+  // Migración única: copia los checkouts de los Sheets viejos a la tabla `cleans`.
+  // Solo inserta si la tabla está vacía (idempotente — no duplica si se re-ejecuta).
+  migrateCleansFromSheets: async (): Promise<{ inserted: number; skipped: boolean }> => {
+    const { count } = await supabase.from('cleans').select('id', { count: 'exact', head: true });
+    if ((count ?? 0) > 0) {
+      console.warn('[migrateCleans] La tabla cleans ya tiene datos; se omite la migración.');
+      return { inserted: 0, skipped: true };
+    }
+
+    const normal = await sheetReadCleans('Checkout_Limpieza_Normal', 'A:P', (getVal): NormalCleanRecord | null => {
+      const nombre = String(getVal('Nombre') || ''); const apellidos = String(getVal('Apellidos') || '');
+      if (!nombre && !apellidos) return null;
+      return {
+        id: '', telefono: String(getVal('Telefono') || ''), nombre, apellidos,
+        checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador')),
+        checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
+        checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador')),
+        checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
+        apartamento: String(getVal('Apartamento') || ''),
+        horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
+        horaSalida: String(getVal('Hora Limpieza Salida') || ''),
+        sigueHuesped: parseBool(getVal('Sigue Huesped')),
+        fechaSalidaReserva: String(getVal('Fecha Salida Reserva') || getVal('FECHA SALIDA RESERVA') || getVal('FECHA SALIDA RE') || '').trim(),
+        recogeLlaves: parseBool(getVal('Recoge Llaves')),
+        km: parseExcelNumber(getVal('Km')), observaciones: String(getVal('Observaciones') || ''),
+        checked: parseBool(getVal('Checked')),
+      };
+    });
+
+    const initial = await sheetReadCleans('Checkout_Limpieza_Inicial', 'A:M', (getVal): InitialCleanRecord | null => {
+      const nombre = String(getVal('Nombre') || ''); const apellidos = String(getVal('Apellidos') || '');
+      if (!nombre && !apellidos) return null;
+      return {
+        id: '', telefono: String(getVal('Telefono') || ''), nombre, apellidos,
+        checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador')),
+        checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
+        checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador')),
+        checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
+        apartamento: String(getVal('Apartamento') || ''),
+        horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
+        horaSalida: String(getVal('Hora Limpieza Salida') || ''),
+        km: parseExcelNumber(getVal('Km')), observaciones: String(getVal('Observaciones') || ''),
+        checked: parseBool(getVal('Checked')),
+      };
+    });
+
+    const handyman = await sheetReadCleans('Checkout_Manitas', 'A:M', (getVal): HandymanRecord | null => {
+      const nombre = String(getVal('Nombre') || ''); const apellidos = String(getVal('Apellidos') || '');
+      if (!nombre && !apellidos) return null;
+      return {
+        id: '', telefono: String(getVal('Telefono') || ''), nombre, apellidos,
+        fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador')),
+        ubicacionInicio: String(getVal('Checkin Ubicacion Trabajador') || ''),
+        fechaFin: parseDateTime(getVal('Checkout Fecha Trabajador')),
+        ubicacionFin: String(getVal('Checkout Ubicacion Trabajador') || ''),
+        alojamiento: String(getVal('Apartamento') || ''),
+        horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
+        horaFinTarea: String(getVal('Hora Reparacion Salida') || ''),
+        cantidadMinutos: parseExcelNumber(getVal('Km')),
+        observacionesTarea: String(getVal('Observaciones') || ''),
+        estadoCompletado: parseBool(getVal('Checked')) ? 'Completado' : 'Pendiente',
+      };
+    });
+
+    const rows = [
+      ...normal.map((r: NormalCleanRecord) => cleanRecordToRow('normal', r)),
+      ...initial.map((r: InitialCleanRecord) => cleanRecordToRow('initial', r)),
+      ...handyman.map((r: HandymanRecord) => cleanRecordToRow('handyman', r)),
+    ];
+    if (rows.length === 0) return { inserted: 0, skipped: false };
+
+    const { error } = await supabase.from('cleans').insert(rows);
+    if (error) throw error;
+    console.log(`[migrateCleans] Insertados ${rows.length} registros en cleans.`);
+    return { inserted: rows.length, skipped: false };
+  },
+
   updateCleanStatus: async (type: CleanSheetType, id: string, checked: boolean): Promise<boolean> => {
     try {
-      const rowIndex = parseRowIndexFromId(id);
-      const sheetName = getCleanSheetName(type);
-
-      const payload = {
-        action: 'updateCleanStatus',
-        sheetName,
-        rowIndex,
-        checked
-      };
-
-      const res = await postToCleansScript(payload);
-      if (!res.ok) {
-        console.error('Apps Script updateCleanStatus failed:', res);
-        return false;
-      }
+      const { error } = await supabase.from('cleans').update({ checked }).eq('id', id);
+      if (error) throw error;
+      invalidateSheetsCache(cleansCacheKey(type));
       return true;
     } catch (error) {
       console.error('Error updating clean status:', error);
@@ -2238,17 +2104,9 @@ export const appsScriptApi = {
 
   createCheckoutRecord: async (type: CleanSheetType, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Promise<boolean> => {
     try {
-      const payload = {
-        action: 'createCheckout',
-        sheetName: getCleanSheetName(type),
-        record: cleanRecordToPayload(type, record)
-      };
-      
-      const res = await postToCleansScript(payload);
-      if (!res.ok) {
-        console.error('Apps Script createCheckout failed:', res);
-        return false;
-      }
+      const { error } = await supabase.from('cleans').insert([cleanRecordToRow(type, record)]);
+      if (error) throw error;
+      invalidateSheetsCache(cleansCacheKey(type));
       return true;
     } catch (error) {
       console.error('❌ Error creating checkout record:', error);
@@ -2258,21 +2116,10 @@ export const appsScriptApi = {
 
   updateCheckoutRecord: async (type: CleanSheetType, id: string, record: NormalCleanRecord | InitialCleanRecord | HandymanRecord): Promise<boolean> => {
     try {
-      const rowIndex = parseRowIndexFromId(id);
-      if (rowIndex === -1) return false;
-
-      const payload = {
-        action: 'updateCheckout',
-        sheetName: getCleanSheetName(type),
-        rowIndex,
-        record: cleanRecordToPayload(type, record)
-      };
-      
-      const res = await postToCleansScript(payload);
-      if (!res.ok) {
-        console.error('Apps Script updateCheckout failed:', res);
-        return false;
-      }
+      const { type: _t, ...row } = cleanRecordToRow(type, record); // no reescribir el discriminador
+      const { error } = await supabase.from('cleans').update(row).eq('id', id);
+      if (error) throw error;
+      invalidateSheetsCache(cleansCacheKey(type));
       return true;
     } catch (error) {
       console.error('❌ Error updating checkout record:', error);
@@ -2282,20 +2129,9 @@ export const appsScriptApi = {
 
   deleteCheckoutRecord: async (type: CleanSheetType, id: string): Promise<boolean> => {
     try {
-      const rowIndex = parseRowIndexFromId(id);
-      if (rowIndex === -1) return false;
-
-      const payload = {
-        action: 'deleteCheckout',
-        sheetName: getCleanSheetName(type),
-        rowIndex
-      };
-      
-      const res = await postToCleansScript(payload);
-      if (!res.ok) {
-        console.error('Apps Script deleteCheckout failed:', res);
-        return false;
-      }
+      const { error } = await supabase.from('cleans').delete().eq('id', id);
+      if (error) throw error;
+      invalidateSheetsCache(cleansCacheKey(type));
       return true;
     } catch (error) {
       console.error('❌ Error deleting checkout record:', error);
@@ -2305,60 +2141,13 @@ export const appsScriptApi = {
 
   getInitialCleansResult: async (): Promise<CleansFetchResult<InitialCleanRecord>> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Limpieza_Inicial!A:M?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
-      const response = await fetchWithRetry(url);
-
-      if (!response.ok) {
-        throw new Error(`Error fetching initial cleans: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (!data.values || data.values.length <= 1) {
-        return { records: [], status: 'empty' };
-      }
-
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      const records: InitialCleanRecord[] = rows
-        .map((row: any[], index: number): InitialCleanRecord | null => {
-          const getVal = (headerName: string) => {
-            const norm = normalizeHeader(headerName);
-            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-            return idx !== -1 ? row[idx] : undefined;
-          };
-
-          const nombre = String(getVal('Nombre') || '');
-          const apellidos = String(getVal('Apellidos') || '');
-          if (!nombre && !apellidos) return null;
-
-          const parseBool = (val: any): boolean => {
-            if (val === true || val === 'TRUE' || val === 'true' || val === '1' || val === 'Sí' || val === 'SI' || val === 'si') return true;
-            return false;
-          };
-
-          return {
-            id: `ic_${index + 2}`,
-            telefono: String(getVal('Telefono') || ''),
-            nombre,
-            apellidos,
-            checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador')),
-            checkinUbicacion: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            checkoutFecha: parseDateTime(getVal('Checkout Fecha Trabajador')),
-            checkoutUbicacion: String(getVal('Checkout Ubicacion Trabajador') || ''),
-            apartamento: String(getVal('Apartamento') || ''),
-            horaEntrada: String(getVal('Hora Limpieza Entrada') || ''),
-            horaSalida: String(getVal('Hora Limpieza Salida') || ''),
-            km: parseExcelNumber(getVal('Km')),
-            observaciones: String(getVal('Observaciones') || ''),
-            checked: parseBool(getVal('Checked')),
-          };
-        })
-        .filter((r: InitialCleanRecord | null): r is InitialCleanRecord => r !== null);
-
+      const { data, error } = await supabase
+        .from('cleans').select('*').eq('type', 'initial').order('created_at', { ascending: true });
+      if (error) throw error;
+      const records = (data || []).map(rowToInitialClean);
       return { records, status: records.length ? 'ok' : 'empty' };
     } catch (error) {
-      console.error('Error fetching initial cleans from Sheets:', error);
+      console.error('Error fetching initial cleans from Supabase:', error);
       return { records: [], status: 'error', error: String((error as any)?.message || error) };
     }
   },
@@ -2372,60 +2161,13 @@ export const appsScriptApi = {
 
   getHandymanRecordsResult: async (): Promise<CleansFetchResult<HandymanRecord>> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkout_Manitas!A:M?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
-      const response = await fetchWithRetry(url);
-
-      if (!response.ok) {
-        throw new Error(`Error fetching handyman records: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (!data.values || data.values.length <= 1) {
-        return { records: [], status: 'empty' };
-      }
-
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      const records: HandymanRecord[] = rows
-        .map((row: any[], index: number): HandymanRecord | null => {
-          const getVal = (headerName: string) => {
-            const norm = normalizeHeader(headerName);
-            const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-            return idx !== -1 ? row[idx] : undefined;
-          };
-
-          const nombre = String(getVal('Nombre') || '');
-          const apellidos = String(getVal('Apellidos') || '');
-          if (!nombre && !apellidos) return null;
-
-          const parseBool = (val: any): boolean => {
-            if (val === true || val === 'TRUE' || val === 'true' || val === '1' || val === 'Sí' || val === 'SI' || val === 'si') return true;
-            return false;
-          };
-
-          return {
-            id: `hm_${index + 2}`,
-            telefono: String(getVal('Telefono') || ''),
-            nombre,
-            apellidos,
-            fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador')),
-            ubicacionInicio: String(getVal('Checkin Ubicacion Trabajador') || ''),
-            fechaFin: parseDateTime(getVal('Checkout Fecha Trabajador')),
-            ubicacionFin: String(getVal('Checkout Ubicacion Trabajador') || ''),
-            alojamiento: String(getVal('Apartamento') || ''),
-            horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
-            horaFinTarea: String(getVal('Hora Reparacion Salida') || ''),
-            cantidadMinutos: parseExcelNumber(getVal('Km')),
-            observacionesTarea: String(getVal('Observaciones') || ''),
-            estadoCompletado: parseBool(getVal('Checked')) ? 'Completado' : 'Pendiente',
-          };
-        })
-        .filter((r: HandymanRecord | null): r is HandymanRecord => r !== null);
-
+      const { data, error } = await supabase
+        .from('cleans').select('*').eq('type', 'handyman').order('created_at', { ascending: true });
+      if (error) throw error;
+      const records = (data || []).map(rowToHandyman);
       return { records, status: records.length ? 'ok' : 'empty' };
     } catch (error) {
-      console.error('Error fetching handyman records from Sheets:', error);
+      console.error('Error fetching handyman records from Supabase:', error);
       return { records: [], status: 'error', error: String((error as any)?.message || error) };
     }
   },

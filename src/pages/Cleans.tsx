@@ -234,6 +234,9 @@ const Cleans: React.FC<CleansProps> = ({ userRole }) => {
     const fetchAllData = async () => {
       setLoading(true);
       try {
+        // Migración única Sheets -> Supabase (idempotente: se omite sola si ya hay datos).
+        await appsScriptApi.migrateCleansFromSheets().catch(e => console.error('migrateCleans:', e));
+
         const [ncRes, icRes, hmRes] = await Promise.all([
           appsScriptApi.getNormalCleansResult(),
           appsScriptApi.getInitialCleansResult(),

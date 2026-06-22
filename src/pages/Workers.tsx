@@ -57,16 +57,10 @@ const Workers: React.FC<WorkersProps> = ({ user, userRole }) => {
   };
 
   useEffect(() => {
-    // 1. Carga inmediata desde Supabase para pintar la lista al instante.
+    // Carga desde Supabase (fuente única tras migración desde Apps Script).
     fetchWorkers();
 
-    // 2. Sincronizar Excel -> Supabase en segundo plano (no bloquea el render).
-    //    Al terminar, refresca por si hubo ediciones hechas en el Sheet.
-    appsScriptApi.syncWorkersFromSheets()
-      .then(() => fetchWorkers())
-      .catch(console.error);
-
-    // 3. Cargar nombres de alojamientos
+    // Cargar nombres de alojamientos
     appsScriptApi.getAccommodations().then(accs => {
       setAccommodations(accs.map(a => a.name).sort());
     }).catch(console.error);

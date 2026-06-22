@@ -5,7 +5,7 @@ import { appsScriptApi } from '../../services/api';
 import { supabase } from '../../services/supabaseClient';
 
 const ANIM_MS = 320;
-const DEFAULT_PASSWORD = 'Rentalholidas0211';
+const DEFAULT_PASSWORD = 'Rentalholidays0211';
 
 const SetPasswordModal: React.FC = () => {
   const [needed, setNeeded] = useState(false);

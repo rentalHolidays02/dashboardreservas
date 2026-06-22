@@ -795,7 +795,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
           'crear_usuario'
         );
 
-        showToast(`Usuario creado. Contraseña por defecto: Rentalholidas0211`);
+        showToast(`Usuario creado. Contraseña por defecto: Rentalholidays0211`);
 
         // 2. Si es trabajador, vincular su ficha con la cuenta recién creada.
         if (u.role === 'trabajador' && u.assignedWorkerId && newProfileId) {
