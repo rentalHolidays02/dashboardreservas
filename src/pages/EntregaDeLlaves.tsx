@@ -603,6 +603,7 @@ const EntregaDeLlaves: React.FC<EntregaDeLlavesProps> = ({ userRole }) => {
   const fetchData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
+      await appsScriptApi.migrateEntregaLlavesFromSheets();
       const [entries, accs, ws] = await Promise.all([
         appsScriptApi.getEntregaLlaves(),
         appsScriptApi.getAccommodations(),

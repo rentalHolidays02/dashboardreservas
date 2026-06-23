@@ -127,7 +127,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
     });
     if (draftId) {
       const { deleteDraft } = await import('../../services/reportsApi');
-      await deleteDraft(draftId).catch(() => {});
+      await deleteDraft(draftId).catch(() => { });
     }
     localDrafts.clear('key_delivery');
   };
@@ -142,7 +142,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
   const handleDiscard = async () => {
     if (draftId) {
       const { deleteDraft } = await import('../../services/reportsApi');
-      await deleteDraft(draftId).catch(() => {});
+      await deleteDraft(draftId).catch(() => { });
     }
     localDrafts.clear('key_delivery');
     setForm(emptyForm);
@@ -228,7 +228,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
       )}
 
       <div>
-        <label className={labelCls}>Fianza (Monto) {ast}</label>
+        <label className={labelCls}>Dinero recogido (Monto) {ast}</label>
         <PagoSelector value={form.fianzaMonto} onChange={(v) => setF('fianzaMonto', v)} />
       </div>
 

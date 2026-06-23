@@ -64,19 +64,16 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Carga rápida: Supabase + mock — renderiza el dashboard sin esperar a Sheets
         const [
           workersData, checkInsData, normalData, initialData, handymanData,
-          activeNormalData, activeInitialData, activeHandymanData, entregaData,
-          accommodationsData
+          entregaData, accommodationsData
         ] = await Promise.all([
           appsScriptApi.getWorkers(),
           appsScriptApi.getRecentCheckIns(),
           appsScriptApi.getNormalCleans(),
           appsScriptApi.getInitialCleans(),
           appsScriptApi.getHandymanRecords(),
-          appsScriptApi.getNormalCheckins(),
-          appsScriptApi.getInitialCheckins(),
-          appsScriptApi.getHandymanCheckins(),
           appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
           appsScriptApi.getAccommodations().catch(() => []),
         ]);
@@ -85,9 +82,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
         setNormalCleans(normalData);
         setInitialCleans(initialData);
         setHandymanRecords(handymanData);
-        setActiveNormalCheckins(activeNormalData);
-        setActiveInitialCheckins(activeInitialData);
-        setActiveHandymanCheckins(activeHandymanData);
         setEntregaLlaves(entregaData);
         setAccommodations(accommodationsData);
       } catch (error) {
@@ -95,36 +89,47 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
       } finally {
         setLoading(false);
       }
+
+      // Carga diferida: checkins de Sheets (cold start ~3-8s) — no bloquea el render
+      Promise.all([
+        appsScriptApi.getNormalCheckins().catch(() => [] as NormalCleanRecord[]),
+        appsScriptApi.getInitialCheckins().catch(() => [] as InitialCleanRecord[]),
+        appsScriptApi.getHandymanCheckins().catch(() => [] as HandymanRecord[]),
+      ]).then(([activeNormalData, activeInitialData, activeHandymanData]) => {
+        setActiveNormalCheckins(activeNormalData);
+        setActiveInitialCheckins(activeInitialData);
+        setActiveHandymanCheckins(activeHandymanData);
+      }).catch(() => {});
     };
     fetchData();
   }, []);
 
   const refreshDashboard = async () => {
     try {
-      const [
-        workersData, checkInsData, normalData, initialData, handymanData,
-        activeNormalData, activeInitialData, activeHandymanData
-      ] = await Promise.all([
+      const [workersData, checkInsData, normalData, initialData, handymanData] = await Promise.all([
         appsScriptApi.getWorkers(),
         appsScriptApi.getRecentCheckIns(),
         appsScriptApi.getNormalCleans(),
         appsScriptApi.getInitialCleans(),
         appsScriptApi.getHandymanRecords(),
-        appsScriptApi.getNormalCheckins(),
-        appsScriptApi.getInitialCheckins(),
-        appsScriptApi.getHandymanCheckins(),
       ]);
       setWorkers(workersData);
       setCheckIns(checkInsData);
       setNormalCleans(normalData);
       setInitialCleans(initialData);
       setHandymanRecords(handymanData);
-      setActiveNormalCheckins(activeNormalData);
-      setActiveInitialCheckins(activeInitialData);
-      setActiveHandymanCheckins(activeHandymanData);
     } catch (error) {
       console.error('Error refreshing dashboard:', error);
     }
+    Promise.all([
+      appsScriptApi.getNormalCheckins().catch(() => [] as NormalCleanRecord[]),
+      appsScriptApi.getInitialCheckins().catch(() => [] as InitialCleanRecord[]),
+      appsScriptApi.getHandymanCheckins().catch(() => [] as HandymanRecord[]),
+    ]).then(([a, b, c]) => {
+      setActiveNormalCheckins(a);
+      setActiveInitialCheckins(b);
+      setActiveHandymanCheckins(c);
+    }).catch(() => {});
   };
 
   const handleCheckoutRequested = (type: CheckoutTabType, record: CheckoutRecord) => {

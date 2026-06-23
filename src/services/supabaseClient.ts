@@ -7,21 +7,26 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('⚠️ Supabase URL o Anon Key no encontradas en el archivo .env');
 }
 
+// ponytail: storage en memoria controlado por nosotros.
+// - evita el deadlock del navigatorLock (signInWithPassword colgaba porque
+//   detectSessionInUrl + getSession concurrentes retenían el lock del SDK)
+// - permite escribir el token directamente desde login() sin pasar por setSession()
+// - se borra al recargar la página (como sessionStorage), sin persistir entre pestañas
+const memStore = new Map<string, string>();
+const memStorage = {
+  getItem: (key: string) => memStore.get(key) ?? null,
+  setItem: (key: string, value: string) => { memStore.set(key, value); },
+  removeItem: (key: string) => { memStore.delete(key); },
+};
+
+export { memStore };
+
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Guardar la sesión en sessionStorage (no localStorage): sobrevive a
-    // recargas (F5) dentro de la misma pestaña, pero se borra al cerrar la
-    // pestaña/navegador. Más seguro: al cerrar, hay que volver a iniciar sesión.
-    // Nota: sessionStorage es por pestaña → cada pestaña nueva pide login.
-    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
-    // Sustituye el Web Lock global del navegador (navigatorLock) por un lock
-    // pass-through. El navigatorLock provoca un deadlock: signInWithPassword
-    // recibe el token (HTTP 200) pero su promesa JS nunca resuelve porque el
-    // lock queda retenido por getSession()/detectSessionInUrl concurrentes,
-    // dejando el botón "Verificando…" girando para siempre.
+    storage: memStorage,
     lock: async (_name, _acquireTimeout, fn) => fn(),
   },
 });

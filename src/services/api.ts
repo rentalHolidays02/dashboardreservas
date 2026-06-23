@@ -1,10 +1,6 @@
 import {
   MOCK_WORKERS,
   MOCK_CHECKINS,
-  MOCK_INCIDENCIAS,
-  MOCK_NORMAL_CLEANS,
-  MOCK_INITIAL_CLEANS,
-  MOCK_HANDYMAN_RECORDS,
   MOCK_PAGOS,
   User,
   Worker,
@@ -21,28 +17,19 @@ import {
   WorkerAccommodationDetails,
   AppFeedbackPayload
 } from './mockData';
-import { supabase } from './supabaseClient';
+import { supabase, memStore } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
-// Google Sheets API Configuration
+// Google Sheets — solo Checkins (alimentados por reservas externas) y migraciones únicas
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
-const ALOJAMIENTOS_SPREADSHEET_ID = import.meta.env.VITE_ALOJAMIENTOS_SPREADSHEET_ID || ''; // Alojamientos
-const WORKERS_SPREADSHEET_ID = import.meta.env.VITE_WORKERS_SPREADSHEET_ID || ''; // Pagos Generales (Operarios)
-const CLEANS_SPREADSHEET_ID = import.meta.env.VITE_CLEANS_SPREADSHEET_ID || ''; // INFORMES_OPERARIOS
-const ACCOMMODATIONS_RANGE = "'ALOJAMIENTOS ACTIVOS'!A:AJ"; // Extendido para incluir CP, POBLACIÓN y PROVINCIA del apartamento
-const WORKERS_RANGE = "'informacion operarios'!A:Z";
-const INVITACION_APPS_SCRIPT_URL = import.meta.env.VITE_SUPABASE_INVITACION_APPS_SCRIPT_URL || '';
-const CLEANS_APPS_SCRIPT_URL = import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL || '';
-const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || '';
+const CLEANS_SPREADSHEET_ID = import.meta.env.VITE_CLEANS_SPREADSHEET_ID || ''; // Checkins pendientes
+const CLEANS_APPS_SCRIPT_URL = import.meta.env.VITE_CLEANS_APPS_SCRIPT_URL || ''; // deleteCheckinRecord
+const INCIDENCIAS_SPREADSHEET_ID = import.meta.env.VITE_INCIDENCIAS_SPREADSHEET_ID || ''; // migración única
 const INCIDENCIAS_RANGE = "'Informe_Incidencia'!A:Z";
-const INCIDENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_APPS_SCRIPT_URL || '';
-const ENTREGA_LLAVES_SPREADSHEET_ID = import.meta.env.VITE_ENTREGA_LLAVES_SPREADSHEET_ID || '';
+const ENTREGA_LLAVES_SPREADSHEET_ID = import.meta.env.VITE_ENTREGA_LLAVES_SPREADSHEET_ID || ''; // migración única
 const ENTREGA_LLAVES_RANGE = "'Informe_Entrega_Llaves'!A:U";
 const FIRMAS_ENTREGA_BUCKET = 'firmas-entrega';
-const ENTREGA_LLAVES_APPS_SCRIPT_URL = import.meta.env.VITE_ENTREGA_LLAVES_APPS_SCRIPT_URL || '';
 const SUGERENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || '';
-const SAVE_PDF_APPS_SCRIPT_URL = import.meta.env.VITE_SAVE_PDF_APPS_SCRIPT_URL || '';
-const PDF_FOLDER_ID = import.meta.env.VITE_PDF_FOLDER_ID || '';
 
 
 // --- Sheets cache (TTL + in-flight deduplication) ---
@@ -130,6 +117,110 @@ async function uploadEntregaFirmaIfNeeded(
   const { data } = supabase.storage.from(FIRMAS_ENTREGA_BUCKET).getPublicUrl(path);
   return `${data.publicUrl}?t=${Date.now()}`;
 }
+function incRowToIncidencia(r: any): Incidencia {
+  return {
+    id: r.id,
+    userName: r.user_name ?? '',
+    description: r.description ?? '',
+    timestamp: r.timestamp ?? r.created_at ?? new Date().toISOString(),
+    accommodationId: r.accommodation_id ?? '',
+    accommodationName: r.accommodation_name ?? '',
+    coste: Number(r.coste) || 0,
+    pagadoPor: r.pagado_por ?? 'empresa',
+    kms: r.kms != null ? Number(r.kms) : undefined,
+    checked: r.checked ?? false,
+    telefono: r.telefono ?? '',
+    nombre: r.nombre ?? '',
+    apellidos: r.apellidos ?? '',
+    paradaInicial: r.parada_inicial ?? '',
+    paradaOpcional1: r.parada_opcional1 ?? '',
+    paradaOpcional2: r.parada_opcional2 ?? '',
+    paradaOpcional3: r.parada_opcional3 ?? '',
+    paradaOpcional4: r.parada_opcional4 ?? '',
+    paradaOpcional5: r.parada_opcional5 ?? '',
+    paradaFinal: r.parada_final ?? '',
+    observaciones: r.observaciones ?? '',
+  };
+}
+
+function incidenciaToRow(d: Omit<Incidencia, 'id'>) {
+  return {
+    user_name: d.userName,
+    description: d.description,
+    timestamp: d.timestamp,
+    accommodation_id: d.accommodationId,
+    accommodation_name: d.accommodationName,
+    coste: d.coste,
+    pagado_por: d.pagadoPor,
+    kms: d.kms ?? null,
+    checked: d.checked ?? false,
+    telefono: d.telefono ?? '',
+    nombre: d.nombre ?? '',
+    apellidos: d.apellidos ?? '',
+    parada_inicial: d.paradaInicial ?? '',
+    parada_opcional1: d.paradaOpcional1 ?? '',
+    parada_opcional2: d.paradaOpcional2 ?? '',
+    parada_opcional3: d.paradaOpcional3 ?? '',
+    parada_opcional4: d.paradaOpcional4 ?? '',
+    parada_opcional5: d.paradaOpcional5 ?? '',
+    parada_final: d.paradaFinal ?? '',
+    observaciones: d.observaciones ?? '',
+  };
+}
+
+function elkRowToEntregaLlaves(r: any): EntregaLlaves {
+  return {
+    id: r.id,
+    telefono: r.telefono ?? '',
+    nombre: r.nombre ?? '',
+    apellidos: r.apellidos ?? '',
+    fechaUbicacionEntrega: r.fecha_ubicacion_entrega ?? '',
+    apartamento: r.apartamento ?? '',
+    nombreCliente: r.nombre_cliente ?? '',
+    fechaEntradaReserva: r.fecha_entrada_reserva ?? '',
+    fechaSalidaReserva: r.fecha_salida_reserva ?? '',
+    entregaLlaves: r.entrega_llaves ?? false,
+    sabanasToallas: r.sabanas_toallas ?? 'No',
+    km: Number(r.km) || 0,
+    observaciones: r.observaciones ?? '',
+    fianzaMonto: r.fianza_monto ?? 'Efectivo',
+    bizumMonto: r.bizum_monto ?? '',
+    cantidadPagadaMonto: r.cantidad_pagada_monto ?? '',
+    fianzaGarantia: r.fianza_garantia ?? 'Efectivo',
+    bizumGarantia: r.bizum_garantia ?? '',
+    cantidadPagadaGarantia: r.cantidad_pagada_garantia ?? '',
+    checked: r.checked ?? false,
+    firmaTrabajador: r.firma_trabajador ?? undefined,
+    firmaHuesped: r.firma_huesped ?? undefined,
+  };
+}
+
+function entregaLlavesToRow(d: Omit<EntregaLlaves, 'id'>) {
+  return {
+    telefono: d.telefono,
+    nombre: d.nombre,
+    apellidos: d.apellidos,
+    fecha_ubicacion_entrega: d.fechaUbicacionEntrega,
+    apartamento: d.apartamento,
+    nombre_cliente: d.nombreCliente,
+    fecha_entrada_reserva: d.fechaEntradaReserva,
+    fecha_salida_reserva: d.fechaSalidaReserva,
+    entrega_llaves: d.entregaLlaves,
+    sabanas_toallas: d.sabanasToallas,
+    km: d.km,
+    observaciones: d.observaciones,
+    fianza_monto: d.fianzaMonto,
+    bizum_monto: d.bizumMonto,
+    cantidad_pagada_monto: d.cantidadPagadaMonto,
+    fianza_garantia: d.fianzaGarantia,
+    bizum_garantia: d.bizumGarantia,
+    cantidad_pagada_garantia: d.cantidadPagadaGarantia,
+    checked: d.checked,
+    firma_trabajador: d.firmaTrabajador || null,
+    firma_huesped: d.firmaHuesped || null,
+  };
+}
+
 // --- Fin cache ---
 
 export type CleansFetchStatus = 'ok' | 'empty' | 'error';
@@ -631,36 +722,53 @@ const sheetReadCleans = async (sheetName: string, range: string, mapRow: (getVal
 export const appsScriptApi = {
   login: async (email: string, pass: string): Promise<User | null> => {
     try {
-      // Autenticar exclusivamente con Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password: pass,
+      // ponytail: fetch directo al REST de Supabase Auth — bypasea el lock interno del SDK
+      // que cuelga signInWithPassword indefinidamente en v2.x con sessionStorage storage
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const authResp = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'apikey': supabaseKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass }),
       });
-
-      if (authError) {
-        console.error('Error de autenticación:', authError.message);
+      const authJson = await authResp.json();
+      if (!authResp.ok || authJson.error) {
+        console.error('Error de autenticación:', authJson.error_description || authJson.error);
         return null;
       }
+      // Escribir token directamente en el memStore que usa el SDK como storage.
+      // Esto popula la caché del cliente sin pasar por setSession() ni signInWithPassword()
+      // (ambos cuelgan por el navigatorLock del SDK). Con memStorage sincrónico,
+      // getSession() del SDK encuentra el token inmediatamente y no hace red.
+      const projectRef = supabaseUrl.match(/\/\/([^.]+)/)?.[1] ?? '';
+      const storageKey = `sb-${projectRef}-auth-token`;
+      const sessionPayload = {
+        access_token: authJson.access_token,
+        refresh_token: authJson.refresh_token,
+        expires_at: authJson.expires_at ?? Math.floor(Date.now() / 1000) + (authJson.expires_in ?? 3600),
+        expires_in: authJson.expires_in ?? 3600,
+        token_type: 'bearer',
+        user: authJson.user,
+      };
+      memStore.set(storageKey, JSON.stringify(sessionPayload));
+      const sessionUser = { id: authJson.user?.id as string, email: authJson.user?.email as string };
+      if (!sessionUser.id) return null;
 
-      const sessionUser = authData.user;
-      if (!sessionUser) return null;
+      // ponytail: fetch directo al REST de Supabase para el perfil — SDK en memoria aún tiene sesión null
+      const profileResp = await fetch(
+        `${supabaseUrl}/rest/v1/profiles?id=eq.${sessionUser.id}&select=id,email,full_name,role,phone,avatar_url&limit=1`,
+        { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${authJson.access_token}` } }
+      );
+      const profileRows = profileResp.ok ? await profileResp.json() : [];
+      const profile = profileRows[0] ?? null;
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, role, phone, avatar_url')
-        .eq('id', sessionUser.id)
-        .single();
-
-      if (profileError || !profile) {
-        // Sin perfil en Supabase → acceso de solo lectura (viewer).
-        // El puente a Google Apps Script se eliminó: no contenía perfiles
-        // y solo añadía latencia (cold start) al login.
+      if (!profile) {
         console.warn('🚩 [Login] Perfil no encontrado en Supabase. Fallback a viewer.');
         return {
           id: sessionUser.id,
           email: sessionUser.email || '',
           role: 'viewer',
-          name: sessionUser.user_metadata?.full_name || sessionUser.user_metadata?.name || 'Usuario'
+          name: (authJson.user as any)?.user_metadata?.full_name || (authJson.user as any)?.user_metadata?.name || 'Usuario'
         };
       }
 
@@ -669,7 +777,7 @@ export const appsScriptApi = {
         id: p.id || sessionUser.id,
         email: p.email || sessionUser.email,
         role: (p.role || 'viewer') as any,
-        name: p.full_name || p.name || sessionUser.user_metadata?.full_name || 'Usuario',
+        name: p.full_name || p.name || (authJson.user as any)?.user_metadata?.full_name || 'Usuario',
         telefono: p.phone || p.telefono || undefined,
         avatar_url: p.avatar_url || null
       };
@@ -746,28 +854,10 @@ export const appsScriptApi = {
 
   uploadReportPDF: async (blob: Blob, filename: string): Promise<{ ok: boolean, error?: string }> => {
     try {
-      if (!SAVE_PDF_APPS_SCRIPT_URL) {
-        throw new Error('La URL de SAVE_PDF_APPS_SCRIPT_URL no está configurada.');
-      }
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-
-      const response = await fetch(SAVE_PDF_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'uploadPDF',
-          filename,
-          base64,
-          folderId: PDF_FOLDER_ID
-        })
-      });
-      // no-cors no nos permite leer la respuesta, por lo que asumimos que está ok si no lanza excepción
+      const { error } = await supabase.storage
+        .from('pdfs')
+        .upload(filename, blob, { contentType: 'application/pdf', upsert: true });
+      if (error) throw error;
       return { ok: true };
     } catch (e: any) {
       console.error('Error al subir PDF:', e);
@@ -808,38 +898,20 @@ export const appsScriptApi = {
   // --- Funciones de Administración (Supabase) ---
 
   getAllUsers: async (): Promise<User[]> => {
-    let { data, error } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('*')
       .order('full_name', { ascending: true });
 
-    if (!data || data.length === 0) {
-      console.warn('⚠️ [API] Supabase no devolvió perfiles. Intentando Google...');
-      try {
-        const url = new URL(INVITACION_APPS_SCRIPT_URL);
-        url.searchParams.append('action', 'getAllProfiles');
-        // Usamos un proxy de CORS o intentamos fetch normal (aunque falle)
-        const response = await fetch(url.toString(), { method: 'GET' });
-        const gasData = await response.json();
-        if (gasData.ok && gasData.profiles) {
-          data = gasData.profiles;
-        }
-      } catch (e) {
-        console.error('❌ [API] Fallo al obtener perfiles desde Google (CORS):', e);
-      }
-    }
-
-    const finalProfiles = (data || []).map(p => ({
+    return (data || []).map(p => ({
       id: p.id,
       email: p.email,
       role: p.role as any,
       name: p.full_name || p.name,
       telefono: p.phone || p.telefono || undefined,
-      last_seen: p.last_seen, // Campo para el estado de conexión
+      last_seen: p.last_seen,
       avatar_url: p.avatar_url || null,
     }));
-
-    return finalProfiles;
   },
 
   updateProfile: async (userId: string, profileData: Partial<User>) => {
@@ -1080,159 +1152,9 @@ export const appsScriptApi = {
   },
 
   // --- Sincronización Excel -> Supabase ---
-  syncWorkersFromSheets: async (): Promise<void> => {
-    try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKERS_SPREADSHEET_ID}/values/${encodeURIComponent(WORKERS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) return;
-
-      const data = await response.json();
-      if (!data.values || data.values.length < 2) return;
-
-      const headers = data.values[0];
-      const rows = data.values.slice(1);
-
-      // 1. Obtener estado actual de Supabase para comparar
-      const { data: dbWorkers } = await supabase.from('workers').select('*');
-      if (!dbWorkers) return;
-
-      const activePhonesInExcel: string[] = [];
-
-      for (const row of rows) {
-        const getVal = (headerName: string) => {
-          const norm = normalizeHeader(headerName);
-          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-          return idx !== -1 ? row[idx] : undefined;
-        };
-
-        const fullName = String(getVal('OPERARIO') || '').trim();
-        const phone = String(getVal('MOVIL') || '').trim();
-        if (!fullName || !phone) continue;
-
-        activePhonesInExcel.push(phone);
-
-        const medioPago = String(getVal('MEDIO DE PAGO') || '').toLowerCase();
-        const tipoPago = medioPago.includes('bizum') ? 'bizum' :
-                         medioPago.includes('tarjeta') ? 'tarjeta' :
-                         'efectivo';
-
-        const workerData = {
-          full_name: fullName,
-          phone: phone,
-          iban: String(getVal('CUENTA BANCARIA') || ''),
-          payment_method: tipoPago,
-          pay_per_reservation: parseExcelNumber(getVal('PAGO POR RESERVA')),
-          pay_per_extra_reservation: parseExcelNumber(getVal('PAGO POR RESERVA ADICIONAL')),
-          pay_per_linen_service: parseExcelNumber(getVal('PAGO POR SABANAS Y TOALLAS')),
-          pay_per_incident: parseExcelNumber(getVal('INCIDENCIAS')),
-          price_per_km: parseExcelNumber(getVal('KILOMETRAJE')),
-          notes: String(getVal('OBSERVACIONES') || ''),
-          pending_balance: parseExcelNumber(getVal('SALDO PENDIENTE')),
-          retained_cash: parseExcelNumber(getVal('EFECTIVO RETENIDO')),
-          active: true
-        };
-
-        // LÓGICA INTELIGENTE: Buscar por teléfono O por nombre (para detectar cambios de número)
-        const existing = dbWorkers.find(w => w.phone === phone) || 
-                         dbWorkers.find(w => w.full_name.toLowerCase() === fullName.toLowerCase());
-
-        if (existing) {
-          // Si existe (por teléfono o nombre), actualizamos para mantener el mismo ID interno
-          await supabase.from('workers').update(workerData).eq('id', existing.id);
-        } else {
-          // Si es totalmente nuevo, insertamos
-          await supabase.from('workers').insert([workerData]);
-        }
-      }
-
-      // 2. GESTIÓN DE BAJAS: Los que están en DB pero ya no en Excel
-      const dbPhones = dbWorkers.map(w => w.phone);
-      const phonesToDeactivate = dbPhones.filter(p => {
-        if (activePhonesInExcel.includes(p)) return false;
-        if (p === '') return false;
-
-        // Buscar el trabajador en la lista de Supabase
-        const w = dbWorkers.find(x => x.phone === p);
-        if (w && w.created_at) {
-          const createdAtTime = new Date(w.created_at).getTime();
-          const nowTime = Date.now();
-          const diffMin = (nowTime - createdAtTime) / 60000;
-          if (diffMin < 3) {
-            console.log(`Sincronización: Omitiendo desactivación de trabajador recién creado en Supabase: ${w.full_name}`);
-            return false; // Omitir desactivación
-          }
-        }
-        return true;
-      });
-      
-      if (phonesToDeactivate.length > 0) {
-        // En lugar de borrar (delete), marcamos como inactivos (active: false)
-        // Esto evita romper relaciones con pagos e informes históricos.
-        await supabase.from('workers').update({ active: false }).in('phone', phonesToDeactivate);
-        console.log(`Sincronización: Marcados como inactivos ${phonesToDeactivate.length} trabajadores.`);
-      }
-
-      console.log('✅ Sincronización inteligente Excel -> Supabase completada');
-    } catch (error) {
-      console.error('Error sincronizando trabajadores:', error);
-    }
-  },
-
-  // --- Sincronización Alojamientos: Sheets -> Supabase ---
-  syncAccommodationsFromSheets: async (): Promise<void> => {
-    try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${ALOJAMIENTOS_SPREADSHEET_ID}/values/${encodeURIComponent(ACCOMMODATIONS_RANGE)}?key=${GOOGLE_API_KEY}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) return;
-
-      const data = await response.json();
-      if (!data.values || data.values.length < 2) return;
-
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1) as any[][];
-
-      const toSync = rows
-        .map((row) => {
-          const getVal = (headerName: string) => {
-            const norm = normalizeHeader(headerName);
-            const idx = headers.findIndex((h: string) => h && normalizeHeader(h) === norm);
-            return idx !== -1 ? row[idx] : undefined;
-          };
-
-          const name = String(getVal('PROPIEDAD') || getVal('NOMBRE') || getVal('Apartamento') || '').trim();
-          if (!name) return null;
-
-          const touristAddress = String(getVal('DIRECCIÓN ALOJAMIENTO TURÍSTICO') || getVal('DIRECCION ALOJAMIENTO TURISTICO') || '').trim();
-          const ownerAddress  = String(getVal('DIRECCIÓN') || getVal('Dirección') || '').trim();
-
-          return {
-            name,
-            ref:       String(getVal('REF') || getVal('Ref') || getVal('ref') || '').trim(),
-            address:   touristAddress || ownerAddress,
-            city:      String(getVal('POBLACIÓN') || getVal('POBLACION') || getVal('Población') || getVal('Ciudad') || '').trim(),
-            zip_code:  String(getVal('CP') || getVal('C.P.') || '').trim(),
-            provincia: String(getVal('PROVINCIA') || getVal('Provincia') || '').trim(),
-            notes:     String(getVal('OBSERVACIONES') || '').trim(),
-            active:    true,
-          };
-        })
-        .filter(Boolean) as Record<string, any>[];
-
-      if (toSync.length === 0) return;
-
-      const { error } = await supabase
-        .from('accommodations')
-        .upsert(toSync, { onConflict: 'name' });
-
-      if (error) {
-        console.error('Error sincronizando alojamientos a Supabase:', error);
-      } else {
-        console.log(`✅ Alojamientos sincronizados a Supabase: ${toSync.length} registros`);
-      }
-    } catch (error) {
-      console.error('Error en syncAccommodationsFromSheets:', error);
-    }
-  },
+  // ponytail: sync manual eliminado — Supabase es la fuente de verdad desde 2026-06-23
+  syncWorkersFromSheets: async (): Promise<void> => {},
+  syncAccommodationsFromSheets: async (): Promise<void> => {},
 
   updateWorker: async (workerData: Worker): Promise<Worker> => {
     try {
@@ -1394,82 +1316,78 @@ export const appsScriptApi = {
 
   getRecentIncidencias: async (limit = 50): Promise<Incidencia[]> => {
     try {
+      const { data, error } = await supabase
+        .from('incidencias_logistica')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return (data || []).map(incRowToIncidencia);
+    } catch (error) {
+      console.error('Error fetching incidencias from Supabase:', error);
+      return [];
+    }
+  },
+
+  migrateIncidenciasFromSheets: async (): Promise<{ inserted: number; skipped: boolean }> => {
+    const { count } = await supabase.from('incidencias_logistica').select('id', { count: 'exact', head: true });
+    if ((count ?? 0) > 0) return { inserted: 0, skipped: true };
+    if (!INCIDENCIAS_SPREADSHEET_ID || !GOOGLE_API_KEY) return { inserted: 0, skipped: false };
+
+    try {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${INCIDENCIAS_SPREADSHEET_ID}/values/${encodeURIComponent(INCIDENCIAS_RANGE)}?key=${GOOGLE_API_KEY}`;
       const response = await fetchWithRetry(url);
-      
-      if (!response.ok) {
-        throw new Error(`Error en la API de Google Sheets (Incidencias): ${response.statusText}`);
-      }
-  
-      const data = await response.json();
-      if (!data.values || data.values.length === 0) {
-        return MOCK_INCIDENCIAS;
-      }
-  
-      const allValues = data.values as any[][];
-      const headers = allValues[0] as string[];
-      const rows = allValues.slice(1);
-  
-      const incidencias: Incidencia[] = rows
-        .map((row: any[], index: number): Incidencia => {
-          const getVal = (headerName: string) => {
-            const idx = headers.findIndex((h: string) => h && h.trim().toUpperCase() === headerName.trim().toUpperCase());
-            return idx !== -1 ? row[idx] : undefined;
-          };
-  
-          const nombre = String(getVal('NOMBRE') || '').trim();
-          const apellidos = String(getVal('APELLIDOS') || '').trim();
-          const fechaExcel = String(getVal('FECHA') || '').trim();
-          
-          // Formatea D/M/YYYY [HH:MM[:SS]] con coma o espacio → ISO. Robusto al separador.
-          let timestamp = new Date().toISOString();
-          if (fechaExcel) {
-            try {
-              const m = fechaExcel.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-              if (m) {
-                const [, dd, mo, yy, hh, mi, ss] = m;
-                timestamp = `${yy}-${mo.padStart(2, '0')}-${dd.padStart(2, '0')}T${(hh || '00').padStart(2, '0')}:${(mi || '00').padStart(2, '0')}:${(ss || '00').padStart(2, '0')}`;
-              } else if (!fechaExcel.includes('/')) {
-                timestamp = new Date(fechaExcel).toISOString();
-              }
-            } catch (e) {
-              console.warn('Error parseando fecha de incidencia:', fechaExcel);
-            }
-          }
-  
-          return {
-            id: `real_inc_${index + 2}`,
-            userName: `${nombre} ${apellidos}`.replace(/\s+/g, ' ').trim() || 'Desconocido',
-            description: String(getVal('DETALLES INCIDENCIA') || '').trim(),
-            timestamp,
-            accommodationId: `real_acc_${index}`, // ID ficticio basado en fila
-            accommodationName: String(getVal('APARTAMENTO') || 'Sin especificar').trim(),
-            coste: 0,
-            pagadoPor: 'empresa',
-            kms: parseExcelNumber(getVal('KMS TOTAL')),
-            checked: String(getVal('CHECKED')).toUpperCase() === 'TRUE',
-            telefono: String(getVal('TELEFONO') || '').trim(),
-            nombre: nombre,
-            apellidos: apellidos,
-            paradaInicial: String(getVal('PARADA INICIAL') || '').trim(),
-            paradaOpcional1: String(getVal('PARADA OPCIONAL 1') || '').trim(),
-            paradaOpcional2: String(getVal('PARADA OPCIONAL 2') || '').trim(),
-            paradaOpcional3: String(getVal('PARADA OPCIONAL 3') || '').trim(),
-            paradaOpcional4: String(getVal('PARADA OPCIONAL 4') || '').trim(),
-            paradaOpcional5: String(getVal('PARADA OPCIONAL 5') || '').trim(),
-            paradaFinal: String(getVal('PARADA FINAL') || '').trim(),
-            observaciones: String(getVal('OBSERVACIONES') || '').trim()
-          };
-        })
-        // Antes filtraba sólo las que tienen descripción — eso excluía incidencias de prueba
-        // (creadas sin texto) en el resumen del trabajador.
-        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-        .slice(0, limit);
-  
-      return incidencias;
-    } catch (error) {
-      console.error('Error fetching incidencias from Sheets:', error);
-      return MOCK_INCIDENCIAS;
+      if (!response.ok) return { inserted: 0, skipped: false };
+      const sheetData = await response.json();
+      if (!sheetData.values || sheetData.values.length < 2) return { inserted: 0, skipped: false };
+
+      const headers = sheetData.values[0] as string[];
+      const rows = sheetData.values.slice(1) as any[][];
+      const getVal = (row: any[], h: string) => {
+        const idx = headers.findIndex(x => x && x.trim().toUpperCase() === h.toUpperCase());
+        return idx !== -1 ? String(row[idx] ?? '').trim() : '';
+      };
+
+      const parseIncFecha = (f: string): string => {
+        const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+        if (m) {
+          const [, dd, mo, yy, hh = '00', mi = '00', ss = '00'] = m;
+          return `${yy}-${mo.padStart(2,'0')}-${dd.padStart(2,'0')}T${hh.padStart(2,'0')}:${mi.padStart(2,'0')}:${ss.padStart(2,'0')}`;
+        }
+        return new Date().toISOString();
+      };
+
+      const inserts = rows.map(row => ({
+        user_name: `${getVal(row,'NOMBRE')} ${getVal(row,'APELLIDOS')}`.trim() || 'Desconocido',
+        description: getVal(row, 'DETALLES INCIDENCIA'),
+        timestamp: parseIncFecha(getVal(row, 'FECHA')),
+        accommodation_id: '',
+        accommodation_name: getVal(row, 'APARTAMENTO') || 'Sin especificar',
+        coste: 0,
+        pagado_por: 'empresa' as const,
+        kms: parseExcelNumber(getVal(row, 'KMS TOTAL')) || null,
+        checked: getVal(row, 'CHECKED').toUpperCase() === 'TRUE',
+        telefono: getVal(row, 'TELEFONO'),
+        nombre: getVal(row, 'NOMBRE'),
+        apellidos: getVal(row, 'APELLIDOS'),
+        parada_inicial: getVal(row, 'PARADA INICIAL'),
+        parada_opcional1: getVal(row, 'PARADA OPCIONAL 1'),
+        parada_opcional2: getVal(row, 'PARADA OPCIONAL 2'),
+        parada_opcional3: getVal(row, 'PARADA OPCIONAL 3'),
+        parada_opcional4: getVal(row, 'PARADA OPCIONAL 4'),
+        parada_opcional5: getVal(row, 'PARADA OPCIONAL 5'),
+        parada_final: getVal(row, 'PARADA FINAL'),
+        observaciones: getVal(row, 'OBSERVACIONES'),
+      }));
+
+      if (inserts.length === 0) return { inserted: 0, skipped: false };
+      const { error } = await supabase.from('incidencias_logistica').insert(inserts);
+      if (error) throw error;
+      console.log(`[migrateIncidencias] Insertadas ${inserts.length} incidencias.`);
+      return { inserted: inserts.length, skipped: false };
+    } catch (err) {
+      console.error('[migrateIncidencias] Error:', err);
+      return { inserted: 0, skipped: false };
     }
   },
 
@@ -1580,15 +1498,12 @@ export const appsScriptApi = {
 
   updateIncidencia: async (incidencia: Incidencia): Promise<boolean> => {
     try {
-      await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify({ ...incidencia, action: 'update' })
-      });
-
+      const { id, ...rest } = incidencia;
+      const { error } = await supabase
+        .from('incidencias_logistica')
+        .update(incidenciaToRow(rest))
+        .eq('id', id);
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error updating incidencia:', error);
@@ -1598,15 +1513,10 @@ export const appsScriptApi = {
 
   createIncidencia: async (incidencia: Omit<Incidencia, 'id'>): Promise<boolean> => {
     try {
-      await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify({ ...incidencia, action: 'add' })
-      });
-
+      const { error } = await supabase
+        .from('incidencias_logistica')
+        .insert(incidenciaToRow(incidencia));
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error creating incidencia:', error);
@@ -1616,15 +1526,11 @@ export const appsScriptApi = {
 
   deleteIncidencia: async (id: string): Promise<boolean> => {
     try {
-      await fetch(INCIDENCIAS_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        body: JSON.stringify({ id, action: 'delete' })
-      });
-
+      const { error } = await supabase
+        .from('incidencias_logistica')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error deleting incidencia:', error);
@@ -1633,117 +1539,17 @@ export const appsScriptApi = {
   },
 
   getEntregaLlaves: async (): Promise<EntregaLlaves[]> => {
-    return withSheetsCache('entregaLlaves_v3', async () => {
     try {
-      const sheetBase = `https://sheets.googleapis.com/v4/spreadsheets/${ENTREGA_LLAVES_SPREADSHEET_ID}/values/`;
-      const [fmtResponse, formulaResponse] = await Promise.all([
-        fetch(`${sheetBase}${encodeURIComponent(ENTREGA_LLAVES_RANGE)}?key=${GOOGLE_API_KEY}`),
-        fetch(
-          `${sheetBase}${encodeURIComponent("'Informe_Entrega_Llaves'!S:U")}?valueRenderOption=FORMULA&key=${GOOGLE_API_KEY}`
-        ),
-      ]);
-      if (!fmtResponse.ok) throw new Error(`Error fetching Entrega de Llaves: ${fmtResponse.statusText}`);
-
-      const data = await fmtResponse.json();
-      if (!data.values || data.values.length === 0) return [];
-
-      const formulaData = formulaResponse.ok ? await formulaResponse.json() : { values: [] as string[][] };
-      const formulaRows = (formulaData.values || []).slice(1) as string[][];
-
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      const normalizeHeader = (h: string) =>
-        h.trim().toUpperCase().normalize('NFD').replace(/\p{M}/gu, '');
-
-      const headerIndex = (...names: string[]) => {
-        for (const name of names) {
-          const target = normalizeHeader(name);
-          const idx = headers.findIndex(h => h && normalizeHeader(String(h)) === target);
-          if (idx !== -1) return idx;
-        }
-        return -1;
-      };
-
-      return rows.map((row: any[], index: number) => {
-        const getVal = (headerName: string) => {
-          const idx = headerIndex(headerName);
-          return idx !== -1 ? row[idx] : undefined;
-        };
-
-        const formulaRow = formulaRows[index] || [];
-        const firmaFromFormula = (colInS: number) =>
-          parseEntregaFirmaCell(formulaRow[colInS]);
-
-        const rawTel = String(getVal('TELEFONO') || getVal('Telefono') || '').replace(/\D/g, '');
-        const cleanTel = (rawTel.startsWith('34') && rawTel.length >= 11) ? rawTel.slice(-9) : rawTel;
-
-        const parsePaymentMethod = (val: any) => {
-          const s = String(val || '').trim().toLowerCase();
-          if (s.includes('bizum')) return 'Bizum';
-          if (s.includes('tarjeta')) return 'Tarjeta';
-          return 'Efectivo';
-        };
-
-        const rawEntrega = String(getVal('ENTREGA LLAVES') || getVal('Entrega Llaves') || '').toUpperCase();
-        const rawChecked = String(getVal('CHECKED') || getVal('Checked') || '').toUpperCase();
-
-        return {
-          id: `real_key_${index + 2}`,
-          telefono: cleanTel,
-          nombre: String(getVal('NOMBRE') || getVal('Nombre') || ''),
-          apellidos: String(getVal('APELLIDOS') || getVal('Apellidos') || ''),
-          fechaUbicacionEntrega: String(
-            getVal('FECHA Y UBICACION DE LLAVES ENTREGADAS') ||
-            getVal('Fecha y ubicacion de llaves entregadas') ||
-            ''
-          ),
-          apartamento: String(getVal('APARTAMENTO') || getVal('Apartamento') || ''),
-          nombreCliente: String(getVal('NOMBRE CLIENTE') || getVal('Nombre Cliente') || ''),
-          fechaEntradaReserva: parseDateTime(
-            getVal('FECHA ENTRADA RESERVA') || getVal('Fecha Entrada Reserva')
-          ),
-          fechaSalidaReserva: parseDateTime(
-            getVal('FECHA SALIDA RE') ||
-            getVal('FECHA SALIDA RESERVA') ||
-            getVal('Fecha Salida Reserva')
-          ),
-          entregaLlaves:
-            rawEntrega === 'SÍ' || rawEntrega === 'SI' || rawEntrega === 'YES' || rawEntrega === 'TRUE',
-          sabanasToallas: String(
-            getVal('SÁBANAS Y TOALLAS') || getVal('Sábanas y Toallas') || 'No'
-          ),
-          km: parseExcelNumber(getVal('KM') || getVal('Km')),
-          observaciones: String(getVal('OBSERVACIONES') || getVal('Observaciones') || ''),
-          fianzaMonto: parsePaymentMethod(getVal('FIANZA (MONTO)') || getVal('Fianza (Monto)')),
-          bizumMonto: String(getVal('NUMERO BIZUM (MONTO)') || getVal('Numero Bizum (Monto)') || ''),
-          cantidadPagadaMonto: String(
-            parseExcelNumber(getVal('CANTIDAD PAGADA (MONTO)') || getVal('Cantidad Pagada (Monto)'))
-          ),
-          fianzaGarantia: parsePaymentMethod(
-            getVal('FIANZA (GARANTIA)') || getVal('Fianza (Garantia)')
-          ),
-          bizumGarantia: String(
-            getVal('NUMERO BIZUM (GARANTIA)') || getVal('Numero Bizum (Garantia)') || ''
-          ),
-          cantidadPagadaGarantia: String(
-            parseExcelNumber(getVal('CANTIDAD PAGADA (GARANTIA)') || getVal('Cantidad Pagada (Garantia)'))
-          ),
-          checked: rawChecked === 'TRUE' || rawChecked === 'VERDADERO',
-          // S:U → col 0 = Firma Trabajador, col 1 = Firma Huésped, col 2 = Checked
-          firmaTrabajador:
-            firmaFromFormula(0) ||
-            parseEntregaFirmaCell(getVal('FIRMA TRABAJADOR') || getVal('Firma Trabajador')),
-          firmaHuesped:
-            firmaFromFormula(1) ||
-            parseEntregaFirmaCell(getVal('FIRMA HUESPED') || getVal('Firma Huesped')),
-        };
-      });
+      const { data, error } = await supabase
+        .from('entrega_llaves_logistica')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(elkRowToEntregaLlaves);
     } catch (error) {
       console.error('Error in getEntregaLlaves:', error);
       return [];
     }
-    });
   },
 
   prepareEntregaLlavesForSave: async (
@@ -1764,13 +1570,10 @@ export const appsScriptApi = {
 
   addEntregaLlaves: async (data: Omit<EntregaLlaves, 'id'>): Promise<boolean> => {
     try {
-      await fetch(ENTREGA_LLAVES_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ ...data, action: 'add' })
-      });
-      invalidateSheetsCache('entregaLlaves_v3');
+      const { error } = await supabase
+        .from('entrega_llaves_logistica')
+        .insert(entregaLlavesToRow(data));
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error adding Entrega de Llaves:', error);
@@ -1780,13 +1583,12 @@ export const appsScriptApi = {
 
   updateEntregaLlaves: async (data: EntregaLlaves): Promise<boolean> => {
     try {
-      await fetch(ENTREGA_LLAVES_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ ...data, action: 'update' })
-      });
-      invalidateSheetsCache('entregaLlaves_v3');
+      const { id, ...rest } = data;
+      const { error } = await supabase
+        .from('entrega_llaves_logistica')
+        .update(entregaLlavesToRow(rest))
+        .eq('id', id);
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error updating Entrega de Llaves:', error);
@@ -1796,17 +1598,100 @@ export const appsScriptApi = {
 
   deleteEntregaLlaves: async (id: string): Promise<boolean> => {
     try {
-      await fetch(ENTREGA_LLAVES_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ id, action: 'delete' })
-      });
-      invalidateSheetsCache('entregaLlaves_v3');
+      const { error } = await supabase
+        .from('entrega_llaves_logistica')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error deleting Entrega de Llaves:', error);
       throw error;
+    }
+  },
+
+  migrateEntregaLlavesFromSheets: async (): Promise<{ inserted: number; skipped: boolean }> => {
+    const { count } = await supabase
+      .from('entrega_llaves_logistica')
+      .select('id', { count: 'exact', head: true });
+    if ((count ?? 0) > 0) {
+      console.warn('[migrateELK] Tabla ya tiene datos; se omite migración.');
+      return { inserted: 0, skipped: true };
+    }
+
+    try {
+      const sheetBase = `https://sheets.googleapis.com/v4/spreadsheets/${ENTREGA_LLAVES_SPREADSHEET_ID}/values/`;
+      const [fmtRes, formulaRes] = await Promise.all([
+        fetch(`${sheetBase}${encodeURIComponent(ENTREGA_LLAVES_RANGE)}?key=${GOOGLE_API_KEY}`),
+        fetch(`${sheetBase}${encodeURIComponent("'Informe_Entrega_Llaves'!S:U")}?valueRenderOption=FORMULA&key=${GOOGLE_API_KEY}`),
+      ]);
+      if (!fmtRes.ok) throw new Error(`Sheet error: ${fmtRes.statusText}`);
+      const sheetData = await fmtRes.json();
+      if (!sheetData.values || sheetData.values.length < 2) return { inserted: 0, skipped: false };
+
+      const formulaData = formulaRes.ok ? await formulaRes.json() : { values: [] };
+      const formulaRows = (formulaData.values || []).slice(1) as string[][];
+
+      const headers = sheetData.values[0] as string[];
+      const normalize = (h: string) => h.trim().toUpperCase().normalize('NFD').replace(/\p{M}/gu, '');
+      const hIdx = (...names: string[]) => {
+        for (const n of names) {
+          const i = headers.findIndex(h => h && normalize(String(h)) === normalize(n));
+          if (i !== -1) return i;
+        }
+        return -1;
+      };
+
+      const parsePayment = (val: any) => {
+        const s = String(val || '').trim().toLowerCase();
+        if (s.includes('bizum')) return 'Bizum';
+        if (s.includes('tarjeta')) return 'Tarjeta';
+        return 'Efectivo';
+      };
+
+      const rows = sheetData.values.slice(1).map((row: any[], i: number) => {
+        const g = (n: string) => { const idx = hIdx(n); return idx !== -1 ? row[idx] : undefined; };
+        const formulaRow = formulaRows[i] || [];
+        const firma = (col: number) => parseEntregaFirmaCell(formulaRow[col]);
+
+        const rawTel = String(g('TELEFONO') || g('Telefono') || '').replace(/\D/g, '');
+        const tel = (rawTel.startsWith('34') && rawTel.length >= 11) ? rawTel.slice(-9) : rawTel;
+        const rawEntrega = String(g('ENTREGA LLAVES') || g('Entrega Llaves') || '').toUpperCase();
+        const rawChecked = String(g('CHECKED') || g('Checked') || '').toUpperCase();
+
+        return {
+          telefono: tel,
+          nombre: String(g('NOMBRE') || g('Nombre') || ''),
+          apellidos: String(g('APELLIDOS') || g('Apellidos') || ''),
+          fecha_ubicacion_entrega: String(g('FECHA Y UBICACION DE LLAVES ENTREGADAS') || g('Fecha y ubicacion de llaves entregadas') || ''),
+          apartamento: String(g('APARTAMENTO') || g('Apartamento') || ''),
+          nombre_cliente: String(g('NOMBRE CLIENTE') || g('Nombre Cliente') || ''),
+          fecha_entrada_reserva: parseDateTime(g('FECHA ENTRADA RESERVA') || g('Fecha Entrada Reserva')),
+          fecha_salida_reserva: parseDateTime(g('FECHA SALIDA RE') || g('FECHA SALIDA RESERVA') || g('Fecha Salida Reserva')),
+          entrega_llaves: rawEntrega === 'SÍ' || rawEntrega === 'SI' || rawEntrega === 'YES' || rawEntrega === 'TRUE',
+          sabanas_toallas: String(g('SÁBANAS Y TOALLAS') || g('Sábanas y Toallas') || 'No'),
+          km: parseExcelNumber(g('KM') || g('Km')),
+          observaciones: String(g('OBSERVACIONES') || g('Observaciones') || ''),
+          fianza_monto: parsePayment(g('FIANZA (MONTO)') || g('Fianza (Monto)')),
+          bizum_monto: String(g('NUMERO BIZUM (MONTO)') || g('Numero Bizum (Monto)') || ''),
+          cantidad_pagada_monto: String(parseExcelNumber(g('CANTIDAD PAGADA (MONTO)') || g('Cantidad Pagada (Monto)'))),
+          fianza_garantia: parsePayment(g('FIANZA (GARANTIA)') || g('Fianza (Garantia)')),
+          bizum_garantia: String(g('NUMERO BIZUM (GARANTIA)') || g('Numero Bizum (Garantia)') || ''),
+          cantidad_pagada_garantia: String(parseExcelNumber(g('CANTIDAD PAGADA (GARANTIA)') || g('Cantidad Pagada (Garantia)'))),
+          checked: rawChecked === 'TRUE' || rawChecked === 'VERDADERO',
+          firma_trabajador: firma(0) || parseEntregaFirmaCell(g('FIRMA TRABAJADOR') || g('Firma Trabajador')) || null,
+          firma_huesped: firma(1) || parseEntregaFirmaCell(g('FIRMA HUESPED') || g('Firma Huesped')) || null,
+        };
+      }).filter((r: any) => r.nombre || r.apellidos || r.telefono);
+
+      if (rows.length === 0) return { inserted: 0, skipped: false };
+      const { error } = await supabase.from('entrega_llaves_logistica').insert(rows);
+      if (error) throw error;
+      console.log(`[migrateELK] Insertados ${rows.length} registros.`);
+      return { inserted: rows.length, skipped: false };
+    } catch (err) {
+      console.error('[migrateELK] Error:', err);
+      return { inserted: 0, skipped: false };
     }
   },
 

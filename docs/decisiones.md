@@ -1,0 +1,97 @@
+# Registro de Decisiones de Arquitectura (ADR)
+
+Este documento recopila las decisiones de diseño de software y arquitectura técnica adoptadas en el proyecto **BaseDatosPagosRH**, detallando el contexto, las alternativas evaluadas y las consecuencias de cada decisión.
+
+---
+
+## Decisiones Técnicas Clave
+
+### ADR 1: Persistencia Híbrida (Google Sheets + Supabase)
+- **Estado**: Aceptado.
+- **Contexto**: La empresa requiere la flexibilidad de Google Sheets para que el personal de oficina (no técnico) pueda visualizar, exportar y ajustar las nóminas y registros de manera manual. Sin embargo, se necesitan funciones avanzadas como autenticación segura de empleados, almacenamiento de firmas digitales en pantalla, gestión de fotos, control de incidencias con adjuntos y un sistema móvil fiable para partes de trabajo.
+- **Decisión**: Mantener **Google Sheets** como repositorio primario para administración general (limpiezas, nóminas acumuladas, registros de llaves generales) y acoplarlo con **Supabase** (PostgreSQL, Storage y Auth) para la capa del trabajador (partes diarios, incidencias en curso, firmas de huéspedes, fotos y control de sesiones).
+- **Consecuencias**:
+  - *Ventaja*: El equipo administrativo sigue utilizando su flujo habitual en Excel/Sheets.
+  - *Ventaja*: Seguridad robusta de datos en el cliente móvil y gestión óptima de archivos binarios (firmas y fotos).
+  - *Desventaja*: Es necesario mantener sincronizadas ambas bases de datos al momento de confirmar un reporte.
+
+---
+
+### ADR 2: Proxy de Google Apps Script para el acceso a Sheets
+- **Estado**: Aceptado.
+- **Contexto**: Realizar peticiones directas desde React usando la API de Google Sheets requiere inyectar claves de API o tokens OAuth del lado del cliente, lo que compromete la seguridad del archivo y de la organización.
+- **Decisión**: Exponer los datos de Google Sheets a través de una API Web creada con **Google Apps Script** que actúa como proxy intermediario.
+- **Consecuencias**:
+  - *Ventaja*: React no almacena tokens sensibles; toda la lógica de autenticación de Google se delega al servidor de Google Apps Script.
+  - *Ventaja*: Permite procesar datos y formatearlos en un JSON simplificado antes de enviarlos a la aplicación.
+  - *Desventaja*: Introduce una pequeña latencia adicional al depender del tiempo de arranque del Web App de Apps Script.
+
+---
+
+### ADR 3: Uso de marcas de tiempo en Hora Local de Madrid (`timestamp(0)`)
+- **Estado**: Aceptado (Migraciones v14 y v15).
+- **Contexto**: Las bases de datos tradicionales en Supabase usan el tipo `timestamptz` (UTC). Al generar reportes desde España y visualizar la base de datos en el panel de control de Supabase Studio o exportar listados, las marcas de tiempo aparecían desplazadas (1 hora en invierno, 2 horas en verano debido al huso CEST). Esto generaba confusión en las auditorías administrativas.
+- **Decisión**: Convertir los campos `created_at` y `updated_at` de las tablas transaccionales de trabajadores (`service_reports`, `key_deliveries`, `incident_reports`) al tipo `timestamp(0)` sin zona horaria, calculando el valor por defecto directamente en el huso de España mediante la instrucción SQL `now() AT TIME ZONE 'Europe/Madrid'`.
+- **Consecuencias**:
+  - *Ventaja*: Los datos representados en los listados del administrador coinciden exactamente con la hora civil local española del reporte.
+  - *Ventaja*: Se elimina el milisegundo de las marcas temporales, reduciendo el ruido visual en logs.
+  - *Desventaja*: Si la empresa expande operaciones a otras zonas horarias fuera de Europa Occidental, estas tablas requerirán conversiones explícitas de hora local.
+
+---
+
+### ADR 4: Duraciones y Tiempos de Entrada/Salida como Cadenas `text` (`HH:MM`)
+- **Estado**: Aceptado.
+- **Contexto**: El almacenamiento de tiempos transcurridos (por ejemplo, duración de incidencias u horas extra) usando tipos nativos como `interval` o `time` en PostgreSQL produce desajustes en el formato JS al realizar sumas matemáticas y formatear la salida en pantalla.
+- **Decisión**: Registrar las horas de entrada/salida y las duraciones como textos formateados en `HH:MM` (ej. `"08:30"`, `"01:15"`), restringidos por restricciones CHECK de expresiones regulares en base de datos.
+- **Consecuencias**:
+  - *Ventaja*: Inmunidad frente a desajustes por zonas horarias al serializar o deserializar en JSON.
+  - *Ventaja*: Operaciones de visualización directa y filtros simples en React sin requerir librerías pesadas de parsing de fechas (como moment o date-fns).
+  - *Desventaja*: Las sumas acumuladas de horas de trabajo en PostgreSQL requieren la creación de funciones auxiliares que conviertan las cadenas de texto a minutos y de vuelta a formato de tiempo.
+
+---
+
+### ADR 5: Esquema de Borradores en Dos Capas (Local + Remoto)
+- **Estado**: Aceptado.
+- **Contexto**: El personal operativo suele reportar desde áreas con baja cobertura de datos móvil (ascensores, sótanos o parkings de apartamentos). Si se pierde la conexión o el dispositivo se apaga, el trabajador perdía los datos de un parte a medio rellenar, teniendo que duplicar esfuerzos.
+- **Decisión**: Diseñar una persistencia en dos niveles:
+  1. **localStorage**: Guarda en el navegador local el estado actual del formulario ante cualquier cierre fortuito o accidental de la ventana.
+  2. **report_drafts (Supabase)**: Al pulsar "Guardar en borrador", se realiza un envío seguro a una tabla relacional en Supabase.
+- **Consecuencias**:
+  - *Ventaja*: Permite al trabajador continuar un parte desde un dispositivo diferente si es necesario (ya que el borrador en la nube está asociado a su perfil).
+  - *Ventaja*: Las firmas electrónicas en base64 se omiten de la serialización del borrador para mantener el tamaño del payload bajo y evitar consumir el límite de almacenamiento o timeout de red.
+
+---
+
+### ADR 6: Borrado Directo de Usuarios mediante RPC SQL (`admin_delete_user`)
+- **Estado**: Aceptado (Migración v17).
+- **Contexto**: Borrar a un usuario del panel de administración requería invocar una Edge Function en Deno que desvinculara la cuenta. Si la Edge Function fallaba o no estaba activa, el usuario no se eliminaba, dejando perfiles huérfanos.
+- **Decisión**: Implementar un procedimiento almacenado en PostgreSQL (`admin_delete_user`) configurado con `SECURITY DEFINER` que se ejecuta con privilegios de superusuario para eliminar directamente registros de la tabla interna `auth.users`, restringido por una comprobación en la que el usuario que lo invoca debe ser de rol `admin`.
+- **Consecuencias**:
+  - *Ventaja*: Mayor fiabilidad al eliminar usuarios del panel sin depender de infraestructura externa de Edge Functions.
+  - *Ventaja*: Activación automática de la limpieza en cascada sobre las tablas `profiles` y liberación del campo `profile_id` en `workers` para su posterior reasignación.
+
+---
+
+### ADR 8: Login via Fetch Nativo (bypass del SDK de Supabase Auth)
+- **Estado**: Aceptado (2026-06-23).
+- **Contexto**: `supabase.auth.signInWithPassword()` y `setSession()` cuelgan indefinidamente en el navegador porque el SDK usa `navigator.locks` internamente y `detectSessionInUrl` + `getSession()` concurrentes provocan un deadlock. El síntoma era el botón "Verificando…" infinito, reproducible cada vez que se cambiaba de usuario.
+- **Decisión**: Reemplazar todo el flujo de autenticación del SDK por llamadas `fetch` nativas al REST de Supabase (`/auth/v1/token` y `/rest/v1/profiles`). Los tokens se inyectan directamente en un `Map` en memoria (`memStore` en `supabaseClient.ts`) que se usa como `storage` del cliente Supabase. Esto elimina la dependencia del Web Lock API para el login y permite al SDK leer la sesión síncronamente sin red en los `.from()` posteriores.
+- **Consecuencias**:
+  - *Ventaja*: Login siempre resuelve, sin timeouts ni deadlocks.
+  - *Ventaja*: Dashboard carga inmediatamente tras login porque `getSession()` del SDK lee del Map en O(1).
+  - *Ventaja*: Logout limpio: `memStore.clear()` borra la sesión al instante.
+  - *Desventaja*: La sesión no persiste entre recargas de página (como sessionStorage, pero sin el riesgo de locks). El usuario tiene que volver a iniciar sesión si recarga.
+  - *Archivos*: `src/services/supabaseClient.ts` (memStore + memStorage), `src/services/api.ts` (login fetch), `src/App.tsx` (logout memStore.clear).
+
+---
+
+### ADR 7: Migración total de Google Apps Script a Supabase
+- **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
+- **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.
+- **Decisión**: Migrar todo el CRUD operativo a Supabase. Mantener Sheets solo para los Checkins de pendientes (alimentados por un sistema de reservas externo fuera del control de la app).
+- **Tablas Supabase añadidas**: `cleans`, `suggestions`, `entrega_llaves_logistica`, `incidencias_logistica`. Bucket Storage `pdfs` (privado).
+- **Patron de migración**: función `migrate*FromSheets()` idempotente (salta si la tabla ya tiene filas), disparada en la primera carga de cada página. Sin scripts manuales.
+- **Consecuencias**:
+  - *Ventaja*: Escrituras confirmadas, RLS, sin cold starts.
+  - *Ventaja*: `GOOGLE_API_KEY` y demás vars de Sheets se pueden retirar del `.env` cuando las migraciones únicas confirmen haber corrido.
+  - *Pendiente*: Checkins requeriría migrar también el sistema de reservas externo.

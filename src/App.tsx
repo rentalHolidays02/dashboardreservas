@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { NavigationGuardProvider } from './context/NavigationGuardContext';
@@ -54,11 +54,23 @@ function App() {
   };
 
   const handleLogout = async () => {
-    setUser(null);
     sessionStorage.removeItem('rh_user');
-    // Importante: Cerrar también la sesión real de Supabase para evitar cruce de cuentas
-    const { supabase } = await import('./services/supabaseClient');
-    await supabase.auth.signOut();
+    // Limpiar token del memStore (storage en memoria del SDK) y como seguro
+    // también de sessionStorage/localStorage por si quedan restos de versiones anteriores.
+    ['sessionStorage', 'localStorage'].forEach(store => {
+      const s = window[store as 'sessionStorage' | 'localStorage'];
+      Object.keys(s).forEach(k => { if (k.startsWith('sb-')) s.removeItem(k); });
+    });
+    const { memStore } = await import('./services/supabaseClient');
+    memStore.clear();
+    setUser(null);
+    try {
+      const { supabase } = await import('./services/supabaseClient');
+      await Promise.race([
+        supabase.auth.signOut({ scope: 'local' }),
+        new Promise<void>(resolve => setTimeout(resolve, 1500)),
+      ]);
+    } catch { /* ignorar */ }
   };
 
   const handleRoleChange = (newRole: 'admin' | 'editor' | 'viewer' | 'trabajador') => {
@@ -69,33 +81,38 @@ function App() {
     }
   };
 
-  // Verificación de integridad del perfil al cargar
+  // Verificación de integridad del perfil al cargar (solo una vez por sesión).
+  // Usamos useRef para evitar bucle: si dependiéramos de [user] y llamáramos
+  // handleLoginSuccess dentro, el efecto se reejecutaría indefinidamente.
+  const profileVerifiedRef = useRef(false);
   useEffect(() => {
+    if (profileVerifiedRef.current) return;
+    if (!user || (user.role !== 'viewer' && user.name !== 'Usuario' && user.id)) return;
+
+    profileVerifiedRef.current = true;
     const verifyProfile = async () => {
-      // Solo verificamos si ya hay un usuario cargado de localStorage
-      if (user && (user.role === 'viewer' || user.name === 'Usuario' || !user.id)) {
-        console.log('🔍 Verificando integridad del perfil...');
-        try {
-          const { supabase } = await import('./services/supabaseClient');
-          const { data: { session } } = await supabase.auth.getSession();
+      console.log('🔍 Verificando integridad del perfil...');
+      try {
+        const { supabase } = await import('./services/supabaseClient');
+        const { data: { session } } = await supabase.auth.getSession();
 
-          if (session && session.user) {
-            const { appsScriptApi } = await import('./services/api');
-            // Intentamos un login silencioso (re-obtener perfil)
-            const freshUser = await appsScriptApi.getProfileByEmail(session.user.email || '');
+        if (session && session.user) {
+          const { appsScriptApi } = await import('./services/api');
+          const freshUser = await appsScriptApi.getProfileByEmail(session.user.email || '');
 
-            if (freshUser && (freshUser.role !== user.role || freshUser.name !== user.name)) {
-              console.log('✅ Perfil actualizado detectado:', freshUser.role);
-              handleLoginSuccess(freshUser);
-            }
+          if (freshUser && (freshUser.role !== user.role || freshUser.name !== user.name)) {
+            console.log('✅ Perfil actualizado detectado:', freshUser.role);
+            handleLoginSuccess(freshUser);
           }
-        } catch (e) {
-          console.error('Error verificando perfil:', e);
         }
+      } catch (e) {
+        console.error('Error verificando perfil:', e);
+        profileVerifiedRef.current = false; // reintentar si hubo error de red
       }
     };
     verifyProfile();
-  }, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Backfill avatar_url para sesiones existentes en localStorage que no lo incluyen.
   useEffect(() => {
@@ -106,7 +123,7 @@ function App() {
         .from('profiles')
         .select('avatar_url')
         .eq('id', user.id!)
-        .single();
+        .maybeSingle();
       const next = { ...user, avatar_url: data?.avatar_url || null };
       setUser(next);
       sessionStorage.setItem('rh_user', JSON.stringify(next));

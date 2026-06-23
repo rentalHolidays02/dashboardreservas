@@ -307,7 +307,7 @@ const Incidencias: React.FC<IncidenciasProps> = ({ userRole }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchIncidencias();
+    appsScriptApi.migrateIncidenciasFromSheets().then(() => fetchIncidencias());
   }, []);
 
   const fetchIncidencias = (showGlobalLoading = true) => {

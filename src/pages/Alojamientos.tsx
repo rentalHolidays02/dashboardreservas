@@ -67,10 +67,7 @@ const Alojamientos: React.FC<AlojamientosProps> = ({ userRole }) => {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      await appsScriptApi.syncAccommodationsFromSheets();
       await fetchAccommodations();
-    } catch (error) {
-      console.error('Error sincronizando:', error);
     } finally {
       setIsSyncing(false);
     }
