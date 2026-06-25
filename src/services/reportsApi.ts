@@ -61,8 +61,9 @@ const stripBizum = (v: string | undefined): string =>
 
 // Devuelve el worker_id del trabajador conectado (vía profile_id = auth.uid()).
 export const getCurrentWorkerId = async (): Promise<string | null> => {
-  const { data: auth, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !auth.user) return null;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return null;
+  const auth = { user: session.user };
   const { data, error } = await supabase
     .from('workers')
     .select('id')
@@ -304,8 +305,9 @@ export interface MyWorkerRow {
 
 // Devuelve el worker autenticado con su subset de tarifas.
 export const getMyWorker = async (): Promise<MyWorkerRow | null> => {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return null;
+  const auth = { user: session.user };
   const { data, error } = await supabase
     .from('workers')
     .select('id, full_name, pay_per_reservation, pay_per_extra_reservation, price_per_km, pay_per_linen_service, pay_per_incident')
