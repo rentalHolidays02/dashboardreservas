@@ -95,6 +95,29 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 11. WorkerPanel no carga datos / "Todavía no has realizado ningún trabajo" (2026-06-25)
+
+- **Síntoma**: El panel del trabajador muestra el skeleton indefinidamente o "Todavía no has realizado ningún trabajo" aunque el trabajador tiene registros en `service_reports`. Se reproducía al entrar por primera vez o tras F5.
+- **Causa 1 — `getUser()` falla en SDK frío**: `getCurrentWorkerId()` y `getMyWorker()` en `reportsApi.ts` usaban `supabase.auth.getUser()`, que hace una llamada de red a `/auth/v1/user` para validar el token. Si el SDK se inicializa frío (sin `_currentSession` en memoria), la llamada falla o devuelve error → `workerId = null` → `listMyServiceReports()` retorna `[]` sin error visible.
+- **Causa 2 — memStore vacío tras F5**: `supabaseClient.ts` usaba un `Map` en memoria puro. Al recargar la página el Map se vaciaba → el SDK no tenía token → `getUser()` fallaba → mismo síntoma.
+- **Causa 3 — backfill avatar_url causaba 406**: `App.tsx` tenía un `useEffect` que hacía `supabase.from('profiles').select('avatar_url')` cuando `user.avatar_url === undefined`. Sin token válido en memStore, la query retornaba 406 Not Acceptable, llenando la consola de errores y enmascarando el problema real.
+- **Solución aplicada**:
+  1. `supabaseClient.ts`: `memStorage` ahora hace backup en `sessionStorage`. En `getItem`, si memStore no tiene la clave, lee de `sessionStorage` y restaura en memStore. En `setItem`/`removeItem` sincroniza ambos. Así el token sobrevive F5 sin volver a usar la API de locks del SDK.
+  2. `reportsApi.ts`: `getCurrentWorkerId()` y `getMyWorker()` cambiados a `supabase.auth.getSession()` (lee de storage, sin red) en vez de `getUser()` (hace red). Más robusto ante SDK recién inicializado.
+  3. `App.tsx`: eliminado el `useEffect` de backfill de `avatar_url`. Con `memStore` no hay "sesiones viejas sin avatar_url" que backfillciar; el login ya siempre incluye `avatar_url`.
+- **Regla para el futuro**: **Usar `getSession()` en lugar de `getUser()` cuando solo se necesita el UID del usuario.** `getUser()` valida el token en red; `getSession()` lo lee de storage. Si la validación en servidor es necesaria (seguridad), usar `getUser()` solo en paths críticos (admin actions), no en cada carga de datos.
+
+---
+
+## 12. Delays artificiales bloqueaban el Dashboard (2026-06-25)
+
+- **Síntoma**: El dashboard tardaba 2-3 segundos en cargar datos tras cambiar de usuario o tras F5, incluso con Supabase respondiendo rápido.
+- **Causa**: Restos de simulación de Apps Script — `await delay(X)` en funciones de `api.ts` (`getPagos`, `getAllPagos`, `getWorkerPagos`, `getAnalytics`, etc.). Estos delays sumaban 2.5+ segundos y bloqueaban el `Promise.all` del Dashboard entero.
+- **Solución**: Eliminados todos los `await delay()` en `api.ts`. La función `delay` queda definida pero sin uso.
+- **Regla para el futuro**: Al migrar una función de Apps Script a Supabase, revisar si tiene `await delay()` residual y eliminarlo.
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.

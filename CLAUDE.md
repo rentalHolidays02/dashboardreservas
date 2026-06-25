@@ -148,6 +148,9 @@ npm run preview  # Previsualizar build
 11. **Nunca caer a Apps Script como fallback**: Si `supabase.from(...).select()` falla, lanzar error o devolver `[]`. El Apps Script es solo para migraciones únicas de datos históricos. Llamarlo en error handler causa latencias de 300-600ms.
 12. **Evitar N+1 en `getWorkers()`**: La función `getWorkers()` ya carga internamente cleans, handyman, entrega de llaves para calcular earnings. No llamarlas de nuevo en el mismo `Promise.all()` en Dashboard.tsx u otro componente padre.
 13. **No delays arbitrarios en funciones que bloquean UI**: Funciones como `getRecentCheckIns()` no deben tener `await delay()` si se llaman desde `Promise.all()` que controla spinners. Bloquea el `Promise.all` entero.
+14. **`getSession()` en lugar de `getUser()` para obtener UID**: `getUser()` hace red para validar token; si el SDK inicializa frío falla aunque storage tenga el token → datos vacíos sin error visible. Usar `getSession()` (lee de storage) en `reportsApi.ts` y similares. Solo `getUser()` en paths de seguridad crítica (admin actions).
+15. **memStorage sincroniza con sessionStorage**: `supabaseClient.ts` usa `memStorage` que hace backup en `sessionStorage`. Token sobrevive F5. Logout limpia ambos via `App.tsx`. No añadir otro mecanismo de persistencia de token.
+16. **Leer `docs/` antes de tocar cualquier archivo**: Antes de cada corrección, leer `docs/errores_conocidos.md` y `docs/decisiones.md` para no repetir errores resueltos ni contradecir decisiones tomadas.
 
 ## Tareas comunes y dónde tocar
 

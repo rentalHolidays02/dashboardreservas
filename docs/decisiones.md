@@ -85,6 +85,29 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 9: memStorage con backup en sessionStorage (2026-06-25)
+- **Estado**: Aceptado.
+- **Contexto**: `memStore` (Map en memoria) se vaciaba al hacer F5, perdiendo el token de Supabase. El SDK inicializaba frío y `auth.getUser()` fallaba → WorkerPanel mostraba vacío. No se podía usar el storage nativo del SDK por el deadlock de Web Locks (ver ADR 8).
+- **Decisión**: Modificar `memStorage` en `supabaseClient.ts` para que `setItem`/`removeItem` sincronicen también con `sessionStorage`, y `getItem` lea de `sessionStorage` como fallback si memStore no tiene la clave. Esto preserva el token entre recargas sin volver a depender de la API de locks del SDK.
+- **Consecuencias**:
+  - *Ventaja*: Sesión sobrevive F5 — WorkerPanel carga datos correctamente al recargar.
+  - *Ventaja*: Logout sigue limpiando ambos (`App.tsx` ya borraba `sb-*` de sessionStorage).
+  - *Nota*: El token sigue siendo por pestaña (sessionStorage), no global (localStorage). Dos pestañas con distinto usuario siguen siendo independientes.
+  - *Archivos*: `src/services/supabaseClient.ts`.
+
+---
+
+### ADR 10: getSession() en lugar de getUser() en reportsApi (2026-06-25)
+- **Estado**: Aceptado.
+- **Contexto**: `getCurrentWorkerId()` y `getMyWorker()` usaban `supabase.auth.getUser()` que hace una llamada de red para validar el token. Si el SDK inicializa frío (sin `_currentSession`), la llamada falla aunque el token esté en storage → WorkerPanel retorna vacío sin error visible.
+- **Decisión**: Cambiar a `supabase.auth.getSession()` que lee el token de storage de forma síncrona (con fallback a sessionStorage via ADR 9). Solo usar `getUser()` donde se requiera validación real del token en servidor (paths de seguridad crítica).
+- **Consecuencias**:
+  - *Ventaja*: WorkerPanel carga datos correctamente tanto en primera visita como tras F5.
+  - *Desventaja menor*: `getSession()` puede devolver una sesión expirada si el auto-refresh no ha corrido aún. En este contexto (cargar datos del propio trabajador) es aceptable — el query de Supabase fallará con 401 si el token expiró, lo cual es manejable.
+  - *Archivos*: `src/services/reportsApi.ts`.
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.
