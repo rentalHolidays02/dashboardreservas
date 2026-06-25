@@ -753,7 +753,9 @@ export const appsScriptApi = {
         token_type: 'bearer',
         user: authJson.user,
       };
-      memStore.set(storageKey, JSON.stringify(sessionPayload));
+      const sessionStr = JSON.stringify(sessionPayload);
+      memStore.set(storageKey, sessionStr);
+      sessionStorage.setItem(storageKey, sessionStr); // backup para sobrevivir F5
       const sessionUser = { id: authJson.user?.id as string, email: authJson.user?.email as string };
       if (!sessionUser.id) return null;
 
@@ -1036,61 +1038,46 @@ export const appsScriptApi = {
 
       if (dbError) throw dbError;
 
-      // 2. Fetch sensitive data if available (DNI/IBAN)
-      // Note: We'll fetch all sensitive data for linked profiles to merge it
-      const profileIds = dbWorkers.filter(w => w.profile_id).map(w => w.profile_id);
-      let sensitiveMap: Record<string, any> = {};
-      
-      if (profileIds.length > 0) {
-        const { data: sensitiveData } = await supabase
-          .from('worker_sensitive_data')
-          .select('*')
-          .in('id', profileIds);
-        
-        if (sensitiveData) {
-          sensitiveMap = sensitiveData.reduce((acc, curr) => ({
-            ...acc,
-            [curr.id]: curr
-          }), {});
-        }
-      }
-
-      // 3. Fetch accommodation assignments from pivot table
+      const profileIds = dbWorkers.filter((w: any) => w.profile_id).map((w: any) => w.profile_id);
       const workerIds = dbWorkers.map((w: any) => w.id);
+
+      // 2+3. Sensitive data y accommodations en paralelo (ambas dependen de step 1)
+      const [sensitiveData, waResult] = await Promise.all([
+        profileIds.length > 0
+          ? supabase.from('worker_sensitive_data').select('*').in('id', profileIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+        workerIds.length > 0
+          ? supabase.from('worker_accommodations')
+              .select('worker_id, precio, sabanas_incl, toallas_incl, accommodations(name)')
+              .in('worker_id', workerIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+      ]);
+
+      const sensitiveMap: Record<string, any> = (sensitiveData.data || []).reduce(
+        (acc: Record<string, any>, curr: any) => ({ ...acc, [curr.id]: curr }), {}
+      );
+
       const workerAccDetailsMap: Record<string, WorkerAccommodationDetails[]> = {};
-
-      if (workerIds.length > 0) {
-        // Intentamos leer las columnas nuevas; si no existen aún hacemos fallback a la query básica
-        const { data: waData, error: waError } = await supabase
-          .from('worker_accommodations')
-          .select('worker_id, precio, sabanas_incl, toallas_incl, accommodations(name)')
-          .in('worker_id', workerIds);
-
-        const populate = (entries: any[], withDetails: boolean) => {
-          entries.forEach((entry: any) => {
-            if (!workerAccDetailsMap[entry.worker_id]) workerAccDetailsMap[entry.worker_id] = [];
-            if (entry.accommodations?.name) {
-              workerAccDetailsMap[entry.worker_id].push({
-                accommodationName: entry.accommodations.name,
-                precio: withDetails ? Number(entry.precio ?? 0) : 0,
-                sabanasIncluidas: withDetails ? (entry.sabanas_incl ?? false) : false,
-                toallasIncluidas: withDetails ? (entry.toallas_incl ?? false) : false,
-              });
-            }
-          });
-        };
-
-        if (!waError && waData) {
-          populate(waData, true);
-        } else {
-          // Fallback: columnas nuevas no disponibles aún — usamos query básica
-          if (waError) console.warn('worker_accommodations: columnas nuevas no disponibles, usando fallback:', waError.message);
-          const { data: basicData } = await supabase
-            .from('worker_accommodations')
-            .select('worker_id, accommodations(name)')
-            .in('worker_id', workerIds);
-          if (basicData) populate(basicData, false);
-        }
+      const populate = (entries: any[], withDetails: boolean) => {
+        entries.forEach((entry: any) => {
+          if (!workerAccDetailsMap[entry.worker_id]) workerAccDetailsMap[entry.worker_id] = [];
+          if (entry.accommodations?.name) {
+            workerAccDetailsMap[entry.worker_id].push({
+              accommodationName: entry.accommodations.name,
+              precio: withDetails ? Number(entry.precio ?? 0) : 0,
+              sabanasIncluidas: withDetails ? (entry.sabanas_incl ?? false) : false,
+              toallasIncluidas: withDetails ? (entry.toallas_incl ?? false) : false,
+            });
+          }
+        });
+      };
+      if (!waResult.error && waResult.data) {
+        populate(waResult.data, true);
+      } else {
+        if (waResult.error) console.warn('worker_accommodations fallback:', waResult.error.message);
+        const { data: basicData } = await supabase
+          .from('worker_accommodations').select('worker_id, accommodations(name)').in('worker_id', workerIds);
+        if (basicData) populate(basicData, false);
       }
 
       // 4. Map to Worker interface
