@@ -111,7 +111,7 @@ export const uploadSignature = async (
 
 export const submitServiceReport = async (input: ServiceReportInput): Promise<string> => {
   const workerId = await getCurrentWorkerId();
-  if (!workerId) throw new Error('No hay trabajador asociado a esta cuenta');
+  if (!workerId) throw new Error('Sesión caducada — cierra sesión y vuelve a entrar.');
 
   const isManitas = input.kind === 'manitas';
   const row = {
@@ -145,7 +145,7 @@ export const submitServiceReport = async (input: ServiceReportInput): Promise<st
 
 export const submitKeyDelivery = async (input: KeyDeliveryInput): Promise<string> => {
   const workerId = await getCurrentWorkerId();
-  if (!workerId) throw new Error('No hay trabajador asociado a esta cuenta');
+  if (!workerId) throw new Error('Sesión caducada — cierra sesión y vuelve a entrar.');
 
   // Sube las firmas si vienen como base64
   const firmaTrabajadorUrl = input.firmaTrabajadorBase64
@@ -190,7 +190,7 @@ export const submitKeyDelivery = async (input: KeyDeliveryInput): Promise<string
 
 export const submitIncidentReport = async (input: IncidentReportInput): Promise<string> => {
   const workerId = await getCurrentWorkerId();
-  if (!workerId) throw new Error('No hay trabajador asociado a esta cuenta');
+  if (!workerId) throw new Error('Sesión caducada — cierra sesión y vuelve a entrar.');
 
   // duracion ahora es text con CHECK ^HH:MM$ → si no es válido, '00:00'.
   const validHHMM = /^([0-9]{1,2}):[0-5][0-9]$/.test(input.duracion);
@@ -239,7 +239,7 @@ export const saveDraft = async <T>(
   id?: string
 ): Promise<string> => {
   const workerId = await getCurrentWorkerId();
-  if (!workerId) throw new Error('No hay trabajador asociado a esta cuenta');
+  if (!workerId) throw new Error('Sesión caducada — cierra sesión y vuelve a entrar.');
 
   if (id) {
     const { error } = await supabase
