@@ -903,11 +903,15 @@ export const appsScriptApi = {
   // --- Funciones de Administración (Supabase) ---
 
   getAllUsers: async (): Promise<User[]> => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .order('full_name', { ascending: true });
 
+    if (error) {
+      console.error('[getAllUsers] Supabase error:', error);
+      throw error;
+    }
     return (data || []).map(p => ({
       id: p.id,
       email: p.email,

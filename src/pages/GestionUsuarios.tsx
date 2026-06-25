@@ -697,9 +697,11 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
   const { showUndoToast } = useUndoToast();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadUsers = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const supabaseUsers = await appsScriptApi.getAllUsers();
       const mapped = supabaseUsers.map(u => ({
@@ -713,8 +715,9 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         onlineStatus: 'offline' as OnlineStatus,
       }));
       setUsers(mapped as AppUser[]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[GestionUsuarios] Error al cargar usuarios:', err);
+      setLoadError(err?.message || 'Error de sesión — cierra sesión y vuelve a entrar');
     } finally {
       setLoading(false);
     }
@@ -1018,7 +1021,10 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         <ul className="divide-y divide-stone-100 dark:divide-stone-800">
           {filtered.length === 0 ? (
             <li className="flex items-center justify-center px-8 py-12">
-              <span className="text-xs text-slate-400 dark:text-stone-500">Sin resultados</span>
+              {loadError
+                ? <span className="text-xs text-red-500">{loadError}</span>
+                : <span className="text-xs text-slate-400 dark:text-stone-500">Sin resultados</span>
+              }
             </li>
           ) : (
             filtered.map(u => (
