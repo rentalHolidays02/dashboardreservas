@@ -1025,6 +1025,16 @@ export const appsScriptApi = {
 
   getWorkers: async (): Promise<Worker[]> => {
     try {
+      // Limpiezas/entregas no dependen de la tabla workers → se lanzan ya en
+      // paralelo para que solapen con las queries de workers/sensitive/accommodations.
+      // Antes eran una 3ª ola de red secuencial que ralentizaba el Dashboard.
+      const derivedDataPromise = Promise.all([
+        appsScriptApi.getNormalCleans().catch(() => []),
+        appsScriptApi.getInitialCleans().catch(() => []),
+        appsScriptApi.getHandymanRecords().catch(() => []),
+        appsScriptApi.getEntregaLlaves().catch(() => []),
+      ]);
+
       // 1. Fetch from Supabase 'workers' table
       const { data: dbWorkers, error: dbError } = await supabase
         .from('workers')
@@ -1118,13 +1128,8 @@ export const appsScriptApi = {
         } as any;
       });
 
-      // 4. Compute derived values (same as before)
-      const [normalCleans, initialCleans, handymanRecords, entregaLlaves] = await Promise.all([
-        appsScriptApi.getNormalCleans().catch(() => []),
-        appsScriptApi.getInitialCleans().catch(() => []),
-        appsScriptApi.getHandymanRecords().catch(() => []),
-        appsScriptApi.getEntregaLlaves().catch(() => []),
-      ]);
+      // 4. Compute derived values (ya lanzadas arriba en paralelo)
+      const [normalCleans, initialCleans, handymanRecords, entregaLlaves] = await derivedDataPromise;
 
       const workers: Worker[] = baseWorkers.map(w => {
         const earnings = computeWorkerEarnings(w, normalCleans, initialCleans, handymanRecords, entregaLlaves);
