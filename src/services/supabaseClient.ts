@@ -7,16 +7,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('⚠️ Supabase URL o Anon Key no encontradas en el archivo .env');
 }
 
-// ponytail: storage en memoria controlado por nosotros.
+// ponytail: storage en memoria + sessionStorage como backup.
 // - evita el deadlock del navigatorLock (signInWithPassword colgaba porque
 //   detectSessionInUrl + getSession concurrentes retenían el lock del SDK)
 // - permite escribir el token directamente desde login() sin pasar por setSession()
-// - se borra al recargar la página (como sessionStorage), sin persistir entre pestañas
+// - persiste en sessionStorage para sobrevivir F5 (pero no entre pestañas distintas)
 const memStore = new Map<string, string>();
 const memStorage = {
-  getItem: (key: string) => memStore.get(key) ?? null,
-  setItem: (key: string, value: string) => { memStore.set(key, value); },
-  removeItem: (key: string) => { memStore.delete(key); },
+  getItem: (key: string) => {
+    if (memStore.has(key)) return memStore.get(key)!;
+    const val = sessionStorage.getItem(key);
+    if (val) memStore.set(key, val); // restaurar tras F5
+    return val;
+  },
+  setItem: (key: string, value: string) => {
+    memStore.set(key, value);
+    sessionStorage.setItem(key, value);
+  },
+  removeItem: (key: string) => {
+    memStore.delete(key);
+    sessionStorage.removeItem(key);
+  },
 };
 
 export { memStore };
