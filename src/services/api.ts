@@ -1700,7 +1700,7 @@ export const appsScriptApi = {
   },
 
   getAnalytics: async () => {
-    await delay(500);
+
     const totalMoney = currentWorkers.reduce((acc, w) => acc + w.netMoneyMonth, 0);
     const totalCleans = currentWorkers.reduce((acc, w) => acc + w.cleansCountMonth, 0);
     return {
@@ -2165,24 +2165,24 @@ export const appsScriptApi = {
   },
 
   getPagos: async (desde: string, hasta: string): Promise<PagoRecord[]> => {
-    await delay(400);
+
     return currentPagos.filter(p => p.fecha >= desde && p.fecha <= hasta)
       .sort((a, b) => b.fecha.localeCompare(a.fecha));
   },
 
   getAllPagos: async (): Promise<PagoRecord[]> => {
-    await delay(500);
+
     return [...currentPagos].sort((a, b) => b.fecha.localeCompare(a.fecha));
   },
 
   getWorkerPagos: async (workerId: string): Promise<PagoRecord[]> => {
-    await delay(300);
+
     return currentPagos.filter(p => p.workerId === workerId)
       .sort((a, b) => b.fecha.localeCompare(a.fecha));
   },
 
   markPagosAsPaid: async (pagoIds: string[]): Promise<PaymentAction> => {
-    await delay(400);
+
     const targets = currentPagos.filter(p => pagoIds.includes(p.id));
     const amount = targets.reduce((acc, p) => acc + p.importe, 0);
     const workerId = targets[0]?.workerId ?? '';
@@ -2204,7 +2204,7 @@ export const appsScriptApi = {
   },
 
   undoPayment: async (actionId: string): Promise<void> => {
-    await delay(400);
+
     const stack = getUndoStack();
     const action = stack.find(a => a.id === actionId);
     if (!action) return;
@@ -2216,12 +2216,12 @@ export const appsScriptApi = {
   },
 
   getWorkerPaymentActions: async (workerId: string): Promise<PaymentAction[]> => {
-    await delay(100);
+
     return getUndoStack().filter(a => a.workerId === workerId);
   },
 
   createPago: async (pago: Omit<PagoRecord, 'id'>): Promise<PagoRecord> => {
-    await delay(400);
+
     const newPago: PagoRecord = { ...pago, id: `p_${Date.now()}` };
     currentPagos = [newPago, ...currentPagos];
     savePagos(currentPagos);
