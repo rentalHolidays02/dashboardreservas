@@ -708,11 +708,13 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         status: (u.last_seen ? 'active' : 'pending') as UserStatus,
         createdAt: new Date().toISOString(),
         lastLogin: u.last_seen ?? null,
-        avatar: u.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
+        avatar: (u.name || '?').split(' ').filter(Boolean).map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) || '?',
         avatarUrl: u.avatar_url || null,
         onlineStatus: 'offline' as OnlineStatus,
       }));
       setUsers(mapped as AppUser[]);
+    } catch (err) {
+      console.error('[GestionUsuarios] Error al cargar usuarios:', err);
     } finally {
       setLoading(false);
     }

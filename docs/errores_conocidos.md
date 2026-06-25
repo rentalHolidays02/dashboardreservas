@@ -76,6 +76,25 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 10. GestionUsuarios muestra "0 de 0 usuarios" aunque la API devuelve datos
+
+- **Síntoma**: La página `/usuarios` muestra "Sin resultados / 0 de 0 usuarios" aunque la pestaña Network confirma que `profiles?select=*` retorna 200 con datos reales.
+- **Causa**: `loadUsers()` en `GestionUsuarios.tsx` hacía `u.name.split(' ')` directamente. Si cualquier perfil en Supabase tiene `full_name = null`, `u.name` es `undefined` y `.split()` lanza `TypeError`. El bloque `try` no tenía `catch`, por lo que el error se propagaba silenciosamente, `setUsers` nunca se ejecutaba y `users` quedaba `[]`. También el spinner desaparecía (el `finally` sí corría) haciendo creer que había cargado correctamente con cero usuarios.
+- **Solución**: Cambiado `u.name.split(...)` por `(u.name || '?').split(...).filter(Boolean)...` para tolerar perfiles sin nombre. Añadido bloque `catch` que loguea el error con `console.error` para que futuros fallos sean visibles en la consola.
+- **Regla para el futuro**: **Todo `async` que actualiza estado debe tener `catch` explícito.** Un `try/finally` sin `catch` oculta errores de mapeo/parsing y hace que la UI muestre vacío sin ninguna pista en consola.
+
+---
+
+## 9. Peticiones Duplicadas y Lentitud General del Dashboard
+
+- **Síntoma**: El dashboard tarda en mostrar datos. En la pestaña Network se observan 4+ llamadas duplicadas a `incidencias_logistica`, `entrega_llaves_logistica` y `worker_accommodations`. Ocasionalmente aparecen llamadas lentas a Google Apps Script (`Informe_Incidencia`) aunque la migración debería estar completada.
+- **Causa 1 — N+1 en `getWorkers()`**: La función `getWorkers()` en `api.ts` primero carga la tabla `workers` + `worker_sensitive_data` + `worker_accommodations`, y luego internamente llama a `getNormalCleans()`, `getInitialCleans()`, `getHandymanRecords()` y `getEntregaLlaves()` para calcular los earnings. Dashboard.tsx a su vez llama a esas mismas cuatro funciones directamente en su `Promise.all`. Aunque `withSheetsCache` deduplica las peticiones en vuelo, sigue habiendo N llamadas redundantes.
+- **Causa 2 — count check de migración en cada montaje**: `migrateIncidenciasFromSheets()` y `migrateEntregaLlavesFromSheets()` hacen un `SELECT count` a Supabase cada vez que se monta `Incidencias.tsx` o `EntregaDeLlaves.tsx`. Si el count devuelve `null` por un error de red o RLS, la función cae al Apps Script (llamada lenta de 300-600 ms a Google Sheets) aunque los datos ya existan.
+- **Solución aplicada**: Se añadió un `Set` a nivel de módulo (`_migrationsConfirmed`) en `api.ts`. La primera vez que el count confirma que hay datos, se registra en el Set y todas las llamadas siguientes de esa sesión retornan `{skipped:true}` en O(1) sin tocar la red. El fall-through al Apps Script solo ocurre si el count devuelve 0 genuino (tabla vacía), nunca por un null/error.
+- **Regla para el futuro**: **No llamar a Apps Script como fallback de un error de Supabase.** Si Supabase falla, lanzar error o devolver array vacío. El Apps Script es solo para migración única de datos históricos.
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.

@@ -32,6 +32,9 @@ const FIRMAS_ENTREGA_BUCKET = 'firmas-entrega';
 const SUGERENCIAS_APPS_SCRIPT_URL = import.meta.env.VITE_SUGERENCIAS_APPS_SCRIPT_URL || '';
 
 
+// Migraciones ya confirmadas en esta sesión → no volver a consultar Supabase ni caer a Apps Script
+const _migrationsConfirmed = new Set<string>();
+
 // --- Sheets cache (TTL + in-flight deduplication) ---
 const SHEETS_CACHE_TTL_MS = 90_000; // 90 segundos
 interface CacheEntry<T> { data: T; ts: number; }
@@ -1308,7 +1311,6 @@ export const appsScriptApi = {
   },
 
   getRecentCheckIns: async (limit = 10): Promise<CheckInOut[]> => {
-    await delay(500);
     return [...MOCK_CHECKINS]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, limit);
@@ -1330,8 +1332,9 @@ export const appsScriptApi = {
   },
 
   migrateIncidenciasFromSheets: async (): Promise<{ inserted: number; skipped: boolean }> => {
+    if (_migrationsConfirmed.has('incidencias')) return { inserted: 0, skipped: true };
     const { count } = await supabase.from('incidencias_logistica').select('id', { count: 'exact', head: true });
-    if ((count ?? 0) > 0) return { inserted: 0, skipped: true };
+    if ((count ?? 0) > 0) { _migrationsConfirmed.add('incidencias'); return { inserted: 0, skipped: true }; }
     if (!INCIDENCIAS_SPREADSHEET_ID || !GOOGLE_API_KEY) return { inserted: 0, skipped: false };
 
     try {
@@ -1611,11 +1614,12 @@ export const appsScriptApi = {
   },
 
   migrateEntregaLlavesFromSheets: async (): Promise<{ inserted: number; skipped: boolean }> => {
+    if (_migrationsConfirmed.has('entregaLlaves')) return { inserted: 0, skipped: true };
     const { count } = await supabase
       .from('entrega_llaves_logistica')
       .select('id', { count: 'exact', head: true });
     if ((count ?? 0) > 0) {
-      console.warn('[migrateELK] Tabla ya tiene datos; se omite migración.');
+      _migrationsConfirmed.add('entregaLlaves');
       return { inserted: 0, skipped: true };
     }
 
@@ -2066,36 +2070,31 @@ export const appsScriptApi = {
 
   getNormalCheckins: async (): Promise<NormalCleanRecord[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Normal!A:P?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) throw new Error(`Error fetching normal checkins: ${response.statusText}`);
-      const data = await response.json();
-      if (!data.values || data.values.length <= 1) return [];
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      return Promise.all(rows.map(async (row: any[], index: number): Promise<NormalCleanRecord> => {
-        const getVal = (headerName: string) => {
-          const norm = normalizeHeader(headerName);
-          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-          return idx !== -1 ? row[idx] : undefined;
-        };
-
-        const apartamento = String(getVal('Apartamento') || '');
-        const coords = String(getVal('Checkin Ubicacion Trabajador') || '');
-        const realStreet = (!apartamento && coords) ? await reverseGeocode(coords) : null;
-
-        return {
-          id: `check_norm_${index + 2}`,
-          telefono: String(getVal('Telefono') || ''),
-          nombre: String(getVal('Nombre') || ''),
-          apellidos: String(getVal('Apellidos') || ''),
-          checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reserva Entrada')),
-          checkinUbicacion: coords,
-          apartamento: apartamento || realStreet || 'Ubicación Desconocida',
-          horaEntrada: String(getVal('Hora Reserva Entrada') || ''),
-          checked: false
-        } as NormalCleanRecord;
+      const { supabase } = await import('./supabaseClient');
+      const { data, error } = await supabase
+        .from('checkins')
+        .select('*')
+        .eq('type', 'normal')
+        .order('checkin_fecha', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((r: any): NormalCleanRecord => ({
+        id: r.id,
+        telefono: r.telefono || '',
+        nombre: r.nombre || '',
+        apellidos: r.apellidos || '',
+        checkinFecha: r.checkin_fecha || '',
+        checkinUbicacion: r.checkin_ubicacion || '',
+        checkoutFecha: r.checkout_fecha || '',
+        checkoutUbicacion: r.checkout_ubicacion || '',
+        apartamento: r.apartamento || 'Ubicación Desconocida',
+        horaEntrada: r.hora_entrada || '',
+        horaSalida: r.hora_salida || '',
+        sigueHuesped: !!r.sigue_huesped,
+        fechaSalidaReserva: r.fecha_salida_reserva || '',
+        recogeLlaves: !!r.recoge_llaves,
+        km: r.km ?? 0,
+        observaciones: r.observaciones || '',
+        checked: !!r.checked,
       }));
     } catch (error) {
       console.error('Error getNormalCheckins:', error);
@@ -2105,36 +2104,28 @@ export const appsScriptApi = {
 
   getInitialCheckins: async (): Promise<InitialCleanRecord[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Limpieza_Inicial!A:P?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) throw new Error(`Error fetching initial checkins: ${response.statusText}`);
-      const data = await response.json();
-      if (!data.values || data.values.length <= 1) return [];
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      return Promise.all(rows.map(async (row: any[], index: number): Promise<InitialCleanRecord> => {
-        const getVal = (headerName: string) => {
-          const norm = normalizeHeader(headerName);
-          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-          return idx !== -1 ? row[idx] : undefined;
-        };
-
-        const apartamento = String(getVal('Apartamento') || '');
-        const coords = String(getVal('Checkin Ubicacion Trabajador') || '');
-        const realStreet = (!apartamento && coords) ? await reverseGeocode(coords) : null;
-
-        return {
-          id: `check_init_${index + 2}`,
-          telefono: String(getVal('Telefono') || ''),
-          nombre: String(getVal('Nombre') || ''),
-          apellidos: String(getVal('Apellidos') || ''),
-          checkinFecha: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reserva Entrada')),
-          checkinUbicacion: coords,
-          apartamento: apartamento || realStreet || 'Ubicación Desconocida',
-          horaEntrada: String(getVal('Hora Reserva Entrada') || ''),
-          checked: false
-        } as InitialCleanRecord;
+      const { supabase } = await import('./supabaseClient');
+      const { data, error } = await supabase
+        .from('checkins')
+        .select('*')
+        .eq('type', 'initial')
+        .order('checkin_fecha', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((r: any): InitialCleanRecord => ({
+        id: r.id,
+        telefono: r.telefono || '',
+        nombre: r.nombre || '',
+        apellidos: r.apellidos || '',
+        checkinFecha: r.checkin_fecha || '',
+        checkinUbicacion: r.checkin_ubicacion || '',
+        checkoutFecha: r.checkout_fecha || '',
+        checkoutUbicacion: r.checkout_ubicacion || '',
+        apartamento: r.apartamento || 'Ubicación Desconocida',
+        horaEntrada: r.hora_entrada || '',
+        horaSalida: r.hora_salida || '',
+        km: Number(r.km || 0),
+        observaciones: r.observaciones || '',
+        checked: !!r.checked,
       }));
     } catch (error) {
       console.error('Error getInitialCheckins:', error);
@@ -2144,36 +2135,28 @@ export const appsScriptApi = {
 
   getHandymanCheckins: async (): Promise<HandymanRecord[]> => {
     try {
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${CLEANS_SPREADSHEET_ID}/values/Checkin_Manitas!A:M?key=${GOOGLE_API_KEY}&t=${Date.now()}`;
-      const response = await fetchWithRetry(url);
-      if (!response.ok) throw new Error(`Error fetching handyman checkins: ${response.statusText}`);
-      const data = await response.json();
-      if (!data.values || data.values.length <= 1) return [];
-      const headers = data.values[0] as string[];
-      const rows = data.values.slice(1);
-
-      return Promise.all(rows.map(async (row: any[], index: number): Promise<HandymanRecord> => {
-        const getVal = (headerName: string) => {
-          const norm = normalizeHeader(headerName);
-          const idx = headers.findIndex((h: string) => normalizeHeader(h) === norm);
-          return idx !== -1 ? row[idx] : undefined;
-        };
-
-        const apartamento = String(getVal('Apartamento') || '');
-        const coords = String(getVal('Checkin Ubicacion Trabajador') || '');
-        const realStreet = (!apartamento && coords) ? await reverseGeocode(coords) : null;
-
-        return {
-          id: `check_hm_${index + 2}`,
-          telefono: String(getVal('Telefono') || ''),
-          nombre: String(getVal('Nombre') || ''),
-          apellidos: String(getVal('Apellidos') || ''),
-          fechaLlegada: parseDateTime(getVal('Checkin Fecha Trabajador'), getVal('Hora Reparacion Entrada')),
-          ubicacionInicio: coords,
-          alojamiento: apartamento || realStreet || 'Ubicación Desconocida',
-          horaInicioTarea: String(getVal('Hora Reparacion Entrada') || ''),
-          estadoCompletado: 'Trabajando...',
-        } as HandymanRecord;
+      const { supabase } = await import('./supabaseClient');
+      const { data, error } = await supabase
+        .from('checkins')
+        .select('*')
+        .eq('type', 'handyman')
+        .order('checkin_fecha', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((r: any): HandymanRecord => ({
+        id: r.id,
+        telefono: r.telefono || '',
+        nombre: r.nombre || '',
+        apellidos: r.apellidos || '',
+        fechaLlegada: r.checkin_fecha || '',
+        ubicacionInicio: r.checkin_ubicacion || '',
+        fechaFin: r.checkout_fecha || '',
+        ubicacionFin: r.checkout_ubicacion || '',
+        alojamiento: r.apartamento || 'Ubicación Desconocida',
+        horaInicioTarea: r.hora_entrada || '',
+        horaFinTarea: r.hora_salida || '',
+        cantidadMinutos: Number(r.km || 0),
+        observacionesTarea: r.observaciones || '',
+        estadoCompletado: 'Trabajando...',
       }));
     } catch (error) {
       console.error('Error getHandymanCheckins:', error);
