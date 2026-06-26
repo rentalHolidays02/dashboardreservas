@@ -47,13 +47,13 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false, // evita que _initialize() haga fetch a URL — resuelve inmediato
+    detectSessionInUrl: false,
     storage: memStorage,
     lock: async (_name, _acquireTimeout, fn) => fn(),
   },
-  // accessToken: evita que _getAccessToken() llame auth.getSession() en cada query.
-  // Lee directamente de memStore/sessionStorage → síncrono, sin esperar initializePromise.
-  // Esto elimina el cuelgue de las queries RLS cuando el SDK no ha inicializado _currentSession.
+  // Lee token directo de memStore en cada query RLS — evita auth.getSession() → initializePromise.
+  // EFECTO SECUNDARIO: supabase.auth.onAuthStateChange y supabase.auth.getUser() lanzan error.
+  // Usar getSessionFromStore() como sustituto donde se necesite el usuario autenticado.
   accessToken: async () => {
     const projectRef = (supabaseUrl as string)?.match(/\/\/([^.]+)/)?.[1] ?? '';
     const key = `sb-${projectRef}-auth-token`;

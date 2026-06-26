@@ -17,7 +17,7 @@ import {
   WorkerAccommodationDetails,
   AppFeedbackPayload
 } from './mockData';
-import { supabase, memStore, setRestAuth } from './supabaseClient';
+import { supabase, memStore, getSessionFromStore } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets — solo Checkins (alimentados por reservas externas) y migraciones únicas
@@ -756,9 +756,6 @@ export const appsScriptApi = {
       const sessionStr = JSON.stringify(sessionPayload);
       memStore.set(storageKey, sessionStr);
       sessionStorage.setItem(storageKey, sessionStr); // backup para sobrevivir F5
-      // Sincroniza el cliente postgrest con el token nuevo — síncrono, sin red, sin locks.
-      // Sin esto, las queries RLS del SDK salen sin Authorization header hasta el próximo F5.
-      setRestAuth(authJson.access_token);
       const sessionUser = { id: authJson.user?.id as string, email: authJson.user?.email as string };
       if (!sessionUser.id) return null;
 
@@ -906,8 +903,7 @@ export const appsScriptApi = {
   // --- Funciones de Administración (Supabase) ---
 
   getAllUsers: async (): Promise<User[]> => {
-    // Verificar sesión antes de la query: RLS devuelve [] silencioso si no hay token.
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = getSessionFromStore();
     if (!session?.user) throw new Error('Sesión caducada — cierra sesión y vuelve a entrar.');
 
     const { data, error } = await supabase

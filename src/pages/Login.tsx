@@ -64,53 +64,49 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         }
       }
 
-      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (!isMounted) return;
+      try {
+        const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (!isMounted) return;
 
-        if (event === 'PASSWORD_RECOVERY') {
-          // El usuario viene de un enlace de "Cambiar contraseña" → mostrar formulario de restablecimiento
-          setAuthFlow('recovery');
-          if (session?.user?.email) setSessionEmail(session.user.email);
-
-        } else if (event === 'SIGNED_IN' && session?.user) {
-          // Si es un inicio de sesión manual desde el formulario de login, ignorar el evento de autologin asíncrono
-          if (isSubmittingLogin.current) {
-            return;
-          }
-
-          // Si estamos en un flujo de recuperación o invitación, evitamos el auto-login silencioso
-          if (isRecovery || sessionStorage.getItem('is_recovery') === 'true') {
+          if (event === 'PASSWORD_RECOVERY') {
             setAuthFlow('recovery');
-            if (session.user.email) setSessionEmail(session.user.email);
-            return;
-          }
-          if (isInvite || sessionStorage.getItem('is_invite') === 'true') {
-            setAuthFlow('invite');
-            if (session.user.email) setSessionEmail(session.user.email);
-            return;
-          }
+            if (session?.user?.email) setSessionEmail(session.user.email);
 
-          // El usuario viene de un magic link o invitación
-          // Si ya existe perfil válido en la BD, hacemos auto-login silencioso
-          try {
-            const { appsScriptApi } = await import('../services/api');
-            const appUser = await appsScriptApi.getProfileByEmail(session.user.email || '');
-            if (appUser && isMounted) {
-              onLoginSuccess(appUser);
-            } else if (isMounted) {
+          } else if (event === 'SIGNED_IN' && session?.user) {
+            if (isSubmittingLogin.current) return;
+
+            if (isRecovery || sessionStorage.getItem('is_recovery') === 'true') {
+              setAuthFlow('recovery');
+              if (session.user.email) setSessionEmail(session.user.email);
+              return;
+            }
+            if (isInvite || sessionStorage.getItem('is_invite') === 'true') {
               setAuthFlow('invite');
               if (session.user.email) setSessionEmail(session.user.email);
+              return;
             }
-          } catch {
-            if (isMounted) {
-              setAuthFlow('invite');
-              if (session.user.email) setSessionEmail(session.user.email);
+
+            try {
+              const { appsScriptApi } = await import('../services/api');
+              const appUser = await appsScriptApi.getProfileByEmail(session.user.email || '');
+              if (appUser && isMounted) {
+                onLoginSuccess(appUser);
+              } else if (isMounted) {
+                setAuthFlow('invite');
+                if (session.user.email) setSessionEmail(session.user.email);
+              }
+            } catch {
+              if (isMounted) {
+                setAuthFlow('invite');
+                if (session.user.email) setSessionEmail(session.user.email);
+              }
             }
           }
-        }
-      });
-
-      authSubscription = data.subscription;
+        });
+        authSubscription = data.subscription;
+      } catch {
+        // onAuthStateChange no disponible con accessToken option — solo afecta flujos magic link/recovery
+      }
     };
 
     setup();
@@ -183,7 +179,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           sessionStorage.removeItem('is_recovery');
           sessionStorage.removeItem('is_invite');
           // Una vez actualizada, intentamos obtener el perfil para entrar
-          const { data: { user } } = await (await import('../services/supabaseClient')).supabase.auth.getUser();
+          const { getSessionFromStore } = await import('../services/supabaseClient');
+          const _sess = getSessionFromStore() as any;
+          const user = _sess?.user ?? null;
           if (user && user.email) {
             const appUser = await appsScriptApi.login(user.email, password);
             if (appUser) {

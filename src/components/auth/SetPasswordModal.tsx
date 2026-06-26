@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react';
 import { appsScriptApi } from '../../services/api';
-import { supabase } from '../../services/supabaseClient';
+import { getSessionFromStore } from '../../services/supabaseClient';
 
 const ANIM_MS = 320;
 const DEFAULT_PASSWORD = 'Rentalholidays0211';
@@ -20,28 +20,11 @@ const SetPasswordModal: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-
-    const check = async () => {
-      const { data } = await supabase.auth.getUser();
-      const u = data?.user;
-      if (!u) {
-        if (mounted) setNeeded(false);
-        return;
-      }
-      // Solo mostrar si password_set es explícitamente false (usuarios nuevos creados por admin)
-      // undefined = usuario existente anterior al flujo → no mostrar
-      const needsSetup = u.user_metadata?.password_set === false;
-      if (mounted) setNeeded(needsSetup);
-    };
-
-    check();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(() => check());
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
+    // supabase.auth.getUser/onAuthStateChange no disponibles con accessToken option.
+    // getSessionFromStore() devuelve el JSON completo de sesión (incluye user_metadata).
+    const session = getSessionFromStore() as any;
+    const needsSetup = session?.user?.user_metadata?.password_set === false;
+    setNeeded(!!needsSetup);
   }, []);
 
   useEffect(() => {
@@ -61,15 +44,20 @@ const SetPasswordModal: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const timeout = new Promise<{ error: Error }>(res =>
-        setTimeout(() => res({ error: new Error('timeout') }), 5000)
-      );
-      const update = supabase.auth.updateUser({ data: { password_set: true } });
-      const result = await Promise.race([update, timeout]);
-      if ('error' in result && result.error && result.error.message !== 'timeout') {
-        console.warn('updateUser error:', result.error.message);
+      // supabase.auth.updateUser no disponible con accessToken option → fetch directo
+      const session = getSessionFromStore() as any;
+      if (session?.access_token) {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+        await fetch(`${supabaseUrl}/auth/v1/user`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ data: { password_set: true } }),
+        }).catch(() => {}); // no-op si falla — modal cierra igual
       }
-      // Cerrar modal pase lo que pase — usuario ya está autenticado
       setNeeded(false);
     } finally {
       setBusy(false);
