@@ -51,6 +51,21 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
     storage: memStorage,
     lock: async (_name, _acquireTimeout, fn) => fn(),
   },
+  // accessToken: evita que _getAccessToken() llame auth.getSession() en cada query.
+  // Lee directamente de memStore/sessionStorage → síncrono, sin esperar initializePromise.
+  // Esto elimina el cuelgue de las queries RLS cuando el SDK no ha inicializado _currentSession.
+  accessToken: async () => {
+    const projectRef = (supabaseUrl as string)?.match(/\/\/([^.]+)/)?.[1] ?? '';
+    const key = `sb-${projectRef}-auth-token`;
+    const raw = memStore.get(key) ?? sessionStorage.getItem(key);
+    if (!raw) return supabaseAnonKey || '';
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.access_token ?? supabaseAnonKey ?? '';
+    } catch {
+      return supabaseAnonKey || '';
+    }
+  },
 });
 
 // Inyecta el token en el cliente postgrest de forma síncrona, sin pasar por el SDK auth.
