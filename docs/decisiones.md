@@ -145,6 +145,18 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 14: Incluir firmas base64 en el payload del borrador (2026-06-26)
+- **Estado**: Aceptado.
+- **Contexto**: `handleSaveDraft` en `ServiceFormModal` y `EntregaLlavesFormModal` excluía las firmas (`el_firmaTrabajador`, `el_firmaHuesped`) del borrador por considerarlas "payload enorme". Al restaurar el borrador, las firmas aparecían vacías y `isValid` las exigía → formulario bloqueado sin poder enviar.
+- **Decisión**: Guardar las firmas en el borrador (Supabase `report_drafts` y `localStorage`). El tamaño real de dos firmas PNG en base64 es ~50-100 KB — insignificante para el límite JSONB de Supabase (1 GB) y para localStorage (5 MB).
+- **Consecuencias**:
+  - *Ventaja*: Al restaurar un borrador, las firmas se muestran pre-cargadas y el trabajador puede enviar sin re-firmar.
+  - *Ventaja*: `isValid` no queda bloqueado por campos vacíos al restaurar.
+  - *Nota*: Si en el futuro las firmas superan 200 KB (firmas muy detalladas), considerar comprimir el canvas antes de `toDataURL` o reducir la resolución del `SignaturePad`.
+- **Archivos**: `src/components/workers/ServiceFormModal.tsx`, `src/components/workers/EntregaLlavesFormModal.tsx` (commits `d74dfa1`, `c25c541`).
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.
