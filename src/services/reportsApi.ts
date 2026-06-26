@@ -60,8 +60,14 @@ const stripBizum = (v: string | undefined): string =>
   (v ?? '').replace(/\D/g, '');
 
 // Devuelve el worker_id del trabajador conectado (vía profile_id = auth.uid()).
+// Reintenta una vez si getSession() devuelve null — puede ocurrir en la carrera
+// login→render cuando el SDK aún no ha inicializado _currentSession desde memStore.
 export const getCurrentWorkerId = async (): Promise<string | null> => {
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    await new Promise(r => setTimeout(r, 150));
+    ({ data: { session } } = await supabase.auth.getSession());
+  }
   if (!session?.user) return null;
   const auth = { user: session.user };
   const { data, error } = await supabase
@@ -305,7 +311,11 @@ export interface MyWorkerRow {
 
 // Devuelve el worker autenticado con su subset de tarifas.
 export const getMyWorker = async (): Promise<MyWorkerRow | null> => {
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) {
+    await new Promise(r => setTimeout(r, 150));
+    ({ data: { session } } = await supabase.auth.getSession());
+  }
   if (!session?.user) return null;
   const auth = { user: session.user };
   const { data, error } = await supabase
