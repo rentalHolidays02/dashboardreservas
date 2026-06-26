@@ -37,10 +37,13 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
   const displayUrl = isDisplayableSignature(value) ? value!.trim() : '';
 
   useEffect(() => {
+    const displayable = isDisplayableSignature(value);
     setImgError(false);
-    setHasContent(isDisplayableSignature(value));
-    setImgSrc(isDisplayableSignature(value) ? value!.trim() : '');
-  }, [value]);
+    setHasContent(displayable);
+    setImgSrc(displayable ? value!.trim() : '');
+    if (!readOnly && displayable) setLocked(true);
+    else if (!displayable) setLocked(false);
+  }, [value, readOnly]);
 
   useEffect(() => {
     if (!value || readOnly || !canvasRef.current) return;
