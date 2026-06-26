@@ -55,5 +55,12 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
 
 // Inyecta el token en el cliente postgrest de forma síncrona, sin pasar por el SDK auth.
 // Llamar después de login() para que las queries RLS funcionen desde el primer render.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const setRestAuth = (accessToken: string) => { (supabase as any).rest.headers['Authorization'] = `Bearer ${accessToken}`; };
+export const setRestAuth = (accessToken: string) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rest = (supabase as any).rest;
+    if (rest?.headers) rest.headers['Authorization'] = `Bearer ${accessToken}`;
+  } catch {
+    // no-op si la versión del SDK no expone rest.headers
+  }
+};
