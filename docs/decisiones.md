@@ -119,6 +119,18 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 12: getSessionFromStore() — leer token directo de memStore sin pasar por SDK (2026-06-26)
+- **Estado**: Aceptado.
+- **Contexto**: El SDK de Supabase cachea la sesión en `_currentSession`. Escribir en memStore actualiza el storage pero no `_currentSession`. `getCurrentWorkerId()` y `getMyWorker()` llamaban a `supabase.auth.getSession()` que devuelve `_currentSession` — null hasta que alguien lo inicialice. Resultado: WorkerPanel vacío en primera carga tras login.
+- **Decisión**: Exportar `getSessionFromStore()` desde `supabaseClient.ts` que parsea el JSON directamente desde memStore (con fallback a sessionStorage). Usarla en `reportsApi.ts` en lugar de `supabase.auth.getSession()`. Para las queries RLS del SDK (que sí necesitan `_currentSession`), llamar `supabase.auth.setSession()` en `login()` para sincronizarlo.
+- **Consecuencias**:
+  - *Ventaja*: WorkerPanel y Dashboard cargan en primera visita sin recargar.
+  - *Ventaja*: `getSessionFromStore()` es O(1), sin async, sin red.
+  - *Desventaja*: Añade una función helper que hay que mantener sincronizada con el formato de clave `sb-{ref}-auth-token` del SDK.
+  - *Archivos*: `src/services/supabaseClient.ts`, `src/services/reportsApi.ts`, `src/services/api.ts`.
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.

@@ -137,6 +137,21 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 15. WorkerPanel vacío + Dashboard spinner infinito tras login (2026-06-26)
+
+- **Síntoma 1**: Al hacer login como trabajador, WorkerPanel muestra skeletons vacíos. Si se recarga, los datos aparecen.
+- **Síntoma 2**: Al hacer login como admin (segunda sesión tras trabajador), Dashboard muestra spinner infinito. Si se recarga, carga bien.
+- **Causa**: El SDK de Supabase cachea la sesión en `_currentSession` (estado interno del objeto). Escribir el token en `memStore` actualiza el storage, pero no `_currentSession`. Las queries RLS del SDK leen el `Authorization` header de `_currentSession`, no del storage — si `_currentSession` es null, el header va vacío → RLS devuelve `[]` silencioso (error #5 pattern) → UI vacía sin error.
+- **Por qué al recargar funciona**: F5 reinicia el SDK desde cero, que inicializa `_currentSession` leyendo memStorage (que lee memStore → sessionStorage fallback) → token encontrado → todo OK.
+- **Solución aplicada**:
+  1. `api.ts` `login()`: llamar `await supabase.auth.setSession({ access_token, refresh_token })` después de escribir en memStore. `setSession()` actualiza `_currentSession` directamente. No hace red adicional porque el SDK tiene `lock: async fn => fn()` (sin Web Lock) y los tokens son frescos.
+  2. `reportsApi.ts`: `getCurrentWorkerId()` y `getMyWorker()` usan `getSessionFromStore()` (nueva helper en `supabaseClient.ts`) que lee memStore/sessionStorage directamente, sin pasar por el SDK — inmune a `_currentSession` null.
+  3. `supabaseClient.ts`: exportar `getSessionFromStore()` que parsea el JSON del token directamente desde memStore/sessionStorage.
+- **Regla para el futuro**: Escribir en `memStore` no es suficiente. Siempre llamar `supabase.auth.setSession()` después del login para sincronizar `_currentSession`. Sin eso, las queries RLS del SDK salen sin token aunque memStore lo tenga.
+- **Commits**: `7c445c6`.
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.
