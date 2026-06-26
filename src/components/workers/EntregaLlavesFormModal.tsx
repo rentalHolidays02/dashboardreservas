@@ -133,9 +133,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
   };
 
   const handleSaveDraft = async () => {
-    // No metemos las firmas en el borrador para evitar payloads enormes.
-    const { firmaTrabajador: _ft, firmaHuesped: _fh, ...rest } = form;
-    await saveDraft('key_delivery', rest, draftId ?? undefined);
+    await saveDraft('key_delivery', form, draftId ?? undefined);
     localDrafts.clear('key_delivery');
   };
 

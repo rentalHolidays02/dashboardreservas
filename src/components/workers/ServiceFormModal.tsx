@@ -112,11 +112,10 @@ const SiNoToggle: React.FC<{
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`w-full py-4 rounded-2xl text-sm font-medium border transition-all active:scale-[0.98] ${
-            active
+          className={`w-full py-4 rounded-2xl text-sm font-medium border transition-all active:scale-[0.98] ${active
               ? 'bg-stone-900 text-white border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100 shadow-sm'
               : 'bg-stone-50 dark:bg-stone-800/50 text-slate-600 dark:text-stone-300 border-slate-100 dark:border-stone-700/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
-          }`}
+            }`}
         >
           {opt === 'Si' ? 'Sí' : 'No'}
         </button>
@@ -137,11 +136,10 @@ const PagoSelector: React.FC<{
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
-          className={`w-full py-4 rounded-2xl text-xs font-medium border transition-all active:scale-[0.98] ${
-            active
+          className={`w-full py-4 rounded-2xl text-xs font-medium border transition-all active:scale-[0.98] ${active
               ? 'bg-stone-900 text-white border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100 shadow-sm'
               : 'bg-stone-50 dark:bg-stone-800/50 text-slate-600 dark:text-stone-300 border-slate-100 dark:border-stone-700/50 hover:bg-stone-100 dark:hover:bg-stone-700/50'
-          }`}
+            }`}
         >
           {opt}
         </button>
@@ -159,11 +157,10 @@ const SectionToggle: React.FC<{
 }> = ({ title, subtitle, enabled, onToggle, children }) => (
   <div className="space-y-4">
     {/* Pill cabecera (siempre aislada del contenido). Mismo borde/curva que los inputs. */}
-    <div className={`rounded-xl border-[1.5px] bg-transparent transition-colors ${
-      enabled
+    <div className={`rounded-xl border-[1.5px] bg-transparent transition-colors ${enabled
         ? 'border-stone-900 dark:border-stone-100'
         : 'border-stone-200 dark:border-stone-700/60'
-    }`}>
+      }`}>
       <button
         type="button"
         onClick={onToggle}
@@ -437,7 +434,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
 
       if (draftId) {
         const { deleteDraft } = await import('../../services/reportsApi');
-        await deleteDraft(draftId).catch(() => {});
+        await deleteDraft(draftId).catch(() => { });
       }
       localDrafts.clear('service');
       setStatus({ type: 'ok', message: 'Informe enviado correctamente.' });
@@ -453,9 +450,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     setBusy(true);
     setStatus(null);
     try {
-      // No metemos firmas en el borrador (payloads enormes).
-      const { el_firmaTrabajador: _ft, el_firmaHuesped: _fh, ...rest } = form;
-      await saveDraft('service', { tipo, ...rest }, draftId ?? undefined);
+      await saveDraft('service', { tipo, ...form }, draftId ?? undefined);
       localDrafts.clear('service');
       // En lugar de cerrar directo: popup informativo. El usuario debe entender que NO se ha enviado.
       setDraftSavedOpen(true);
@@ -471,8 +466,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
   // el slot local, para que "Realizar trabajo" abra siempre en blanco.
   const handleCancelOrClose = () => {
     if (!draftId && tipo !== null && status?.type !== 'ok') {
-      const { el_firmaTrabajador: _ft, el_firmaHuesped: _fh, ...rest } = form;
-      localDrafts.save('service', { tipo, ...rest });
+      localDrafts.save('service', { tipo, ...form });
     }
     onClose();
   };
@@ -484,7 +478,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
     try {
       if (draftId) {
         const { deleteDraft } = await import('../../services/reportsApi');
-        await deleteDraft(draftId).catch(() => {});
+        await deleteDraft(draftId).catch(() => { });
       }
       localDrafts.clear('service');
       setTipo(null);
@@ -565,6 +559,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                     <label className={labelCls}>
                       Entrada reserva <span className="text-stone-400 dark:text-stone-500">*</span>
                     </label>
+                    /*esto son hora  */
                     <input
                       type="datetime-local"
                       value={form.el_fechaEntradaReserva}
@@ -897,11 +892,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
           return (
             <div className="px-6 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] border-t border-slate-100 dark:border-stone-800/60 shrink-0 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm">
               {status && (
-                <div className={`mb-2 px-3 py-2 rounded-xl text-[11px] font-medium text-center border ${
-                  status.type === 'ok'
+                <div className={`mb-2 px-3 py-2 rounded-xl text-[11px] font-medium text-center border ${status.type === 'ok'
                     ? 'bg-stone-50 dark:bg-stone-800/40 text-slate-700 dark:text-stone-200 border-stone-200 dark:border-stone-700/50'
                     : 'bg-stone-100 dark:bg-stone-800/60 text-slate-800 dark:text-stone-100 border-stone-300 dark:border-stone-600'
-                }`}>
+                  }`}>
                   {status.message}
                 </div>
               )}
@@ -921,11 +915,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   type="button"
                   onClick={handleClick}
                   disabled={busy || mode === 'idle'}
-                  className={`w-full py-4 rounded-2xl text-sm font-medium transition-colors disabled:cursor-not-allowed ${
-                    mode === 'idle'
+                  className={`w-full py-4 rounded-2xl text-sm font-medium transition-colors disabled:cursor-not-allowed ${mode === 'idle'
                       ? 'bg-stone-200 dark:bg-stone-800/60 text-slate-400 dark:text-stone-500'
                       : 'bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white text-white dark:text-stone-900'
-                  } ${busy ? 'opacity-60 cursor-wait' : ''}`}
+                    } ${busy ? 'opacity-60 cursor-wait' : ''}`}
                 >
                   {label}
                 </button>
