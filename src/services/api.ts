@@ -17,7 +17,7 @@ import {
   WorkerAccommodationDetails,
   AppFeedbackPayload
 } from './mockData';
-import { supabase, memStore } from './supabaseClient';
+import { supabase, memStore, setRestAuth } from './supabaseClient';
 import { computeWorkerEarnings, matchesWorkerByPhone } from '../utils/payments';
 
 // Google Sheets — solo Checkins (alimentados por reservas externas) y migraciones únicas
@@ -756,6 +756,9 @@ export const appsScriptApi = {
       const sessionStr = JSON.stringify(sessionPayload);
       memStore.set(storageKey, sessionStr);
       sessionStorage.setItem(storageKey, sessionStr); // backup para sobrevivir F5
+      // Sincroniza el cliente postgrest con el token nuevo — síncrono, sin red, sin locks.
+      // Sin esto, las queries RLS del SDK salen sin Authorization header hasta el próximo F5.
+      setRestAuth(authJson.access_token);
       const sessionUser = { id: authJson.user?.id as string, email: authJson.user?.email as string };
       if (!sessionUser.id) return null;
 
