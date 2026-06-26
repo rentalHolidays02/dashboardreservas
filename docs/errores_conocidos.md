@@ -143,14 +143,17 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 - **Síntoma 2**: Al hacer login como admin (segunda sesión tras trabajador), Dashboard muestra spinner infinito. Si se recarga, carga bien.
 - **Causa**: El SDK de Supabase cachea la sesión en `_currentSession` (estado interno del objeto). Escribir el token en `memStore` actualiza el storage, pero no `_currentSession`. Las queries RLS del SDK leen el `Authorization` header de `_currentSession`, no del storage — si `_currentSession` es null, el header va vacío → RLS devuelve `[]` silencioso (error #5 pattern) → UI vacía sin error.
 - **Por qué al recargar funciona**: F5 reinicia el SDK desde cero, que inicializa `_currentSession` leyendo memStorage (que lee memStore → sessionStorage fallback) → token encontrado → todo OK.
-- **Solución aplicada**:
-  1. `api.ts` `login()`: llamar `await supabase.auth.setSession({ access_token, refresh_token })` después de escribir en memStore. `setSession()` actualiza `_currentSession` directamente. No hace red adicional porque el SDK tiene `lock: async fn => fn()` (sin Web Lock) y los tokens son frescos.
-  2. `reportsApi.ts`: `getCurrentWorkerId()` y `getMyWorker()` usan `getSessionFromStore()` (nueva helper en `supabaseClient.ts`) que lee memStore/sessionStorage directamente, sin pasar por el SDK — inmune a `_currentSession` null.
-  3. `supabaseClient.ts`: exportar `getSessionFromStore()` que parsea el JSON del token directamente desde memStore/sessionStorage.
-- **Regla para el futuro**: Escribir en `memStore` no es suficiente. Siempre llamar `supabase.auth.setSession()` después del login para sincronizar `_currentSession`. Sin eso, las queries RLS del SDK salen sin token aunque memStore lo tenga.
-- **Fix adicional — WorkerSwipeShell lazy-mount** (commit `fd5689d`): WorkerSwipeShell montaba los 3 panes (WorkerPanel + WorkerRecords + Profile) simultáneamente al entrar, lo que disparaba ~14 llamadas a `getCurrentWorkerId` en paralelo. Tras el lazy-mount (`visited` Set, pane solo se monta al visitarse por primera vez), baja a ~8 llamadas (solo el pane activo). Admin Dashboard ya no queda en spinner después del cambio de sesión.
-- **Estado final**: Confirmado funcionando. Admin carga sin spinner tras login desde sesión trabajador. WorkerPanel carga datos en primera visita sin recargar.
-- **Commits**: `7c445c6`, `fd5689d`.
+- **Solución definitiva** (commit `37dcd49`):
+  1. `supabaseClient.ts`: opción `accessToken` en `createClient` — callback que lee el token directamente de `memStore`/`sessionStorage` en cada query. Esto bypasea `auth.getSession()` → `initializePromise` completamente. Las queries RLS nunca cuelgan.
+  2. `reportsApi.ts`: `getCurrentWorkerId()` y `getMyWorker()` usan `getSessionFromStore()` (helper en `supabaseClient.ts`) que lee memStore/sessionStorage directamente.
+  3. `SetPasswordModal.tsx`: reemplaza `supabase.auth.getUser()` y `supabase.auth.onAuthStateChange()` (incompatibles con `accessToken` option) con `getSessionFromStore()` y fetch directo a `/auth/v1/user`.
+  4. `Login.tsx`: `onAuthStateChange` envuelto en try/catch (lanza con `accessToken` option; solo afectaría flujos magic link/recovery, no el login normal).
+  5. `api.ts` `getAllUsers()`: reemplaza `supabase.auth.getSession()` con `getSessionFromStore()`.
+- **Efecto secundario de `accessToken` option**: `supabase.auth.onAuthStateChange`, `supabase.auth.getUser()` y `supabase.auth.getSession()` lanzan error. Cualquier código que los use debe migrarse a `getSessionFromStore()` o fetch directo. Buscar con `supabase.auth.get` antes de añadir código nuevo.
+- **Por qué `setSession()` no funcionó**: `supabase.auth.setSession()` también espera `initializePromise` internamente → cuelga igual que `getSession()`. La única solución robusta es `accessToken` callback que evita la capa auth del SDK por completo.
+- **Fix adicional — WorkerSwipeShell lazy-mount** (commit `fd5689d`): WorkerSwipeShell montaba los 3 panes simultáneamente → ~14 llamadas a `getCurrentWorkerId`. Lazy-mount con `visited` Set → ~8 llamadas. Admin Dashboard ya no queda en spinner tras cambio de sesión.
+- **Estado final**: Confirmado. Login admin y trabajador cargan datos en primera visita sin F5. Cambio de sesión entre roles funciona sin recargar.
+- **Commits**: `7c445c6`, `fd5689d`, `37dcd49`.
 
 ---
 
