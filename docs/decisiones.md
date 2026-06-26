@@ -131,6 +131,19 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 13: accessToken callback en createClient para evitar initializePromise (2026-06-26)
+- **Estado**: Aceptado.
+- **Contexto**: ADR 12 proponía `supabase.auth.setSession()` tras el login para sincronizar `_currentSession`. En pruebas reales, `setSession()` también espera `initializePromise` internamente → cuelga igual. Resultado: login bloqueado en "Verificando..." indefinidamente. Además, `supabase.auth.getSession()` en `getAllUsers()` y `supabase.auth.onAuthStateChange` en `SetPasswordModal`/`Login.tsx` lanzaban errores en runtime con ciertas versiones del SDK.
+- **Decisión**: Pasar `accessToken: async () => { ... }` en el objeto de opciones de `createClient`. Cuando está presente, el SDK llama este callback en cada query en lugar de `auth.getSession()` → bypasea `initializePromise` por completo. El callback lee de `memStore`/`sessionStorage` directamente (O(1), sin async real).
+- **Efecto secundario aceptado**: `supabase.auth.onAuthStateChange`, `supabase.auth.getUser()` y `supabase.auth.getSession()` lanzan error cuando se llaman con `accessToken` option activo. Todo código que los use debe migrar a `getSessionFromStore()` o fetch directo. Afecta: `SetPasswordModal`, `Login.tsx` (flujo magic link/recovery), `api.ts getAllUsers`.
+- **Consecuencias**:
+  - *Ventaja*: Queries RLS nunca cuelgan. Login admin y trabajador cargan datos en primera visita sin F5.
+  - *Ventaja*: Cambio de sesión entre roles (trabajador → admin) funciona sin recargar.
+  - *Desventaja*: Flujos magic link y recovery pierden `onAuthStateChange` — el try/catch en Login.tsx los silencia pero no los maneja. Si se necesitan en el futuro, habrá que reimplementarlos con fetch directo a la API de Supabase.
+  - *Archivos*: `src/services/supabaseClient.ts`, `src/components/auth/SetPasswordModal.tsx`, `src/pages/Login.tsx`, `src/services/api.ts` (commit `37dcd49`).
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.
