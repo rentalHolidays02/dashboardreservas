@@ -756,6 +756,9 @@ export const appsScriptApi = {
       const sessionStr = JSON.stringify(sessionPayload);
       memStore.set(storageKey, sessionStr);
       sessionStorage.setItem(storageKey, sessionStr); // backup para sobrevivir F5
+      // Forzar inicialización de _currentSession del SDK antes de ceder el control a React.
+      // Sin esto, WorkerPanel monta y llama getSession() mientras el SDK aún tiene sesión null.
+      await supabase.auth.getSession();
       const sessionUser = { id: authJson.user?.id as string, email: authJson.user?.email as string };
       if (!sessionUser.id) return null;
 
