@@ -47,7 +47,7 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false, // evita que _initialize() haga fetch a URL — resuelve inmediato
     storage: memStorage,
     lock: async (_name, _acquireTimeout, fn) => fn(),
   },

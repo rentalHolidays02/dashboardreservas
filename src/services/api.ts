@@ -756,10 +756,6 @@ export const appsScriptApi = {
       const sessionStr = JSON.stringify(sessionPayload);
       memStore.set(storageKey, sessionStr);
       sessionStorage.setItem(storageKey, sessionStr); // backup para sobrevivir F5
-      // Parchear _currentSession directamente sin pasar por setSession() (que hace red a /auth/v1/user).
-      // El SDK usa _currentSession para el header Authorization de las queries RLS.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase.auth as any)._currentSession = sessionPayload;
       const sessionUser = { id: authJson.user?.id as string, email: authJson.user?.email as string };
       if (!sessionUser.id) return null;
 
