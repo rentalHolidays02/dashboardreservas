@@ -140,7 +140,8 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
   - *Ventaja*: Queries RLS nunca cuelgan. Login admin y trabajador cargan datos en primera visita sin F5.
   - *Ventaja*: Cambio de sesión entre roles (trabajador → admin) funciona sin recargar.
   - *Desventaja*: Flujos magic link y recovery pierden `onAuthStateChange` — el try/catch en Login.tsx los silencia pero no los maneja. Si se necesitan en el futuro, habrá que reimplementarlos con fetch directo a la API de Supabase.
-  - *Archivos*: `src/services/supabaseClient.ts`, `src/components/auth/SetPasswordModal.tsx`, `src/pages/Login.tsx`, `src/services/api.ts` (commit `37dcd49`).
+  - *Archivos*: `src/services/supabaseClient.ts`, `src/components/auth/SetPasswordModal.tsx`, `src/pages/Login.tsx`, `src/services/api.ts` (commits `37dcd49`, `b8ec34a`).
+- **Regla operativa**: antes de añadir cualquier llamada a `supabase.auth.*`, comprobar si el cliente tiene `accessToken` option activo. Si es así, usar `getSessionFromStore()` para leer la sesión y fetch directo a `/auth/v1/` para mutaciones de auth.
 
 ---
 
