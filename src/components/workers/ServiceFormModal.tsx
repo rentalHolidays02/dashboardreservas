@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { dateInputCls, formatBizumNumber, resolveAccommodationId } from './serviceFormHelpers';
+import { TimeSelect, dateInputCls, formatBizumNumber, resolveAccommodationId } from './serviceFormHelpers';
 import {
   saveDraft,
   submitServiceReport,
@@ -706,23 +706,13 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   <label className={labelCls}>
                     Hora entrada {tipo === 'reserva' ? 'limpieza' : 'manitas'} <span className="text-stone-400 dark:text-stone-500">*</span>
                   </label>
-                  <input
-                    type="time"
-                    value={form.horaEntrada}
-                    onChange={(e) => setF('horaEntrada', e.target.value)}
-                    className={inputCls}
-                  />
+                  <TimeSelect value={form.horaEntrada} onChange={(v) => setF('horaEntrada', v)} />
                 </div>
                 <div className="min-w-0">
                   <label className={labelCls}>
                     Hora salida {tipo === 'reserva' ? 'limpieza' : 'manitas'} <span className="text-stone-400 dark:text-stone-500">*</span>
                   </label>
-                  <input
-                    type="time"
-                    value={form.horaSalida}
-                    onChange={(e) => setF('horaSalida', e.target.value)}
-                    className={inputCls}
-                  />
+                  <TimeSelect value={form.horaSalida} onChange={(v) => setF('horaSalida', v)} />
                 </div>
               </div>
 
@@ -731,12 +721,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                 <>
                   <div>
                     <label className={labelCls}>Horas extra realizadas</label>
-                    <input
-                      type="time"
-                      value={form.horasExtra}
-                      onChange={(e) => setF('horasExtra', e.target.value)}
-                      className={inputCls}
-                    />
+                    <TimeSelect value={form.horasExtra} onChange={(v) => setF('horasExtra', v)} />
                   </div>
                   {requiresJustificacion && (
                     <div>
@@ -795,12 +780,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       <label className={labelCls}>
                         Hora salida del huésped <span className="text-stone-400 dark:text-stone-500">*</span>
                       </label>
-                      <input
-                        type="time"
-                        value={form.horaSalidaReserva}
-                        onChange={(e) => setF('horaSalidaReserva', e.target.value)}
-                        className={inputCls}
-                      />
+                      <TimeSelect value={form.horaSalidaReserva} onChange={(v) => setF('horaSalidaReserva', v)} />
                     </div>
                   )}
                 </>
@@ -843,12 +823,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   <label className={labelCls}>
                     Duración de la incidencia <span className="text-stone-400 dark:text-stone-500">*</span>
                   </label>
-                  <input
-                    type="time"
-                    value={form.inc_duracion}
-                    onChange={(e) => setF('inc_duracion', e.target.value)}
-                    className={inputCls}
-                  />
+                  <TimeSelect value={form.inc_duracion} onChange={(v) => setF('inc_duracion', v)} />
                 </div>
                 <div>
                   <label className={labelCls}>

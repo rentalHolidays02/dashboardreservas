@@ -97,6 +97,52 @@ export const DuracionInput: React.FC<{
   );
 };
 
+// Selector de hora HH:MM con dos <select> — evita el picker circular nativo de iOS/Android.
+// Emite y recibe el mismo formato "HH:MM" que type=time.
+const selectCls =
+  'flex-1 min-w-0 min-h-[3.5rem] appearance-none rounded-xl bg-transparent border-[1.5px] border-stone-200 dark:border-stone-700/60 px-3 py-3 text-base text-center text-slate-800 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-100 transition-colors cursor-pointer';
+
+export const TimeSelect: React.FC<{
+  value: string;        // "HH:MM" o ""
+  onChange: (v: string) => void;
+  maxHours?: number;    // tope de horas (por defecto 23)
+}> = ({ value, onChange, maxHours = 23 }) => {
+  const match = value.match(/^(\d{1,2}):(\d{2})$/);
+  const h = match ? parseInt(match[1], 10) : -1;
+  const m = match ? parseInt(match[2], 10) : -1;
+
+  const emit = (hh: number, mm: number) => {
+    if (hh < 0 || mm < 0) { onChange(''); return; }
+    onChange(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+  };
+
+  return (
+    <div className="flex gap-2 items-center">
+      <select
+        value={h >= 0 ? h : ''}
+        onChange={(e) => emit(e.target.value === '' ? -1 : parseInt(e.target.value, 10), m)}
+        className={selectCls}
+      >
+        <option value="" disabled>hh</option>
+        {Array.from({ length: maxHours + 1 }, (_, i) => (
+          <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+        ))}
+      </select>
+      <span className="text-lg font-medium text-slate-400 dark:text-stone-500 select-none">:</span>
+      <select
+        value={m >= 0 ? m : ''}
+        onChange={(e) => emit(h, e.target.value === '' ? -1 : parseInt(e.target.value, 10))}
+        className={selectCls}
+      >
+        <option value="" disabled>mm</option>
+        {Array.from({ length: 60 }, (_, i) => (
+          <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
+        ))}
+      </select>
+    </div>
+  );
+};
+
 // Formatea total HH:MM → "Xh YYmin" para mostrar fuera del DuracionInput.
 export const formatDuracionTotal = (raw: string): string => {
   const total = parseHHMM(raw);

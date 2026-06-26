@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ApartamentoAutocomplete,
+  TimeSelect,
   inputCls,
   labelCls,
   resolveAccommodationId,
@@ -114,12 +115,7 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
 
       <div>
         <label className={labelCls}>Duración de la incidencia {ast}</label>
-        <input
-          type="time"
-          value={form.duracion}
-          onChange={(e) => setF('duracion', e.target.value)}
-          className={inputCls}
-        />
+        <TimeSelect value={form.duracion} onChange={(v) => setF('duracion', v)} />
       </div>
 
       <div>
