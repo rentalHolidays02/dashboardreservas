@@ -11,6 +11,11 @@ export type MetodoPago = 'Efectivo' | 'Tarjeta' | 'Bizum';
 export const inputCls =
   'w-full min-w-0 min-h-[3.5rem] appearance-none rounded-xl bg-transparent border-[1.5px] border-stone-200 dark:border-stone-700/60 px-4 py-4 text-base leading-6 text-slate-800 dark:text-stone-100 placeholder:text-stone-300 dark:placeholder:text-stone-600 focus:outline-none focus:border-stone-900 dark:focus:border-stone-100 transition-colors';
 
+// Para datetime-local en grid de 2 columnas: font más pequeño y menos padding
+// para que "dd/mm/aaaa hh:mm" quepa sin cortarse en móvil.
+export const dateInputCls =
+  'w-full min-w-0 min-h-[3.5rem] appearance-none rounded-xl bg-transparent border-[1.5px] border-stone-200 dark:border-stone-700/60 px-2 py-3 text-sm leading-6 text-slate-800 dark:text-stone-100 focus:outline-none focus:border-stone-900 dark:focus:border-stone-100 transition-colors';
+
 export const labelCls =
   'block text-xs font-medium text-slate-600 dark:text-stone-300 mb-1.5';
 

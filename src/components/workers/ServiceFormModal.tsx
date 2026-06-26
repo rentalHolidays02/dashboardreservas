@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { formatBizumNumber, resolveAccommodationId } from './serviceFormHelpers';
+import { dateInputCls, formatBizumNumber, resolveAccommodationId } from './serviceFormHelpers';
 import {
   saveDraft,
   submitServiceReport,
@@ -565,7 +565,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       onChange={(e) => setF('el_fechaEntradaReserva', e.target.value)}
                       min="1900-01-01T00:00"
                       max="9999-12-31T23:59"
-                      className={inputCls}
+                      className={dateInputCls}
                     />
                   </div>
                   <div>
@@ -578,7 +578,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       onChange={(e) => setF('el_fechaSalidaReserva', e.target.value)}
                       min="1900-01-01T00:00"
                       max="9999-12-31T23:59"
-                      className={inputCls}
+                      className={dateInputCls}
                     />
                   </div>
                 </div>

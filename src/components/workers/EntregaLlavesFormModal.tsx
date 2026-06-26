@@ -4,6 +4,7 @@ import {
   ApartamentoAutocomplete,
   PagoSelector,
   SiNoToggle,
+  dateInputCls,
   formatBizumNumber,
   inputCls,
   labelCls,
@@ -189,7 +190,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
             onChange={(e) => setF('fechaEntradaReserva', e.target.value)}
             min="1900-01-01T00:00"
             max="9999-12-31T23:59"
-            className={inputCls}
+            className={dateInputCls}
           />
         </div>
         <div>
@@ -200,7 +201,7 @@ const EntregaLlavesFormModal: React.FC<EntregaLlavesFormModalProps> = ({
             onChange={(e) => setF('fechaSalidaReserva', e.target.value)}
             min="1900-01-01T00:00"
             max="9999-12-31T23:59"
-            className={inputCls}
+            className={dateInputCls}
           />
         </div>
       </div>
