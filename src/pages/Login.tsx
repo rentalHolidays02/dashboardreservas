@@ -43,7 +43,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     let authSubscription: { unsubscribe: () => void } | null = null;
 
     const setup = async () => {
-      const { supabase } = await import('../services/supabaseClient');
+      const { supabase, getSessionFromStore } = await import('../services/supabaseClient');
       const isRecovery = sessionStorage.getItem('is_recovery') === 'true';
       const isInvite = sessionStorage.getItem('is_invite') === 'true';
 
@@ -51,14 +51,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       if (isRecovery) {
         if (isMounted) {
           setAuthFlow('recovery');
-          const { data: { session } } = await supabase.auth.getSession();
+          const session = getSessionFromStore() as any;
           if (session?.user?.email) setSessionEmail(session.user.email);
           sessionStorage.removeItem('is_recovery');
         }
       } else if (isInvite) {
         if (isMounted) {
           setAuthFlow('invite');
-          const { data: { session } } = await supabase.auth.getSession();
+          const session = getSessionFromStore() as any;
           if (session?.user?.email) setSessionEmail(session.user.email);
           sessionStorage.removeItem('is_invite');
         }

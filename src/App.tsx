@@ -93,8 +93,8 @@ function App() {
     const verifyProfile = async () => {
       console.log('🔍 Verificando integridad del perfil...');
       try {
-        const { supabase } = await import('./services/supabaseClient');
-        const { data: { session } } = await supabase.auth.getSession();
+        const { getSessionFromStore } = await import('./services/supabaseClient');
+        const session = getSessionFromStore();
 
         if (session && session.user) {
           const { appsScriptApi } = await import('./services/api');

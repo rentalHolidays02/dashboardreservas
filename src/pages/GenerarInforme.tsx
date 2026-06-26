@@ -347,7 +347,8 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
         .filter(([, v]) => v)
         .map(([k]) => k);
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const { getSessionFromStore } = await import('../services/supabaseClient');
+      const session = getSessionFromStore();
       if (!session) {
         alert('El informe se generó, pero tu sesión ha caducado. Inicia sesión de nuevo para guardar historial y actividad.');
       } else {

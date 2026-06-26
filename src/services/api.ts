@@ -2281,7 +2281,7 @@ export interface ActivityLog {
 export const activityLogApi = {
   async log(userId: string | null, userName: string, action: string, actionType: string): Promise<ActivityLog | null> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = getSessionFromStore();
       if (!session) {
         console.warn('No se pudo registrar actividad: sesión no válida.');
         return null;
@@ -2345,7 +2345,7 @@ export interface ReportHistoryEntry {
 export const reportHistoryApi = {
   async save(entry: Omit<ReportHistoryEntry, 'id' | 'created_at'>): Promise<ReportHistoryEntry | null> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = getSessionFromStore();
       if (!session) {
         console.warn('No se pudo guardar historial: sesión no válida.');
         return null;
@@ -2378,7 +2378,7 @@ export const reportHistoryApi = {
 
   async getLatest(limit = 20): Promise<ReportHistoryEntry[]> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = getSessionFromStore();
       if (!session) return [];
       const { data, error } = await supabase
         .from('report_history')
@@ -2398,7 +2398,7 @@ export const reportHistoryApi = {
 
   async clearAll(): Promise<boolean> {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = getSessionFromStore();
       if (!session) return false;
       const { error } = await supabase.from('report_history').delete();
       if (error) {
@@ -2415,7 +2415,7 @@ export const reportHistoryApi = {
   async clearByUser(userId: string): Promise<boolean> {
     try {
       if (!userId) return false;
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = getSessionFromStore();
       if (!session) return false;
       const { error } = await supabase
         .from('report_history')
