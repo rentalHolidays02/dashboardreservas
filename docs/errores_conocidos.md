@@ -109,6 +109,25 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 13. getWorkers() 3ª ola secuencial bloqueaba carga del Dashboard (2026-06-26)
+
+- **Síntoma**: Dashboard lento (2-4 s) aunque Supabase respondía rápido. Vercel mostraba la misma lentitud.
+- **Causa**: `getWorkers()` en `api.ts` ejecutaba las llamadas en 3 olas secuenciales: (1) workers, (2) sensitive_data + accommodations, (3) cleans×3 + entrega_llaves. La 3ª ola empezaba solo cuando la 2ª terminaba, sumando una ronda de red extra.
+- **Solución**: Lanzar `derivedDataPromise = Promise.all([getNormalCleans, getInitialCleans, getHandymanRecords, getEntregaLlaves])` al inicio de `getWorkers()`, antes de la query de workers. Cuando llega la 2ª ola, el 3er grupo ya lleva una ronda completa en vuelo → se recoge con `await derivedDataPromise` sin esperar.
+- **Regla**: En funciones que hacen múltiples rondas de red independientes, lanzar todos los `Promise.all` al inicio aunque no se necesiten inmediatamente. La espera es gratis si el procesamiento intermedio tarda más que la red.
+- **Commit**: `fe4e429` — función en `src/services/api.ts`.
+
+---
+
+## 14. Dev server arrancaba con .env desactualizado (2026-06-26)
+
+- **Síntoma**: Login en local no conectaba a Supabase (cero hits en auth logs), aunque las variables en `.env` eran correctas.
+- **Causa**: Vite lee el `.env` solo al arrancar el servidor. Si se edita el archivo después de `npm run dev`, el proceso sigue usando las variables antiguas.
+- **Solución**: Matar el proceso de Vite y relanzar `npm run dev` siempre que se modifique `.env`.
+- **Regla**: Si las llamadas de red desde local dan 400/401 pero las variables `.env` parecen correctas, comprobar el mtime del `.env` vs la hora de inicio del servidor (`ps aux | grep vite`). Si `.env` es más nuevo, reiniciar.
+
+---
+
 ## 12. Delays artificiales bloqueaban el Dashboard (2026-06-25)
 
 - **Síntoma**: El dashboard tardaba 2-3 segundos en cargar datos tras cambiar de usuario o tras F5, incluso con Supabase respondiendo rápido.

@@ -108,6 +108,17 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 11: getWorkers() lanza cleans/entregas en paralelo desde el inicio (2026-06-26)
+- **Estado**: Aceptado.
+- **Contexto**: `getWorkers()` calculaba earnings de cada trabajador cruzando cleans y entregas. Estas llamadas se lanzaban en la 3ª ola, después de cargar workers y sensitive_data, sumando una ronda de red secuencial innecesaria.
+- **Decisión**: `derivedDataPromise = Promise.all([...])` se lanza al inicio de `getWorkers()`, antes de cualquier query a Supabase. Se consume con `await derivedDataPromise` cuando se necesita, pero ya lleva una o dos rondas completas en vuelo para ese momento.
+- **Consecuencias**:
+  - *Ventaja*: Elimina una ronda de red secuencial → Dashboard carga ~1-2 s más rápido en producción.
+  - *Ventaja*: Zero cambio en la API pública de `getWorkers()`.
+  - *Archivos*: `src/services/api.ts` (commit `fe4e429`).
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.

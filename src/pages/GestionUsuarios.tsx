@@ -725,7 +725,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [user.id]);
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
 

@@ -903,6 +903,10 @@ export const appsScriptApi = {
   // --- Funciones de Administración (Supabase) ---
 
   getAllUsers: async (): Promise<User[]> => {
+    // Verificar sesión antes de la query: RLS devuelve [] silencioso si no hay token.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) throw new Error('Sesión caducada — cierra sesión y vuelve a entrar.');
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
