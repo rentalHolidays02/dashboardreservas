@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { appsScriptApi } from '../../services/api';
 import type { Accommodation } from '../../services/mockData';
 import SignaturePad from '../ui/SignaturePad';
-import { DuracionInput, formatBizumNumber, formatDuracionTotal, resolveAccommodationId } from './serviceFormHelpers';
+import { formatBizumNumber, resolveAccommodationId } from './serviceFormHelpers';
 import {
   saveDraft,
   submitServiceReport,
@@ -555,11 +555,10 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="min-w-0">
+                  <div>
                     <label className={labelCls}>
                       Entrada reserva <span className="text-stone-400 dark:text-stone-500">*</span>
                     </label>
-                    /*esto son hora  */
                     <input
                       type="datetime-local"
                       value={form.el_fechaEntradaReserva}
@@ -569,7 +568,7 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                       className={inputCls}
                     />
                   </div>
-                  <div className="min-w-0">
+                  <div>
                     <label className={labelCls}>
                       Salida reserva <span className="text-stone-400 dark:text-stone-500">*</span>
                     </label>
@@ -731,18 +730,12 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
               {tipo === 'reserva' && (
                 <>
                   <div>
-                    <div className="flex items-baseline justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-slate-600 dark:text-stone-300">
-                        Horas extra realizadas
-                      </label>
-                      <span className="text-[11px] text-slate-500 dark:text-stone-400">
-                        Total: <span className="font-medium text-slate-700 dark:text-stone-200">{formatDuracionTotal(form.horasExtra)}</span>
-                      </span>
-                    </div>
-                    <DuracionInput
-                      hideTotal
+                    <label className={labelCls}>Horas extra realizadas</label>
+                    <input
+                      type="time"
                       value={form.horasExtra}
-                      onChange={(v) => setF('horasExtra', v)}
+                      onChange={(e) => setF('horasExtra', e.target.value)}
+                      className={inputCls}
                     />
                   </div>
                   {requiresJustificacion && (
@@ -850,9 +843,11 @@ const ServiceFormModal: React.FC<ServiceFormModalProps> = ({
                   <label className={labelCls}>
                     Duración de la incidencia <span className="text-stone-400 dark:text-stone-500">*</span>
                   </label>
-                  <DuracionInput
+                  <input
+                    type="time"
                     value={form.inc_duracion}
-                    onChange={(v) => setF('inc_duracion', v)}
+                    onChange={(e) => setF('inc_duracion', e.target.value)}
+                    className={inputCls}
                   />
                 </div>
                 <div>

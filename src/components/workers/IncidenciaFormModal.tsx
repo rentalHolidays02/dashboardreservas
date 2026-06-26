@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ApartamentoAutocomplete,
-  DuracionInput,
-  formatDuracionTotal,
   inputCls,
   labelCls,
   resolveAccommodationId,
@@ -115,15 +113,13 @@ const IncidenciaFormModal: React.FC<IncidenciaFormModalProps> = ({
       </div>
 
       <div>
-        <div className="flex items-baseline justify-between mb-1.5">
-          <label className="block text-xs font-medium text-slate-600 dark:text-stone-300">
-            Duración de la incidencia {ast}
-          </label>
-          <span className="text-[11px] text-slate-500 dark:text-stone-400">
-            Total: <span className="font-medium text-slate-700 dark:text-stone-200">{formatDuracionTotal(form.duracion)}</span>
-          </span>
-        </div>
-        <DuracionInput hideTotal value={form.duracion} onChange={(v) => setF('duracion', v)} />
+        <label className={labelCls}>Duración de la incidencia {ast}</label>
+        <input
+          type="time"
+          value={form.duracion}
+          onChange={(e) => setF('duracion', e.target.value)}
+          className={inputCls}
+        />
       </div>
 
       <div>
