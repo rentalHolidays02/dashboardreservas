@@ -30,6 +30,8 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
   const pane2Ref = useRef<HTMLDivElement>(null);
 
   const [index, setIndex] = useState<0 | 1 | 2>(initialIndex);
+  // Panes visitados: solo montar un pane cuando se visita por primera vez (lazy mount, keep-alive).
+  const [visited, setVisited] = useState<Set<number>>(() => new Set([initialIndex]));
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
   );
@@ -67,6 +69,7 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
         setIndex((prev) => {
           if (i !== prev) {
             window.history.replaceState(null, '', PATHS[i]);
+            setVisited(v => { const n = new Set(v); n.add(i); return n; });
           }
           return i;
         });
@@ -184,19 +187,19 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
           ref={pane0Ref}
           className="w-full shrink-0 snap-center snap-always overflow-y-auto no-scrollbar h-full bg-mobile-app pt-[calc(env(safe-area-inset-top)+3.5rem)]"
         >
-          <WorkerPanel user={user} />
+          {visited.has(0) && <WorkerPanel user={user} />}
         </div>
         <div
           ref={pane1Ref}
           className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden no-scrollbar h-full bg-mobile-app pt-[calc(env(safe-area-inset-top)+3.5rem)]"
         >
-          <WorkerRecords user={user} />
+          {visited.has(1) && <WorkerRecords user={user} />}
         </div>
         <div
           ref={pane2Ref}
           className="w-full shrink-0 snap-center snap-always overflow-y-auto overflow-x-hidden no-scrollbar h-full bg-mobile-app pt-[calc(env(safe-area-inset-top)+3.5rem)]"
         >
-          <Profile user={user} onLogout={onLogout} />
+          {visited.has(2) && <Profile user={user} onLogout={onLogout} />}
         </div>
       </div>
     </div>
