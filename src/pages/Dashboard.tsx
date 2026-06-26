@@ -63,19 +63,22 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Timeout de seguridad: si el Promise.all se cuelga, libera el spinner igualmente.
+      const safetyTimer = setTimeout(() => setLoading(false), 15000);
       try {
         // Carga rápida: Supabase + mock — renderiza el dashboard sin esperar a Sheets
+        const tag = (name: string, p: Promise<any>) => p.then(r => { console.log(`[Dashboard] ${name} OK`); return r; }).catch(e => { console.error(`[Dashboard] ${name} ERR`, e); throw e; });
         const [
           workersData, checkInsData, normalData, initialData, handymanData,
           entregaData, accommodationsData
         ] = await Promise.all([
-          appsScriptApi.getWorkers(),
-          appsScriptApi.getRecentCheckIns(),
-          appsScriptApi.getNormalCleans(),
-          appsScriptApi.getInitialCleans(),
-          appsScriptApi.getHandymanRecords(),
-          appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[]),
-          appsScriptApi.getAccommodations().catch(() => []),
+          tag('getWorkers', appsScriptApi.getWorkers()),
+          tag('getRecentCheckIns', appsScriptApi.getRecentCheckIns()),
+          tag('getNormalCleans', appsScriptApi.getNormalCleans()),
+          tag('getInitialCleans', appsScriptApi.getInitialCleans()),
+          tag('getHandymanRecords', appsScriptApi.getHandymanRecords()),
+          tag('getEntregaLlaves', appsScriptApi.getEntregaLlaves().catch(() => [] as EntregaLlaves[])),
+          tag('getAccommodations', appsScriptApi.getAccommodations().catch(() => [])),
         ]);
         setWorkers(workersData);
         setCheckIns(checkInsData);
@@ -87,6 +90,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
+        clearTimeout(safetyTimer);
         setLoading(false);
       }
 
