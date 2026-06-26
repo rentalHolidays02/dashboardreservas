@@ -32,6 +32,17 @@ const memStorage = {
 
 export { memStore };
 
+// Lee la sesión directamente de memStore sin pasar por el SDK (evita race con _currentSession).
+// Usar en lugar de supabase.auth.getSession() cuando el token puede acabar de escribirse en login().
+export const getSessionFromStore = (): { access_token: string; user: { id: string; email: string } } | null => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const projectRef = supabaseUrl?.match(/\/\/([^.]+)/)?.[1] ?? '';
+  const key = `sb-${projectRef}-auth-token`;
+  const raw = memStore.get(key) ?? sessionStorage.getItem(key);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+};
+
 export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   auth: {
     persistSession: true,
