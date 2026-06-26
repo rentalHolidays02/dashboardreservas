@@ -63,7 +63,6 @@ const stripBizum = (v: string | undefined): string =>
 // Lee directamente de memStore para evitar la race con _currentSession del SDK.
 export const getCurrentWorkerId = async (): Promise<string | null> => {
   const session = getSessionFromStore();
-  console.log('[getCurrentWorkerId] session from store:', session ? `uid=${session.user?.id?.slice(0,8)}` : 'NULL');
   if (!session?.user) return null;
   const auth = { user: session.user };
   const { data, error } = await supabase

@@ -148,7 +148,9 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
   2. `reportsApi.ts`: `getCurrentWorkerId()` y `getMyWorker()` usan `getSessionFromStore()` (nueva helper en `supabaseClient.ts`) que lee memStore/sessionStorage directamente, sin pasar por el SDK — inmune a `_currentSession` null.
   3. `supabaseClient.ts`: exportar `getSessionFromStore()` que parsea el JSON del token directamente desde memStore/sessionStorage.
 - **Regla para el futuro**: Escribir en `memStore` no es suficiente. Siempre llamar `supabase.auth.setSession()` después del login para sincronizar `_currentSession`. Sin eso, las queries RLS del SDK salen sin token aunque memStore lo tenga.
-- **Commits**: `7c445c6`.
+- **Fix adicional — WorkerSwipeShell lazy-mount** (commit `fd5689d`): WorkerSwipeShell montaba los 3 panes (WorkerPanel + WorkerRecords + Profile) simultáneamente al entrar, lo que disparaba ~14 llamadas a `getCurrentWorkerId` en paralelo. Tras el lazy-mount (`visited` Set, pane solo se monta al visitarse por primera vez), baja a ~8 llamadas (solo el pane activo). Admin Dashboard ya no queda en spinner después del cambio de sesión.
+- **Estado final**: Confirmado funcionando. Admin carga sin spinner tras login desde sesión trabajador. WorkerPanel carga datos en primera visita sin recargar.
+- **Commits**: `7c445c6`, `fd5689d`.
 
 ---
 
