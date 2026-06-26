@@ -158,6 +158,18 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 16. Firmas desaparecen al restaurar borrador (2026-06-26)
+
+- **Síntoma**: El trabajador firmaba en un formulario de servicio o entrega de llaves, guardaba borrador y al reabrirlo las firmas aparecían en blanco. El formulario quedaba bloqueado porque `isValid` exige firmas.
+- **Causa 1 — firmas excluidas del payload**: `handleSaveDraft` en `ServiceFormModal` y `EntregaLlavesFormModal` desestructuraba `_firmaTrabajador`/`_firmaHuesped` antes de llamar a `saveDraft`, por precaución de "payload enorme". En la práctica dos firmas PNG son ~100 KB — insignificante para Supabase JSONB.
+- **Causa 2 — `locked` no se sincronizaba**: `SignaturePad` inicializa `locked = isDisplayableSignature(value)` solo al montar. Cuando el borrador restauraba `value` tras el montaje, `locked` quedaba `false` y el componente mostraba el canvas vacío en vez de la imagen.
+- **Solución**:
+  1. `ServiceFormModal.tsx` y `EntregaLlavesFormModal.tsx`: eliminar la exclusión de firmas en `handleSaveDraft` y `handleCancelOrClose` — se guarda `form` completo (commits `d74dfa1`).
+  2. `SignaturePad.tsx`: en el `useEffect([value])` que sincroniza `imgSrc`/`hasContent`, añadir `if (!readOnly && displayable) setLocked(true)` para que `locked` se active cuando `value` llega tras el montaje (commit `c25c541`).
+- **Archivos**: `src/components/ui/SignaturePad.tsx`, `src/components/workers/ServiceFormModal.tsx`, `src/components/workers/EntregaLlavesFormModal.tsx`.
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.
