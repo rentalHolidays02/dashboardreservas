@@ -157,6 +157,18 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 15: TimeSelect — dos `<select>` en vez de `type="time"` (2026-06-27)
+- **Estado**: Aceptado.
+- **Contexto**: `<input type="time">` en iOS/Android abre el picker circular nativo de rueda — el trabajador no puede seleccionar hora en lista. No hay forma de sobrescribir este comportamiento con CSS porque es un control del SO.
+- **Decisión**: Componente `TimeSelect` en `serviceFormHelpers.tsx`: dos `<select>` (hh / mm) con `selectCls` alineado visualmente con `inputCls`. Emite `"HH:MM"` — mismo formato que `type="time"` — para no romper payloads ni validaciones existentes. `maxHours` prop opcional (por defecto 23).
+- **Consecuencias**:
+  - *Ventaja*: Selector de lista en todos los dispositivos, sin dependencias externas.
+  - *Ventaja*: Compatible con el formato `"HH:MM"` que ya usa la BD (`text CHECK regex`).
+  - *Nota*: `datetime-local` (entrada/salida reserva) se mantiene nativo pero con `dateInputCls` (text-sm, px-2) para que el texto `dd/mm/aaaa hh:mm` quepa en grid de 2 columnas en móvil.
+- **Archivos**: `src/components/workers/serviceFormHelpers.tsx`, `ServiceFormModal.tsx`, `IncidenciaFormModal.tsx` (commits `153cc0d`, `c936c63`).
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.

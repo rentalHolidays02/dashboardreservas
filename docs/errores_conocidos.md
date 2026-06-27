@@ -170,6 +170,16 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 17. Picker circular de hora en iOS/Android en formularios de trabajador (2026-06-27)
+
+- **Síntoma**: Los campos de hora (entrada, salida, duración, horas extra) usaban `<input type="time">`. En iOS y Android esto abre el picker nativo circular de rueda — el trabajador no puede seleccionar hora en formato de lista.
+- **Causa**: `type="time"` delega el control al SO, no hay forma de cambiarlo con CSS.
+- **Solución**: Componente `TimeSelect` en `serviceFormHelpers.tsx` — dos `<select>` (hh / mm) con el mismo estilo visual que el resto de inputs (`selectCls`). Emite y recibe `"HH:MM"` igual que `type="time"`, sin romper el formato del payload ni la validación. Aplicado en: hora entrada/salida (manitas y reserva), hora salida huésped, horas extra, duración incidencia.
+- **Archivos**: `src/components/workers/serviceFormHelpers.tsx` (`TimeSelect`), `src/components/workers/ServiceFormModal.tsx`, `src/components/workers/IncidenciaFormModal.tsx` (commit `153cc0d`).
+- **Nota**: `datetime-local` (fecha+hora entrada/salida reserva) se mantiene como `type="datetime-local"` con `dateInputCls` (font-sm, px-2) para que quepa en grid de 2 columnas en móvil (commit `c936c63`).
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.
