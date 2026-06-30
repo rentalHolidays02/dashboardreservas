@@ -411,13 +411,13 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
           </div>
         </section>
 
-        {/* ── Operaciones Excel ── Sólo para admin/editor/viewer; trabajador no lo ve. */}
+        {/* ── Checkins ── Sólo para admin/editor/viewer; trabajador no lo ve. */}
         {user.role !== 'trabajador' && (
           <section className="bg-white/80 dark:bg-stone-900 backdrop-blur-md border border-white/60 dark:border-stone-700/50 rounded-2xl overflow-hidden">
             <div className="module-header">
               <div className="flex items-center gap-2">
                 <Sparkles size={15} className="text-orange-500" />
-                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Operaciones Excel</span>
+                <span className="text-sm font-medium text-slate-700 dark:text-stone-200">Checkins</span>
               </div>
             </div>
             <div className="px-5 py-4">
@@ -431,7 +431,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
                   </span>
                   <div className="text-left">
                     <p className="text-sm font-medium text-slate-700 dark:text-stone-200">Mostrar en el menú</p>
-                    <p className="text-xs text-slate-400 dark:text-stone-500">{showExcelOperations ? 'Operaciones Excel visibles' : 'Operaciones Excel ocultas'}</p>
+                    <p className="text-xs text-slate-400 dark:text-stone-500">{showExcelOperations ? 'Checkins visibles' : 'Checkins ocultas'}</p>
                   </div>
                 </div>
                 <div className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${showExcelOperations ? 'bg-orange-500' : 'bg-slate-200 dark:bg-stone-700'}`}>
