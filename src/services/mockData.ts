@@ -46,6 +46,7 @@ export interface Worker {
   titularCuenta?: string;
   photo?: string;
   notes?: string;
+  deletedAt?: string | null;
 }
 
 export interface Accommodation {

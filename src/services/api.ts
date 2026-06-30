@@ -1051,6 +1051,7 @@ export const appsScriptApi = {
             avatar_url
           )
         `)
+        .is('deleted_at', null)
         .order('full_name', { ascending: true });
 
       if (dbError) throw dbError;
@@ -1263,7 +1264,7 @@ export const appsScriptApi = {
     try {
       const { error } = await supabase
         .from('workers')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
@@ -1272,7 +1273,76 @@ export const appsScriptApi = {
       saveWorkers(updatedWorkers);
       return true;
     } catch (error) {
-      console.error('Error deleting worker from Supabase:', error);
+      console.error('Error soft-deleting worker:', error);
+      throw error;
+    }
+  },
+
+  getDeletedWorkers: async (): Promise<Worker[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('workers')
+        .select('*')
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []).map((w: any) => ({
+        id: w.id,
+        fullName: w.full_name,
+        telefono: w.phone,
+        email: w.email || '',
+        tipoPago: w.payment_method,
+        pagoPorReserva: w.pay_per_reservation ?? 0,
+        precioPorKm: w.price_per_km ?? 0,
+        notes: w.notes || '',
+        owedMoney: w.pending_balance ?? 0,
+        efectivoRetenido: w.retained_cash ?? 0,
+        telefonoBizum: w.bizum_phone || '',
+        tipoTrabajador: w.worker_type || 'limpieza',
+        photo: w.photo_url || '',
+        iban: w.iban || '',
+        dni: w.dni || '',
+        netMoneyMonth: 0,
+        cleansCountMonth: 0,
+        kmsMonth: 0,
+        accommodationDetails: [],
+        accommodations: [],
+        deletedAt: w.deleted_at,
+      }));
+    } catch (error) {
+      console.error('Error fetching deleted workers:', error);
+      throw error;
+    }
+  },
+
+  hardDeleteWorker: async (id: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('workers')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error hard-deleting worker:', error);
+      throw error;
+    }
+  },
+
+  restoreDeletedWorker: async (id: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('workers')
+        .update({ deleted_at: null })
+        .eq('id', id);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error restoring worker:', error);
       throw error;
     }
   },
