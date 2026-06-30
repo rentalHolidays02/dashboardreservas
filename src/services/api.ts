@@ -825,12 +825,27 @@ export const appsScriptApi = {
 
   updateUserPassword: async (password: string): Promise<{ ok: boolean; error?: string }> => {
     try {
-      // Cambia password + marca metadata.password_set para que no salga otra vez el modal forzado.
-      const { error } = await supabase.auth.updateUser({
-        password,
-        data: { password_set: true },
+      const { getSessionFromStore } = await import('./supabaseClient');
+      const session = getSessionFromStore() as any;
+      if (!session?.access_token) throw new Error('Sin sesión activa');
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ password, data: { password_set: true } }),
       });
-      if (error) throw error;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('updateUserPassword error body:', res.status, body);
+        if (res.status === 403 || body.error_code === 'user_not_found') {
+          throw new Error('Sesión caducada. Por favor, cierra sesión e inicia de nuevo.');
+        }
+        throw new Error(body.message || body.error_description || body.msg || 'Error al cambiar contraseña');
+      }
       return { ok: true };
     } catch (error: any) {
       console.error('Error al actualizar contraseña:', error);

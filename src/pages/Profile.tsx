@@ -129,27 +129,42 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
 
     setPwLoading(true);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPw,
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+      // Verificar contraseña actual re-autenticando
+      const signInRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': anonKey },
+        body: JSON.stringify({ email: user.email, password: currentPw }),
       });
-      if (signInError) {
+      if (!signInRes.ok) {
         setPwError('La contraseña actual es incorrecta.');
-        setPwLoading(false);
         return;
       }
+      const { access_token } = await signInRes.json();
 
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPw });
-      if (updateError) {
-        setPwError(updateError.message);
-        setPwLoading(false);
+      // Cambiar contraseña con el token fresco
+      const updateRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey,
+          'Authorization': `Bearer ${access_token}`,
+        },
+        body: JSON.stringify({ password: newPw }),
+      });
+      if (!updateRes.ok) {
+        const body = await updateRes.json().catch(() => ({}));
+        setPwError(body.message || body.msg || 'Error al cambiar contraseña.');
         return;
       }
 
       setPwSaved(true);
       setCurrentPw(''); setNewPw(''); setConfirmPw('');
       setTimeout(() => { setPwSaved(false); setPwSection(false); }, 2500);
-    } catch {
+    } catch (e) {
+      console.error('handleSavePassword error:', e);
       setPwError('Error inesperado. Inténtalo de nuevo.');
     } finally {
       setPwLoading(false);

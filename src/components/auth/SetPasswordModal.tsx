@@ -23,7 +23,7 @@ const SetPasswordModal: React.FC = () => {
     // supabase.auth.getUser/onAuthStateChange no disponibles con accessToken option.
     // getSessionFromStore() devuelve el JSON completo de sesión (incluye user_metadata).
     const session = getSessionFromStore() as any;
-    const needsSetup = session?.user?.user_metadata?.password_set === false;
+    const needsSetup = false; // movido a perfil
     setNeeded(!!needsSetup);
   }, []);
 
