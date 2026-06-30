@@ -132,7 +132,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-      // Verificar contraseña actual re-autenticando
+      // Verificar contraseña actual obteniendo token fresco
       const signInRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': anonKey },
@@ -142,7 +142,12 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
         setPwError('La contraseña actual es incorrecta.');
         return;
       }
-      const { access_token } = await signInRes.json();
+      const signInData = await signInRes.json();
+      const freshToken = signInData.access_token;
+      if (!freshToken) {
+        setPwError('No se pudo verificar la sesión. Cierra sesión e inicia de nuevo.');
+        return;
+      }
 
       // Cambiar contraseña con el token fresco
       const updateRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -150,13 +155,14 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
         headers: {
           'Content-Type': 'application/json',
           'apikey': anonKey,
-          'Authorization': `Bearer ${access_token}`,
+          'Authorization': `Bearer ${freshToken}`,
         },
         body: JSON.stringify({ password: newPw }),
       });
       if (!updateRes.ok) {
         const body = await updateRes.json().catch(() => ({}));
-        setPwError(body.message || body.msg || 'Error al cambiar contraseña.');
+        console.error('updateUser error:', updateRes.status, body);
+        setPwError(body.message || body.msg || `Error ${updateRes.status} al cambiar contraseña.`);
         return;
       }
 
@@ -165,7 +171,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout }) => {
       setTimeout(() => { setPwSaved(false); setPwSection(false); }, 2500);
     } catch (e) {
       console.error('handleSavePassword error:', e);
-      setPwError('Error inesperado. Inténtalo de nuevo.');
+      setPwError(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setPwLoading(false);
     }
