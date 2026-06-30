@@ -74,9 +74,9 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
   {
     label: 'CHECKINS',
     items: [
-      { Icon: Calendar, label: 'Limpiezas activas', path: '/cleans' },
-      { Icon: KeyRound, label: 'Llaves logística', path: '/entrega-de-llaves' },
-      { Icon: AlertTriangle, label: 'Incidencias logística', path: '/incidencias' },
+      { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
+      { Icon: KeyRound, label: 'Entrega de Llaves', path: '/entrega-de-llaves' },
+      { Icon: AlertTriangle, label: 'Incidencias', path: '/incidencias' },
     ],
   },
 ];
