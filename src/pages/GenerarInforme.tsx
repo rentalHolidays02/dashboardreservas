@@ -262,28 +262,31 @@ const GenerarInforme: React.FC<GenerarInformeProps> = ({ user }) => {
   const pagosSource = pagos;
 
   // Filtros: periodo + trabajador + alojamiento
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const wn = workerName ? norm(workerName) : null;
+
   const fPagos  = useMemo(() => pagosSource.filter(p =>
     isInRange(p.fecha, dateRange) &&
-    (!workerName || p.workerName === workerName)
-  ), [pagosSource, workerName, dateRange]);
+    (!wn || norm(p.workerName ?? '') === wn)
+  ), [pagosSource, wn, dateRange]);
 
   const fCleans = useMemo(() => cleans.filter(c =>
     isInRange(c.checkoutFecha || c.checkinFecha, dateRange) &&
-    (!workerName || `${c.nombre} ${c.apellidos}` === workerName) &&
-    (!accName    || c.apartamento === accName)
-  ), [cleans, workerName, accName, dateRange]);
+    (!wn || norm(`${c.nombre} ${c.apellidos}`) === wn) &&
+    (!accName || c.apartamento === accName)
+  ), [cleans, wn, accName, dateRange]);
 
   const fIncid  = useMemo(() => incidencias.filter(i =>
     isInRange(i.timestamp, dateRange) &&
-    (!workerName || i.userName === workerName) &&
-    (!accName    || i.accommodationName === accName)
-  ), [incidencias, workerName, accName, dateRange]);
+    (!wn || norm(i.userName ?? '') === wn) &&
+    (!accName || i.accommodationName === accName)
+  ), [incidencias, wn, accName, dateRange]);
 
   const fHandy  = useMemo(() => handyman.filter(h =>
     isInRange(h.fechaFin || h.fechaLlegada, dateRange) &&
-    (!workerName || `${h.nombre} ${h.apellidos}` === workerName) &&
-    (!accName    || h.alojamiento === accName)
-  ), [handyman, workerName, accName, dateRange]);
+    (!wn || norm(`${h.nombre} ${h.apellidos}`) === wn) &&
+    (!accName || h.alojamiento === accName)
+  ), [handyman, wn, accName, dateRange]);
 
   const reportDate = useMemo(() => {
     const now = new Date();
