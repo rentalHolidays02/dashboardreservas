@@ -112,8 +112,8 @@ export const TimeSelect: React.FC<{
   const m = match ? parseInt(match[2], 10) : -1;
 
   const emit = (hh: number, mm: number) => {
-    if (hh < 0 || mm < 0) { onChange(''); return; }
-    onChange(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+    if (hh < 0 && mm < 0) { onChange(''); return; }
+    onChange(`${String(hh >= 0 ? hh : 0).padStart(2, '0')}:${String(mm >= 0 ? mm : 0).padStart(2, '0')}`);
   };
 
   return (

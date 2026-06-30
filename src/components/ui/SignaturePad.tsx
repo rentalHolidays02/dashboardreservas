@@ -82,6 +82,19 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }, []);
 
+  // touchmove con passive:false para que e.preventDefault() funcione y no scroll mientras se firma
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handler = (e: TouchEvent) => {
+      if (!drawing || readOnly) return;
+      e.preventDefault();
+      draw(e as unknown as React.TouchEvent);
+    };
+    canvas.addEventListener('touchmove', handler, { passive: false });
+    return () => canvas.removeEventListener('touchmove', handler);
+  }, [drawing, readOnly]);
+
   const getPos = useCallback(
     (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
       const rect = canvas.getBoundingClientRect();
@@ -228,7 +241,6 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
             onMouseUp={stopDraw}
             onMouseLeave={stopDraw}
             onTouchStart={startDraw}
-            onTouchMove={draw}
             onTouchEnd={stopDraw}
           />
         )}
