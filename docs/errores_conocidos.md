@@ -180,6 +180,25 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 18. TimeSelect no guardaba hora al elegir solo horas o solo minutos (2026-06-30)
+
+- **Síntoma**: El trabajador seleccionaba la hora en `TimeSelect` pero el campo quedaba vacío. Solo funcionaba si se elegían horas Y minutos en ese orden exacto.
+- **Causa**: `emit(hh, mm)` retornaba `''` si cualquiera de los dos era `-1` (sin seleccionar). Al elegir horas primero, `mm = -1` → `emit` abortaba → `onChange('')` → el campo quedaba vacío aunque se hubiera elegido hora.
+- **Solución**: Cambiar condición de abort de `hh < 0 || mm < 0` a `hh < 0 && mm < 0`. Si solo uno falta, usar `0` como fallback: `hh >= 0 ? hh : 0` / `mm >= 0 ? mm : 0`. Así elegir solo horas guarda `"HH:00"` y viceversa.
+- **Archivo**: `src/components/workers/serviceFormHelpers.tsx` (commit `ac83f2f`).
+
+---
+
+## 19. `Unable to preventDefault inside passive event listener` en SignaturePad (2026-06-30)
+
+- **Síntoma**: Consola llena de warnings `Unable to preventDefault inside passive event listener invocation` apuntando a `SignaturePad.tsx:121`. El scroll de página podía interferir con el dibujo de firma en móvil.
+- **Causa**: React registra `onTouchStart`, `onTouchMove` y `onTouchEnd` como listeners **pasivos** por defecto desde React 17. La función `draw` llamaba `e.preventDefault()` para evitar el scroll, pero el browser lo ignoraba silenciosamente (con warning) porque el listener era passive.
+- **Solución**: Mover los tres handlers de touch (`touchstart`, `touchmove`, `touchend`) fuera del JSX y registrarlos con `useEffect` usando `{ passive: false }`. Quitar `onTouchStart` y `onTouchEnd` del canvas JSX (ya no se necesitan ahí). El `useEffect` sin array de deps se re-ejecuta en cada render para mantener closure fresco.
+- **Archivo**: `src/components/ui/SignaturePad.tsx` (commit `5ed4e8f`).
+- **Regla**: Cualquier canvas o elemento que necesite `e.preventDefault()` en touch debe registrar sus listeners vía `addEventListener(..., { passive: false })` en `useEffect`, no con props de React.
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.
