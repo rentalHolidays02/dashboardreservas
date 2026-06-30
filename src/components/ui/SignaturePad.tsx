@@ -82,18 +82,22 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }, []);
 
-  // touchmove con passive:false para que e.preventDefault() funcione y no scroll mientras se firma
+  // Todos los touch con passive:false para que e.preventDefault() funcione (evita scroll al firmar)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const handler = (e: TouchEvent) => {
-      if (!drawing || readOnly) return;
-      e.preventDefault();
-      draw(e as unknown as React.TouchEvent);
+    const onStart = (e: TouchEvent) => { e.preventDefault(); startDraw(e as unknown as React.TouchEvent); };
+    const onMove  = (e: TouchEvent) => { e.preventDefault(); draw(e as unknown as React.TouchEvent); };
+    const onEnd   = (e: TouchEvent) => { stopDraw(); };
+    canvas.addEventListener('touchstart', onStart, { passive: false });
+    canvas.addEventListener('touchmove',  onMove,  { passive: false });
+    canvas.addEventListener('touchend',   onEnd,   { passive: false });
+    return () => {
+      canvas.removeEventListener('touchstart', onStart);
+      canvas.removeEventListener('touchmove',  onMove);
+      canvas.removeEventListener('touchend',   onEnd);
     };
-    canvas.addEventListener('touchmove', handler, { passive: false });
-    return () => canvas.removeEventListener('touchmove', handler);
-  }, [drawing, readOnly]);
+  });
 
   const getPos = useCallback(
     (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
@@ -240,8 +244,6 @@ const SignaturePad: React.FC<SignaturePadProps> = ({ label, value, onChange, rea
             onMouseMove={draw}
             onMouseUp={stopDraw}
             onMouseLeave={stopDraw}
-            onTouchStart={startDraw}
-            onTouchEnd={stopDraw}
           />
         )}
         {lockMsgVisible && (
