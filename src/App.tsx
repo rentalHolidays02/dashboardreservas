@@ -25,6 +25,7 @@ import WorkerPanel from './pages/WorkerPanel';
 import WorkerAnalytics from './pages/WorkerAnalytics';
 import WorkerRecords from './pages/WorkerRecords';
 import WorkerSwipeShell from './components/workers/WorkerSwipeShell';
+import WorkerTrash from './pages/WorkerTrash';
 import { User } from './services/mockData';
 import { Sparkles } from 'lucide-react';
 import SetPasswordModal from './components/auth/SetPasswordModal';
@@ -224,6 +225,19 @@ function App() {
                   user ? (
                     <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
                       <Workers user={user} userRole={user.role} />
+                    </MainLayout>
+                  ) : (
+                    <Navigate to="/login" />
+                  )
+                }
+              />
+
+              <Route
+                path="/workers/papelera"
+                element={
+                  user && (user.role === 'admin' || user.role === 'editor') ? (
+                    <MainLayout user={user} onLogout={handleLogout} onRoleChange={handleRoleChange}>
+                      <WorkerTrash user={user} />
                     </MainLayout>
                   ) : (
                     <Navigate to="/login" />

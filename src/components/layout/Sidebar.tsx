@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Sparkles,
   LogOut,
+  Trash2,
   type LucideProps,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -61,6 +62,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
       { Icon: Users, label: 'Trabajadores', path: '/workers' },
       { Icon: Home, label: 'Alojamientos', path: '/alojamientos' },
       { Icon: ShieldCheck, label: 'Usuarios', path: '/usuarios' },
+      { Icon: Trash2, label: 'Papelera', path: '/workers/papelera' },
     ],
   },
   {

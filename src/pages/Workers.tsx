@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Search, Plus, Filter, Users, LayoutGrid, List, Phone, MapPin, AlertTriangle, Edit2, Trash2, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Plus, Filter, Users, LayoutGrid, List, Phone, MapPin, AlertTriangle, Edit2 } from 'lucide-react';
 import WorkerCard from '../components/workers/WorkerCard';
 import WorkerModal from '../components/workers/WorkerModal';
 import WorkerProfile from '../components/workers/WorkerProfile';
@@ -18,10 +18,6 @@ const Workers: React.FC<WorkersProps> = ({ user, userRole }) => {
   const isReadOnly = userRole === 'viewer';
   const { showUndoToast } = useUndoToast();
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [deletedWorkers, setDeletedWorkers] = useState<Worker[]>([]);
-  const [showTrash, setShowTrash] = useState(false);
-  const [trashLoading, setTrashLoading] = useState(false);
-  const [confirmHardDelete, setConfirmHardDelete] = useState<Worker | null>(null);
   const [accommodations, setAccommodations] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -148,50 +144,10 @@ const Workers: React.FC<WorkersProps> = ({ user, userRole }) => {
         `Movió al trabajador "${workerToDelete.fullName}" a la papelera`,
         'eliminar_trabajador'
       );
-      if (showTrash) loadTrash();
     } catch (error) {
       console.error('Error soft-deleting worker:', error);
       await fetchWorkers();
       throw error;
-    }
-  };
-
-  const loadTrash = async () => {
-    setTrashLoading(true);
-    try {
-      const data = await appsScriptApi.getDeletedWorkers();
-      setDeletedWorkers(data);
-    } catch (e) {
-      console.error('Error loading trash:', e);
-    } finally {
-      setTrashLoading(false);
-    }
-  };
-
-  const handleToggleTrash = () => {
-    if (!showTrash) loadTrash();
-    setShowTrash(v => !v);
-  };
-
-  const handleRestoreWorker = async (id: string) => {
-    try {
-      await appsScriptApi.restoreDeletedWorker(id);
-      setDeletedWorkers(prev => prev.filter(w => w.id !== id));
-      await fetchWorkers();
-      await activityLogApi.log(user.id || null, user.name || 'Usuario', `Restauró al trabajador desde papelera`, 'restaurar_trabajador');
-    } catch (e) {
-      console.error('Error restoring worker:', e);
-    }
-  };
-
-  const handleHardDelete = async (worker: Worker) => {
-    try {
-      await appsScriptApi.hardDeleteWorker(worker.id);
-      setDeletedWorkers(prev => prev.filter(w => w.id !== worker.id));
-      setConfirmHardDelete(null);
-      await activityLogApi.log(user.id || null, user.name || 'Usuario', `Eliminó definitivamente al trabajador "${worker.fullName}"`, 'eliminar_trabajador');
-    } catch (e) {
-      console.error('Error hard-deleting worker:', e);
     }
   };
 
@@ -484,97 +440,6 @@ const Workers: React.FC<WorkersProps> = ({ user, userRole }) => {
                 ? 'No hay trabajadores que coincidan con la búsqueda. Intenta con otros términos.'
                 : 'Añade tu primer trabajador con el botón de arriba.'}
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Papelera ────────────────────────────────────────────── */}
-      {!isReadOnly && (
-        <div className="border border-stone-200 dark:border-stone-700/50 rounded-2xl overflow-hidden">
-          <button
-            onClick={handleToggleTrash}
-            className="w-full flex items-center justify-between px-5 py-3.5 bg-stone-50 dark:bg-stone-900/60 hover:bg-stone-100 dark:hover:bg-stone-800/60 transition-colors text-sm text-slate-500 dark:text-stone-400"
-          >
-            <span className="flex items-center gap-2">
-              <Trash2 size={14} className="text-slate-400" />
-              Papelera de trabajadores
-              {deletedWorkers.length > 0 && (
-                <span className="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-md text-[10px] font-medium">
-                  {deletedWorkers.length}
-                </span>
-              )}
-            </span>
-            {showTrash ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-
-          {showTrash && (
-            <div className="divide-y divide-stone-100 dark:divide-stone-800">
-              {trashLoading ? (
-                <div className="py-8 text-center text-xs text-slate-400 dark:text-stone-500">Cargando...</div>
-              ) : deletedWorkers.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-400 dark:text-stone-500">Papelera vacía</div>
-              ) : deletedWorkers.map(w => (
-                <div key={w.id} className="flex items-center justify-between px-5 py-3 gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-600 dark:text-stone-300 truncate">{w.fullName}</p>
-                    <p className="text-[11px] text-slate-400 dark:text-stone-500">
-                      {w.deletedAt ? new Date(w.deletedAt).toLocaleDateString('es-ES') : ''}
-                      {w.telefono ? ` · ${w.telefono}` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => handleRestoreWorker(w.id)}
-                      title="Restaurar"
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-                    >
-                      <RotateCcw size={11} /> Restaurar
-                    </button>
-                    <button
-                      onClick={() => setConfirmHardDelete(w)}
-                      title="Eliminar definitivamente"
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800/50 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
-                      <Trash2 size={11} /> Eliminar
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Modal confirmación borrado definitivo */}
-      {confirmHardDelete && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-stone-900 rounded-2xl p-6 max-w-sm w-full shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
-                <Trash2 size={18} className="text-red-500" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-slate-800 dark:text-stone-100">Eliminar definitivamente</p>
-                <p className="text-[11px] text-slate-400 dark:text-stone-500">Esta acción no se puede deshacer</p>
-              </div>
-            </div>
-            <p className="text-sm text-slate-600 dark:text-stone-300">
-              Se borrarán todos los datos de <strong>{confirmHardDelete.fullName}</strong>: servicios, entregas de llaves, incidencias y borradores.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setConfirmHardDelete(null)}
-                className="px-4 py-2 rounded-xl text-xs text-slate-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleHardDelete(confirmHardDelete)}
-                className="px-4 py-2 rounded-xl text-xs font-medium bg-red-600 hover:bg-red-700 text-white transition-colors"
-              >
-                Eliminar todo
-              </button>
-            </div>
           </div>
         </div>
       )}
