@@ -72,7 +72,7 @@ const categories: { label: string; items: { Icon: IconComponent; label: string; 
     ],
   },
   {
-    label: 'OPERACIONES (EXCEL)',
+    label: 'CHECKINS',
     items: [
       { Icon: Calendar, label: 'Limpiezas', path: '/cleans' },
       { Icon: KeyRound, label: 'Entrega de Llaves', path: '/entrega-de-llaves' },
@@ -183,7 +183,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <nav className="flex-1 overflow-y-auto py-2 space-y-4">
           {categories
             .filter(cat => {
-              if (!showExcelOperations && cat.label === 'OPERACIONES (EXCEL)') {
+              if (!showExcelOperations && cat.label === 'CHECKINS') {
                 return false;
               }
               if (userRole === 'trabajador') {
