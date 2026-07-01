@@ -57,38 +57,45 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // 1. Invitar — si ya existe en auth.users (huérfano), reutilizarlo
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+    // 1. Crear usuario directamente con contraseña (evita el flujo de invitación)
+    const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
-      {
-        data: { full_name, password_set: false },
-        redirectTo: Deno.env.get('SITE_URL') ?? 'https://basedatospagosrh.vercel.app',
-      }
-    )
+      password: DEFAULT_PASSWORD,
+      email_confirm: true,
+      user_metadata: { full_name, password_set: false },
+    })
 
     let userId: string
-    if (inviteError) {
-      const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-      const existing = list?.users.find((u: { email?: string | null }) => u.email?.toLowerCase() === email.toLowerCase())
-      if (!existing) {
+    if (createError) {
+      // Si ya existe, buscarlo y reutilizarlo
+      if (createError.message?.toLowerCase().includes('already') || createError.message?.toLowerCase().includes('exists')) {
+        let found = null
+        let page = 1
+        while (!found) {
+          const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 })
+          if (!list?.users?.length) break
+          found = list.users.find((u: { email?: string | null }) => u.email?.toLowerCase() === email.toLowerCase()) ?? null
+          if (found || list.users.length < 1000) break
+          page++
+        }
+        if (!found) {
+          return new Response(
+            JSON.stringify({ ok: false, error: createError.message }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          )
+        }
+        userId = found.id
+      } else {
         return new Response(
-          JSON.stringify({ ok: false, error: inviteError.message }),
+          JSON.stringify({ ok: false, error: createError.message }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
-      userId = existing.id
     } else {
-      userId = inviteData.user.id
+      userId = createData.user.id
     }
 
-    // 2. Contraseña por defecto
-    const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      password: DEFAULT_PASSWORD,
-      email_confirm: true,
-    })
-    if (pwError) console.error('Error al establecer contraseña:', pwError)
-
-    // 3. Perfil
+    // 2. Perfil
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({ id: userId, email, full_name, role, phone: phone || null })
