@@ -57,18 +57,19 @@ Deno.serve(async (req: Request) => {
       )
     }
 
-    // 1. Crear usuario directamente con contraseña (evita el flujo de invitación)
-    const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: DEFAULT_PASSWORD,
-      email_confirm: true,
-      user_metadata: { full_name, password_set: false },
+    let userId: string
+    let isNew = false
+
+    // 1. Intentar invitar (dispara el email "Invite user" con credenciales)
+    const redirectTo = 'https://base-datos-pagos-rh.vercel.app/login'
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { full_name, password_set: false },
     })
 
-    let userId: string
-    if (createError) {
-      // Si ya existe, buscarlo y reutilizarlo
-      if (createError.message?.toLowerCase().includes('already') || createError.message?.toLowerCase().includes('exists')) {
+    if (inviteError) {
+      // Si ya existe, buscarlo y reutilizarlo sin reenviar correo
+      if (inviteError.message?.toLowerCase().includes('already') || inviteError.message?.toLowerCase().includes('exists')) {
         let found = null
         let page = 1
         while (!found) {
@@ -80,22 +81,31 @@ Deno.serve(async (req: Request) => {
         }
         if (!found) {
           return new Response(
-            JSON.stringify({ ok: false, error: createError.message }),
+            JSON.stringify({ ok: false, error: inviteError.message }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         userId = found.id
       } else {
         return new Response(
-          JSON.stringify({ ok: false, error: createError.message }),
+          JSON.stringify({ ok: false, error: inviteError.message }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
     } else {
-      userId = createData.user.id
+      userId = inviteData.user.id
+      isNew = true
     }
 
-    // 2. Perfil
+    // 2. Poner contraseña por defecto + confirmar email (para que pueda entrar sin clicar el link)
+    if (isNew) {
+      await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: DEFAULT_PASSWORD,
+        email_confirm: true,
+      })
+    }
+
+    // 3. Perfil
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({ id: userId, email, full_name, role, phone: phone || null })
