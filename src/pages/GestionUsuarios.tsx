@@ -806,7 +806,7 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         if (u.role === 'trabajador' && u.assignedWorkerId && newProfileId) {
           try {
             await appsScriptApi.linkWorkerProfile(u.assignedWorkerId, newProfileId);
-            await appsScriptApi.updateSensitiveData(newProfileId, {
+            await appsScriptApi.updateSensitiveData(u.assignedWorkerId, {
               dni: u.dni,
               home_address: u.home_address,
               bank_account: u.bank_account,
