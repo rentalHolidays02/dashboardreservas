@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SmtpClient } from 'https://deno.land/x/smtp@v0.7.0/mod.ts'
 
 const DEFAULT_PASSWORD = 'Rentalholidays0211'
 
@@ -59,15 +60,17 @@ Deno.serve(async (req: Request) => {
 
     let userId: string
 
-    // 1. Invitar usuario — dispara el email "Invite user" con credenciales
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: 'https://basedatospagosrh.vercel.app/login',
-      data: { full_name, password_set: false },
+    // 1. Crear usuario con contraseña directamente
+    const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: DEFAULT_PASSWORD,
+      email_confirm: true,
+      user_metadata: { full_name, password_set: false },
     })
 
-    if (inviteError) {
-      // Si ya existe, reutilizarlo sin reenviar correo
-      if (inviteError.message?.toLowerCase().includes('already') || inviteError.message?.toLowerCase().includes('exists')) {
+    if (createError) {
+      // Si ya existe, reutilizarlo
+      if (createError.message?.toLowerCase().includes('already') || createError.message?.toLowerCase().includes('exists')) {
         let found = null
         let page = 1
         while (!found) {
@@ -79,24 +82,36 @@ Deno.serve(async (req: Request) => {
         }
         if (!found) {
           return new Response(
-            JSON.stringify({ ok: false, error: inviteError.message }),
+            JSON.stringify({ ok: false, error: createError.message }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         userId = found.id
       } else {
         return new Response(
-          JSON.stringify({ ok: false, error: inviteError.message }),
+          JSON.stringify({ ok: false, error: createError.message }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
     } else {
-      userId = inviteData.user.id
-      // Poner contraseña por defecto y confirmar email para que entre sin clicar el link
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
-        password: DEFAULT_PASSWORD,
-        email_confirm: true,
-      })
+      userId = createData.user.id
+
+      // Enviar correo de bienvenida via Gmail SMTP
+      try {
+        const gmailPass = Deno.env.get('GMAIL_APP_PASSWORD') ?? ''
+        const client = new SmtpClient()
+        await client.connectTLS({ hostname: 'smtp.gmail.com', port: 465, username: 'rentalholidays.es@gmail.com', password: gmailPass })
+        await client.send({
+          from: 'Limpieza Rental <rentalholidays.es@gmail.com>',
+          to: email,
+          subject: 'RentalHolidays RH',
+          content: `Bienvenido a RentalHolidays RH\n\nTu cuenta ha sido creada. Aquí tienes tus credenciales:\n\nUsuario: ${email}\nContraseña: ${DEFAULT_PASSWORD}\n\nAccede aquí: https://basedatospagosrh.vercel.app/login\n\nUna vez dentro podrás cambiar tu contraseña si lo deseas.`,
+          html: `<h2>Bienvenido a RentalHolidays RH</h2><p>Tu cuenta ha sido creada. Aquí tienes tus credenciales de acceso:</p><p><strong>Usuario:</strong> ${email}</p><p><strong>Contraseña:</strong> ${DEFAULT_PASSWORD}</p><p><strong>Accede aquí:</strong> <a href="https://basedatospagosrh.vercel.app/login">https://basedatospagosrh.vercel.app/login</a></p><p>Una vez dentro podrás cambiar tu contraseña si lo deseas.</p>`,
+        })
+        await client.close()
+      } catch (mailErr) {
+        console.error('Error enviando correo bienvenida:', mailErr)
+      }
     }
 
     // 2. Perfil
