@@ -1023,9 +1023,12 @@ export const appsScriptApi = {
   },
 
   updateSensitiveData: async (userId: string, data: { dni?: string; home_address?: string; bank_account?: string }) => {
-    const { error } = await supabase
-      .from('worker_sensitive_data')
-      .upsert({ id: userId, ...data }, { onConflict: 'id', ignoreDuplicates: false });
+    const { data: existing } = await supabase
+      .from('worker_sensitive_data').select('id').eq('id', userId).maybeSingle();
+
+    const { error } = existing
+      ? await supabase.from('worker_sensitive_data').update(data).eq('id', userId)
+      : await supabase.from('worker_sensitive_data').insert({ id: userId, ...data });
 
     if (error) throw error;
   },
