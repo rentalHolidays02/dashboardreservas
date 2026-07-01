@@ -58,17 +58,15 @@ Deno.serve(async (req: Request) => {
     }
 
     let userId: string
-    let isNew = false
 
-    // 1. Intentar invitar (dispara el email "Invite user" con credenciales)
-    const redirectTo = 'https://base-datos-pagos-rh.vercel.app/login'
+    // 1. Invitar usuario — dispara el email "Invite user" con credenciales
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
+      redirectTo: 'https://basedatospagosrh.vercel.app/login',
       data: { full_name, password_set: false },
     })
 
     if (inviteError) {
-      // Si ya existe, buscarlo y reutilizarlo sin reenviar correo
+      // Si ya existe, reutilizarlo sin reenviar correo
       if (inviteError.message?.toLowerCase().includes('already') || inviteError.message?.toLowerCase().includes('exists')) {
         let found = null
         let page = 1
@@ -94,18 +92,14 @@ Deno.serve(async (req: Request) => {
       }
     } else {
       userId = inviteData.user.id
-      isNew = true
-    }
-
-    // 2. Poner contraseña por defecto + confirmar email (para que pueda entrar sin clicar el link)
-    if (isNew) {
+      // Poner contraseña por defecto y confirmar email para que entre sin clicar el link
       await supabaseAdmin.auth.admin.updateUserById(userId, {
         password: DEFAULT_PASSWORD,
         email_confirm: true,
       })
     }
 
-    // 3. Perfil
+    // 2. Perfil
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({ id: userId, email, full_name, role, phone: phone || null })
