@@ -805,14 +805,17 @@ const GestionUsuarios: React.FC<GestionUsuariosProps> = ({ user }) => {
         // 2. Si es trabajador, vincular su ficha con la cuenta recién creada.
         if (u.role === 'trabajador' && u.assignedWorkerId && newProfileId) {
           try {
+            console.log('[link] workerId:', u.assignedWorkerId, 'profileId:', newProfileId);
             await appsScriptApi.linkWorkerProfile(u.assignedWorkerId, newProfileId);
+            console.log('[link] linkWorkerProfile OK');
             await appsScriptApi.updateSensitiveData(u.assignedWorkerId, {
               dni: u.dni,
               home_address: u.home_address,
               bank_account: u.bank_account,
             });
-          } catch (linkErr) {
-            console.error('Error al vincular trabajador con la cuenta:', linkErr);
+            console.log('[link] updateSensitiveData OK');
+          } catch (linkErr: any) {
+            console.error('Error al vincular trabajador con la cuenta:', linkErr?.message || linkErr, linkErr);
             showToast('Cuenta creada, pero falló el vínculo con el trabajador.');
           }
         }
