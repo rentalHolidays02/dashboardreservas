@@ -1981,6 +1981,10 @@ export const appsScriptApi = {
 
   getNormalCleans: async (): Promise<NormalCleanRecord[]> => {
     return withSheetsCache('normalCleans', async () => {
+      if (!_migrationsConfirmed.has('cleans')) {
+        await appsScriptApi.migrateCleansFromSheets().catch(e => console.warn('[migrateCleans]', e));
+        _migrationsConfirmed.add('cleans');
+      }
       const res = await appsScriptApi.getNormalCleansResult();
       return res.records;
     });

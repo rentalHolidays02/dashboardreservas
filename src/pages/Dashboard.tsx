@@ -32,7 +32,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Period state
-  const [period, setPeriod] = useState<Period>('mensual');
+  const [period, setPeriod] = useState<Period>('trimestral');
   const [metric, setMetric] = useState<Metric>('dinero');
   const [customDesde, setCustomDesde] = useState('');
   const [customHasta, setCustomHasta] = useState('');
