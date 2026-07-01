@@ -173,6 +173,7 @@ npm run preview  # Previsualizar build
 | Cambiar gestión de usuarios (perfiles, roles, email sync) | [src/pages/GestionUsuarios.tsx](src/pages/GestionUsuarios.tsx), [src/services/api.ts](src/services/api.ts) (`getAllUsers`, `updateProfile`) |
 | Cambiar Cleans (limpiezas normales/iniciales/manitas) | [src/pages/Cleans.tsx](src/pages/Cleans.tsx), [src/services/api.ts](src/services/api.ts) (`getCleans`, `createClean`, etc) |
 | Cambiar Workers (trabajadores, salarios, perfiles) | [src/pages/Workers.tsx](src/pages/Workers.tsx), [src/services/api.ts](src/services/api.ts) (`getWorkers`, `getWorkerByPhone`, etc) |
+| Cambiar tour guiado del trabajador (pasos, textos) | [src/components/workers/WorkerTour.tsx](src/components/workers/WorkerTour.tsx) |
 
 ## Notas
 
@@ -183,3 +184,5 @@ npm run preview  # Previsualizar build
 - **Env vars legacy** (a retirar cuando las migraciones se confirmen): `VITE_GOOGLE_API_KEY` (only if Sheets migration still runs), `VITE_INCIDENCIAS_SPREADSHEET_ID`, `VITE_ENTREGA_LLAVES_SPREADSHEET_ID`, `VITE_SUGERENCIAS_APPS_SCRIPT_URL`.
 - **Documentación de bugs y soluciones**: Ver `docs/errores_conocidos.md` para patrones a evitar (N+1 queries, Apps Script fallbacks, async error handling, etc).
 - **Session storage sin Web Lock**: Login usa fetch nativo a `/auth/v1/token`, tokens en `memStore` (Map sincrónico). No persiste entre recargas (por diseño).
+- **MCP Supabase del proyecto**: configurado en `.mcp.json` → `https://mcp.supabase.com/mcp?project_ref=xytbprkimsijbokcukye`. Requiere autenticar con `claude /mcp` en terminal antes de usar. El MCP `mcp__claude_ai_Supabase__*` (cuenta claude.ai) NO ve este proyecto — está en otra cuenta de Supabase.
+- **WorkerTour**: tour guiado de 6 pasos para trabajadores. Primer acceso automático, botón "? Ayuda" en header de WorkerPanel para relanzar. `localStorage` key: `worker_tour_seen_v1`.

@@ -169,6 +169,18 @@ Este documento recopila las decisiones de diseño de software y arquitectura té
 
 ---
 
+### ADR 16: Tour guiado para trabajadores (WorkerTour) (2026-07-01)
+- **Estado**: Aceptado.
+- **Contexto**: Los trabajadores no tienen documentación interna ni formación presencial. Necesitan entender la plataforma la primera vez que la usan sin soporte directo.
+- **Decisión**: Componente `WorkerTour.tsx` con 6 pasos (modal centrado + barra de progreso). Se muestra automáticamente en el primer acceso (`localStorage` key `worker_tour_seen_v1`). Botón "? Ayuda" en el header de `WorkerPanel` lo relanza manualmente.
+- **Consecuencias**:
+  - *Ventaja*: Sin librerías externas. Sin highlights de DOM — overlay simple.
+  - *Ventaja*: Relanzable en cualquier momento desde el botón de ayuda.
+  - *Nota*: Si se quiere highlight real de elementos (resaltar cada botón físicamente), habría que añadir `getBoundingClientRect` + overlay recortado. No implementado por YAGNI.
+- **Archivos**: `src/components/workers/WorkerTour.tsx`, `src/pages/WorkerPanel.tsx`.
+
+---
+
 ### ADR 7: Migración total de Google Apps Script a Supabase
 - **Estado**: Completado (2026-06-23). Excepto Checkins de limpieza.
 - **Contexto**: Apps Script tenía cold starts de 3-8 segundos y escrituras fire-and-forget (`mode: 'no-cors'`) sin confirmación de éxito. La app ya tenía Supabase para auth y partes de trabajador.

@@ -189,6 +189,15 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 20. MCP Supabase en IDE no usa autenticación de sesión activa (2026-07-01)
+
+- **Síntoma**: El MCP `mcp__supabase__*` (configurado en `.mcp.json` del proyecto) devuelve `Unauthorized` aunque la sesión esté activa en terminal (`claude /mcp` muestra `✓ connected`).
+- **Causa**: El MCP de proyecto en `.mcp.json` usa transport HTTP sin token en la URL. La autenticación OAuth hecha en terminal solo aplica a esa sesión de CLI — la extensión VSCode del IDE arranca su propio proceso y no hereda esa autenticación.
+- **Solución/Workaround**: Usar el MCP alternativo `mcp__claude_ai_Supabase__*` (autenticado vía claude.ai) para operaciones de lectura. Para el MCP de proyecto, reiniciar la sesión del IDE después de autenticarse en terminal.
+- **Nota**: El proyecto Supabase de BaseDatosPagosRH (`xytbprkimsijbokcukye`) no aparece en la cuenta claude.ai (`acdev331@gmail.com`) — está en otra cuenta. MCP de proyecto es la única vía de acceso automatizado.
+
+---
+
 ## 19. `Unable to preventDefault inside passive event listener` en SignaturePad (2026-06-30)
 
 - **Síntoma**: Consola llena de warnings `Unable to preventDefault inside passive event listener invocation` apuntando a `SignaturePad.tsx:121`. El scroll de página podía interferir con el dibujo de firma en móvil.
