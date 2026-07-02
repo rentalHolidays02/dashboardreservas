@@ -71,26 +71,26 @@ const WorkerTour: React.FC<WorkerTourProps> = ({ onDone, isFirstTime = false }) 
 
       {/* card */}
       <div className="relative z-10 w-full max-w-sm mx-4 mb-8 sm:mb-0 bg-white dark:bg-stone-900 rounded-2xl shadow-2xl p-6 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
-        {/* close */}
-        {canClose && (
-          <button
-            onClick={handleBackdropOrClose}
-            className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-          >
-            <X size={16} />
-          </button>
-        )}
-
-        {/* step indicator */}
-        <div className="flex gap-1.5 mb-5 pr-10">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 rounded-full flex-1 transition-colors duration-300 ${
-                i <= step ? 'bg-orange-500' : 'bg-stone-200 dark:bg-stone-700'
-              }`}
-            />
-          ))}
+        {/* step indicator + close, en la misma fila */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex flex-1 gap-1.5">
+            {STEPS.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1 rounded-full flex-1 transition-colors duration-300 ${
+                  i <= step ? 'bg-orange-500' : 'bg-stone-200 dark:bg-stone-700'
+                }`}
+              />
+            ))}
+          </div>
+          {canClose && (
+            <button
+              onClick={handleBackdropOrClose}
+              className="shrink-0 p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
         <div className="text-4xl mb-3">{current.emoji}</div>
