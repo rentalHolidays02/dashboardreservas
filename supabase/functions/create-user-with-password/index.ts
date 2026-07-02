@@ -135,7 +135,7 @@ Deno.serve(async (req: Request) => {
                   <p><strong>Email:</strong> ${email}</p>
                   <p><strong>Contraseña:</strong> ${DEFAULT_PASSWORD}</p>
                   <p><a href="https://base-datos-pagos-rh.vercel.app/login">Acceder a la aplicación</a></p>
-                  <p>Por favor, cambia tu contraseña tras el primer acceso.</p>
+                  <p>Puedes cambiar tu contraseña desde tu Perfil una vez dentro de la aplicación, o dejarla como está.</p>
                 `,
               },
             ],
