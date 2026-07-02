@@ -82,7 +82,7 @@ const WorkerTour: React.FC<WorkerTourProps> = ({ onDone, isFirstTime = false }) 
         )}
 
         {/* step indicator */}
-        <div className="flex gap-1.5 mb-5 pr-8">
+        <div className="flex gap-1.5 mb-5 pr-10">
           {STEPS.map((_, i) => (
             <div
               key={i}
