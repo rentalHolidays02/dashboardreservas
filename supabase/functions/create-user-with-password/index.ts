@@ -59,18 +59,16 @@ Deno.serve(async (req: Request) => {
 
     let userId: string
 
-    // 1. Intentar invitar (dispara email de bienvenida)
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: 'https://basedatospagosrh.vercel.app/login',
-      data: { full_name, password_set: false },
+    // 1. Crear usuario con contraseña predeterminada
+    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: DEFAULT_PASSWORD,
+      email_confirm: true,
+      user_metadata: { full_name },
     })
 
-    console.log('inviteError:', JSON.stringify(inviteError))
-    console.log('inviteData:', JSON.stringify(inviteData?.user?.id))
-
-    if (inviteError) {
-      // Si ya existe, reutilizarlo sin reenviar
-      if (inviteError.message?.toLowerCase().includes('already') || inviteError.message?.toLowerCase().includes('exists')) {
+    if (userError) {
+      if (userError.message?.toLowerCase().includes('already')) {
         let found = null
         let page = 1
         while (!found) {
@@ -82,28 +80,22 @@ Deno.serve(async (req: Request) => {
         }
         if (!found) {
           return new Response(
-            JSON.stringify({ ok: false, error: inviteError.message }),
+            JSON.stringify({ ok: false, error: userError.message }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           )
         }
         userId = found.id
       } else {
         return new Response(
-          JSON.stringify({ ok: false, error: `invite failed: ${inviteError.message} (status: ${inviteError.status})` }),
+          JSON.stringify({ ok: false, error: `createUser failed: ${userError.message}` }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
       }
     } else {
-      userId = inviteData.user.id
-      // Poner contraseña y confirmar email para que entre sin clicar el link
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
-        password: DEFAULT_PASSWORD,
-        email_confirm: true,
-      })
-
+      userId = userData.user.id
     }
 
-    // 2. Perfil
+    // 2. Crear perfil
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({ id: userId, email, full_name, role, phone: phone || null })
@@ -114,6 +106,50 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ ok: true, id: userId, warning: 'Perfil no creado: ' + profileError.message }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // 3. Enviar email de bienvenida vía SendGrid
+    const sendgridApiKey = Deno.env.get('SENDGRID_API_KEY')
+    if (sendgridApiKey) {
+      try {
+        const emailRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${sendgridApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            personalizations: [
+              {
+                to: [{ email, name: full_name }],
+                subject: 'Bienvenido a RentalHolidays - Tus credenciales',
+              },
+            ],
+            from: { email: 'noreply@rentalholidays.es', name: 'RentalHolidays' },
+            content: [
+              {
+                type: 'text/html',
+                value: `
+                  <h2>¡Bienvenido a RentalHolidays!</h2>
+                  <p>Tu cuenta ha sido creada exitosamente.</p>
+                  <p><strong>Email:</strong> ${email}</p>
+                  <p><strong>Contraseña:</strong> ${DEFAULT_PASSWORD}</p>
+                  <p><a href="https://basedatospagosrh.vercel.app/login">Acceder a la aplicación</a></p>
+                  <p>Por favor, cambia tu contraseña tras el primer acceso.</p>
+                `,
+              },
+            ],
+          }),
+        })
+
+        if (!emailRes.ok) {
+          console.error('SendGrid error:', await emailRes.text())
+        } else {
+          console.log('Email enviado a:', email)
+        }
+      } catch (emailErr) {
+        console.error('Error enviando email:', emailErr)
+      }
     }
 
     return new Response(
