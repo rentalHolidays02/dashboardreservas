@@ -99,6 +99,13 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
   const [editingDraft, setEditingDraft] = useState<DraftRow | null>(null);
   const [draftsExpanded, setDraftsExpanded] = useState(false);
   const [tourOpen, setTourOpen] = useState(useShouldShowTour);
+  const [isFirstTimeTour] = useState(useShouldShowTour);
+
+  useEffect(() => {
+    const openTour = () => setTourOpen(true);
+    window.addEventListener('worker-tour:open', openTour);
+    return () => window.removeEventListener('worker-tour:open', openTour);
+  }, []);
 
   // Carrusel de acciones: fade en bordes según posición de scroll.
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -220,14 +227,7 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
         }}
       >
       <div className="px-6 pt-4 pb-10 space-y-8 lg:px-0 lg:pt-0 lg:pb-0">
-      <header className="flex flex-col items-start text-left pt-2 pb-2 pr-8 font-dm relative">
-        <button
-          onClick={() => setTourOpen(true)}
-          className="absolute top-2 right-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-slate-700 dark:hover:text-stone-200 transition-colors text-xs font-medium"
-        >
-          <span>?</span>
-          <span>Ayuda</span>
-        </button>
+      <header className="flex flex-col items-start text-left pt-2 pb-2 font-dm relative">
         <h1 className="text-3xl font-medium tracking-tight leading-snug text-[#bfb9b7] dark:text-stone-500">
           {stats !== null || statsLoading ? (
             <>
@@ -422,7 +422,7 @@ const WorkerPanel: React.FC<WorkerPanelProps> = ({ user }) => {
       </div>
       </div>
 
-      {tourOpen && <WorkerTour onDone={() => setTourOpen(false)} />}
+      {tourOpen && <WorkerTour onDone={() => setTourOpen(false)} isFirstTime={isFirstTimeTour} />}
 
       <ServiceTypePickerSheet
         isOpen={isServiceTypePickerOpen}

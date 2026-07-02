@@ -263,6 +263,17 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── Footer ───────────────────────────────────────────────────── */}
         <div className="px-3 pb-4 pt-3 shrink-0">
 
+          {/* Ayuda (tour) — solo trabajador */}
+          {user.role === 'trabajador' && !collapsed && (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('worker-tour:open'))}
+              className="w-full flex items-center gap-1.5 px-2.5 py-1.5 mb-2 rounded-xl bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-slate-700 dark:hover:text-stone-200 transition-colors text-xs font-medium justify-center"
+            >
+              <span>?</span>
+              <span>Ayuda</span>
+            </button>
+          )}
+
           {/* Profile link + logout */}
           <div className={`flex items-center gap-1 mb-2 ${collapsed ? 'justify-center' : ''}`}>
             <Link

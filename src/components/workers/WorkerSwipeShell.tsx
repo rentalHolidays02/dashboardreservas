@@ -120,9 +120,11 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
   }, [isDesktop]);
 
   // Desktop: vista directa, sin pager ni tabs (la navegación va por el sidebar).
+  // Usa initialIndex directo (no state) porque cada ruta monta una instancia nueva vía <Route>,
+  // pero React puede reconciliar en vez de remontar si el árbol coincide en tipo/posición.
   if (isDesktop) {
-    if (index === 0) return <WorkerPanel user={user} />;
-    if (index === 1) return <WorkerRecords user={user} />;
+    if (initialIndex === 0) return <WorkerPanel user={user} />;
+    if (initialIndex === 1) return <WorkerRecords user={user} />;
     return <Profile user={user} onLogout={onLogout} />;
   }
 
@@ -154,27 +156,36 @@ const WorkerSwipeShell: React.FC<WorkerSwipeShellProps> = ({ user, onLogout, ini
             Historial
           </button>
         </div>
-        <button
-          onClick={() => scrollToPane(2)}
-          aria-label="Perfil"
-          className={`rounded-full border text-slate-700 dark:text-stone-200 active:scale-95 transition origin-center overflow-hidden ${headerAnimClass} ${
-            user.avatar_url ? 'p-0' : 'p-2'
-          } ${
-            index === 2
-              ? 'bg-stone-100 dark:bg-stone-800/60 border-stone-200/70 dark:border-stone-700/50'
-              : 'bg-transparent border-transparent'
-          }`}
-        >
-          {user.avatar_url ? (
-            <img
-              src={user.avatar_url}
-              alt=""
-              className="w-8 h-8 object-cover rounded-full"
-            />
-          ) : (
-            <UserIcon size={16} />
-          )}
-        </button>
+        <div className={`flex items-center gap-2 origin-center ${headerAnimClass}`}>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('worker-tour:open'))}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-100 dark:bg-stone-800 text-slate-500 dark:text-stone-400 hover:text-slate-700 dark:hover:text-stone-200 transition-colors text-xs font-medium font-gsf"
+          >
+            <span>?</span>
+            <span>Ayuda</span>
+          </button>
+          <button
+            onClick={() => scrollToPane(2)}
+            aria-label="Perfil"
+            className={`rounded-full border text-slate-700 dark:text-stone-200 active:scale-95 transition origin-center overflow-hidden ${
+              user.avatar_url ? 'p-0' : 'p-2'
+            } ${
+              index === 2
+                ? 'bg-stone-100 dark:bg-stone-800/60 border-stone-200/70 dark:border-stone-700/50'
+                : 'bg-transparent border-transparent'
+            }`}
+          >
+            {user.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt=""
+                className="w-8 h-8 object-cover rounded-full"
+              />
+            ) : (
+              <UserIcon size={16} />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Pager horizontal con snap nativo. Sin touch-action: el navegador enruta por eje

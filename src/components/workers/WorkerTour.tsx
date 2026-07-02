@@ -34,19 +34,32 @@ const STEPS = [
     body: 'Ve un resumen de tus servicios recientes, horas y lo que tienes pendiente de cobro.',
     emoji: '📋',
   },
+  {
+    title: 'Cambiar contraseña',
+    body: 'Puedes cambiarla cuando quieras desde tu Perfil (icono superior) → Cambiar contraseña. Si prefieres, puedes dejar la que te llegó por email.',
+    emoji: '🔒',
+  },
 ];
 
 interface WorkerTourProps {
   /** Llamado cuando el tour se cierra (completado o descartado) */
   onDone: () => void;
+  /** true en el primer acceso automático: bloquea el cierre hasta completar todos los pasos */
+  isFirstTime?: boolean;
 }
 
-const WorkerTour: React.FC<WorkerTourProps> = ({ onDone }) => {
+const WorkerTour: React.FC<WorkerTourProps> = ({ onDone, isFirstTime = false }) => {
   const [step, setStep] = useState(0);
+  const isLastStep = step === STEPS.length - 1;
+  const canClose = !isFirstTime || isLastStep;
 
   const finish = () => {
     localStorage.setItem(TOUR_KEY, '1');
     onDone();
+  };
+
+  const handleBackdropOrClose = () => {
+    if (canClose) finish();
   };
 
   const current = STEPS[step];
@@ -54,20 +67,22 @@ const WorkerTour: React.FC<WorkerTourProps> = ({ onDone }) => {
   return (
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center">
       {/* backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={finish} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleBackdropOrClose} />
 
       {/* card */}
       <div className="relative z-10 w-full max-w-sm mx-4 mb-8 sm:mb-0 bg-white dark:bg-stone-900 rounded-2xl shadow-2xl p-6 animate-in zoom-in-95 slide-in-from-bottom-4 duration-300">
         {/* close */}
-        <button
-          onClick={finish}
-          className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-        >
-          <X size={16} />
-        </button>
+        {canClose && (
+          <button
+            onClick={handleBackdropOrClose}
+            className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        )}
 
         {/* step indicator */}
-        <div className="flex gap-1.5 mb-5">
+        <div className="flex gap-1.5 mb-5 pr-8">
           {STEPS.map((_, i) => (
             <div
               key={i}
