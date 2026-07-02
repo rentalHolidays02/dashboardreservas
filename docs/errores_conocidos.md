@@ -208,6 +208,16 @@ Este documento detalla los problemas técnicos recurrentes, bugs de desarrollo i
 
 ---
 
+## 21. inviteUserByEmail devuelve 400 — creación de usuarios bloqueada (2026-07-01)
+
+- **Síntoma**: Al crear un usuario nuevo en GestionUsuarios, la Edge Function falla con "Edge Function returned a non-2xx status code" (400). El usuario se crea internamente pero el vínculo con trabajador y el correo de bienvenida no se envían.
+- **Causa**: `inviteUserByEmail` requiere que **"Confirm email"** esté activado en Supabase Authentication → Sign In / Providers → Email. Sin esa opción, Supabase devuelve 400 Bad Request sin mensaje aclaratorio. La credencial de aplicación de Gmail está correctamente configurada en el SMTP del proyecto.
+- **Workaround actual**: Cambiar la Edge Function a usar `createUser` directamente (sin invite email). El usuario se crea, se vincula, y se guarda su perfil — pero no se envía el correo de bienvenida de forma nativa. Pendiente: investigar por qué el `inviteUserByEmail` sigue dando 400 incluso con "Confirm email" = ON.
+- **Archivos afectados**: `supabase/functions/create-user-with-password/index.ts`, `src/pages/GestionUsuarios.tsx` (línea ~806-817).
+- **Estado**: createUser funciona. Correo bloqueado temporalmente. Cuando Supabase resuelva el problema de `inviteUserByEmail`, volver a cambiar la Edge Function a `inviteUserByEmail` + `updateUserById(password, email_confirm:true)` para disparar el template "Invite user" con las credenciales.
+
+---
+
 ## 8. Migración de Apps Script a Supabase (2026-06-23)
 
 - **Decisión**: Migración total del backend de Google Apps Script (Sheets) a Supabase.
