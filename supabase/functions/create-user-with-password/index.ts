@@ -125,7 +125,7 @@ Deno.serve(async (req: Request) => {
                 subject: 'Bienvenido a RentalHolidays - Tus credenciales',
               },
             ],
-            from: { email: 'noreply@rentalholidays.es', name: 'RentalHolidays' },
+            from: { email: 'rentalholidays.es@gmail.com', name: 'RentalHolidays' },
             content: [
               {
                 type: 'text/html',
