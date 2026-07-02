@@ -134,7 +134,7 @@ Deno.serve(async (req: Request) => {
                   <p>Tu cuenta ha sido creada exitosamente.</p>
                   <p><strong>Email:</strong> ${email}</p>
                   <p><strong>Contraseña:</strong> ${DEFAULT_PASSWORD}</p>
-                  <p><a href="https://basedatospagosrh.vercel.app/login">Acceder a la aplicación</a></p>
+                  <p><a href="https://base-datos-pagos-rh.vercel.app/login">Acceder a la aplicación</a></p>
                   <p>Por favor, cambia tu contraseña tras el primer acceso.</p>
                 `,
               },
